@@ -7,7 +7,7 @@ Source: [PRD](../PRD.md) — Decisions #10/#11/#12/#25 + "API surface" and the `
 
 Create, read, update, and delete an activity. The field set is fixed: `Title`, `Location`,
 `ActivityDate` (a **calendar date — no time, no timezone**), optional `Description`, and optional
-`CoverImageBlobPath`. `CreatedUtc` is recorded for audit and doubles as the tiebreaker that orders
+`CoverImageBlobPath`. `CreatedOn` is recorded for audit and doubles as the tiebreaker that orders
 two activities logged on the same day. This feature ships the CRUD mechanics only; who is allowed
 to call them is feature 09.
 
@@ -22,14 +22,16 @@ where I went and when.
 
 ## Acceptance criteria
 
-- [ ] `activities` matches the PRD data model: `Id`, `Title`, `Location`, `ActivityDate` (`date`),
-      `Description` (nullable), `CoverImageBlobPath` (nullable), `CreatedByUserId` FK → `users.Id`,
-      `CreatedUtc`
+- [ ] `activities` matches the PRD data model. Its own columns are `Title`, `Location`,
+      `ActivityDate` (`date`), `Description` (nullable), `CoverImageBlobPath` (nullable) and
+      `CreatedByUserId` FK → `users.Id`; `Id` and the remaining audit and soft-delete columns come
+      from `EntityBase` (the PRD draws them once), so `IsDeleted` is present and the global query
+      filter applies to this table
 - [ ] Routes exist for `POST /api/activities`, `GET /api/activities/{id}`,
       `PUT /api/activities/{id}`, and `DELETE /api/activities/{id}`
 - [ ] `POST` sets `CreatedByUserId` from the caller's provisioned `users.Id` and ignores any
       `CreatedByUserId` supplied in the request body
-- [ ] `CreatedUtc` is set server-side at insert and ignores any client-supplied value
+- [ ] `CreatedOn` is set server-side at insert and ignores any client-supplied value
 - [ ] `ActivityDate` round-trips as a calendar date: a request for `2026-03-14` stores and returns
       `2026-03-14` regardless of the server's or the client's timezone, with no midnight conversion
       and no off-by-one day (PRD Decision #25)
@@ -43,12 +45,13 @@ where I went and when.
 - [ ] Validation failures return 400 identifying the offending field, and no row is written —
       a rejected create leaves the table unchanged
 - [ ] `GET` returns the activity's text and its cover path; an unknown id returns 404
-- [ ] `PUT` updates the mutable text fields and leaves `CreatedByUserId` and `CreatedUtc`
+- [ ] `PUT` updates the mutable text fields and leaves `CreatedByUserId` and `CreatedOn`
       untouched; an unknown id returns 404
-- [ ] `DELETE` removes the row and returns 204; deleting an already-deleted id returns 404
+- [ ] `DELETE` soft-deletes the row and returns 204; the row is retained with `IsDeleted` set and the
+      global query filter hides it from every read, so deleting an already-deleted id returns 404
 - [ ] `CoverImageBlobPath` is never settable through the create or update body — it is written only
       by the cover upload path in feature 08
-- [ ] Ordering by `ActivityDate DESC, CreatedUtc DESC` places the more recently created of two
+- [ ] Ordering by `ActivityDate DESC, CreatedOn DESC` places the more recently created of two
       same-date activities first
 
 ## Tests (TDD)
@@ -56,11 +59,13 @@ where I went and when.
 - Unit (`TrailBlaze.Service.Test`) — **hot spot**: validation boundaries — blank and
   whitespace-only `Title`/`Location` rejected, 200 characters accepted and 201 rejected, an empty
   `Description` normalised to null, an invalid calendar date rejected. Also that `CreatedByUserId`
-  is taken from the caller even when the payload supplies a different id, and that `CreatedUtc` is
+  is taken from the caller even when the payload supplies a different id, and that `CreatedOn` is
   server-assigned rather than echoed from the request.
-- Integration (`TrailBlaze.Repository.Test`): the `date` column reads back `2026-03-14` with no
-  time component; the same-day pair orders by `CreatedUtc DESC`; the FK to `users.Id` is enforced;
-  `DELETE` cascades media rows (exercised properly once 06 exists).
+- Integration (`TrailBlaze.Repository.Test`): the query is exercised through the `DbContext` with no
+  database — the save interception stamps `CreatedOn` before any connection opens, the `ActivityDate`
+  mapping to a time-less `date` column and the FK to `users.Id` are asserted from the EF model, and
+  the same-day ordering is inspected with `ToQueryString()`. The cascade to media rows is a mapping
+  assertion (exercised properly once 06 exists) ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Api.Test`): create → read → update → delete round-trip; 404 for unknown
   ids on read/update/delete; 400 with field detail on an invalid payload and the table unchanged
   afterwards.
@@ -81,6 +86,9 @@ where I went and when.
 - No media upload or SAS delivery — 06 and 07.
 - No search or filtering of any kind (PRD Decision #23).
 - No optimistic concurrency token and no `If-Match`; concurrent edits are last-write-wins.
-- No soft delete, no edit history, and no audit trail beyond `CreatedUtc`.
+- No **user-facing** edit history screen and no versioning: there is no revision view and no restore.
+  Soft delete and an audit trail *do* exist as platform conventions, not as mechanics this feature
+  ships — `EntityBase` carries `IsDeleted` behind a global query filter, and an append-only `AuditLog`
+  table is written by an `AuditSaveChangesInterceptor`. Neither is configured or exposed here.
 - The anonymous/user/admin access matrix for these four routes is stated and enforced in 09, not
   here.

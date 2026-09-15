@@ -44,7 +44,7 @@ image or video that is otherwise private.
   - a successful mint produces a URL whose expiry is in the future and within the cap;
   - the requested permission set is read-only and the target is a single blob in the private container;
   - an over-long configured TTL is clamped to the maximum.
-- Integration (`TrailBlaze.Repository.Test`): the media row is the source of the blob path — a deleted or unknown id yields no URL.
+- Integration (`TrailBlaze.Repository.Test`): with nothing listening on a port, the media row is the source of the blob path — the lookup whose id is soft-deleted or unknown is asserted to yield no blob path, and therefore no URL, with the query inspected via `ToQueryString()` ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Api.Test`): a tokenless request to `/api/media/{id}/url` returns 401 with no storage call; an authenticated request returns 200 with a URL and an expiry.
 - Storage integration (`TrailBlaze.Service.Test`, tagged `Category=StorageIntegration`; `dotnet test --filter Category=StorageIntegration`): a **real SAS round-trip** — mint against real Azure, issue a plain HTTP GET against the returned URL with no credentials, and receive 200 with the original bytes; then request a URL whose expiry has already passed and observe the storage service **refuse** it. This is the tier that proves SAS generation, which the fake by construction cannot (see [testing-and-tdd.md](../testing-and-tdd.md)).
 

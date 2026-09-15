@@ -29,7 +29,7 @@ journal without signing in.
 - [ ] Query parameters are `page` (1-based, default 1) and `pageSize` (default 20)
 - [ ] `pageSize` above 100 is **clamped to 100**, not rejected and not honoured — the endpoint can never return an unbounded set
 - [ ] `pageSize` of 0, negative, or non-numeric falls back to the default 20 rather than erroring
-- [ ] Items are ordered by `ActivityDate` descending; rows sharing an `ActivityDate` are tie-broken by `CreatedUtc` descending, so the order is total and stable across pages (Decision #10)
+- [ ] Items are ordered by `ActivityDate` descending; rows sharing an `ActivityDate` are tie-broken by `CreatedOn` descending, so the order is total and stable across pages (Decision #10)
 - [ ] The response is a paging envelope — `items` plus the total count and the page/pageSize actually applied, so a caller can detect the clamp and page deterministically
 - [ ] Each list item exposes exactly `Id`, `Title`, `Location`, `ActivityDate`, `Description`, and the cover image URL — no media id, blob path, SAS URL, media count, or any other media-derived field appears anywhere in the anonymous payload
 - [ ] The anonymous payload is asserted by serializing the response model and checking the property set, not by eyeballing a sample response
@@ -42,8 +42,11 @@ journal without signing in.
 
 ## Tests (TDD)
 
-- Unit (`TrailBlaze.Service.Test`): pagination clamping across the boundary — `pageSize` of 0, 1, 20, 100, 101, 1000, and garbage input; page numbering at first/last/past-end page; ordering with same-date rows resolving on `CreatedUtc`. **Hot spot (security / information disclosure):** the projection for the anonymous response carries no media field, and the service never queries the `media` table — RED first, because this is the boundary that keeps private media private.
-- Integration (`TrailBlaze.Repository.Test`): the ordering + paging query against SQL Server, including a same-`ActivityDate` set that must come back in the expected total order.
+- Unit (`TrailBlaze.Service.Test`): pagination clamping across the boundary — `pageSize` of 0, 1, 20, 100, 101, 1000, and garbage input; page numbering at first/last/past-end page; ordering with same-date rows resolving on `CreatedOn`. **Hot spot (security / information disclosure):** the projection for the anonymous response carries no media field, and the service never queries the `media` table — RED first, because this is the boundary that keeps private media private.
+- Integration (`TrailBlaze.Repository.Test`): the ordering + paging query runs offline — the generated
+  SQL (the skip/take paging plus the `ActivityDate DESC, CreatedOn DESC` ordering, and the
+  soft-delete filter) is inspected with `ToQueryString()`, including a same-`ActivityDate` case whose
+  tie-break must appear in the expected total order ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Api.Test`): an end-to-end anonymous request with no `Authorization` header returning 200 and valid JSON; the serialized JSON object for a list item containing no media key; `ActivityDate` emitting as `yyyy-MM-dd`.
 
 ## Notes / non-goals

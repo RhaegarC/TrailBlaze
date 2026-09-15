@@ -20,11 +20,11 @@ decides who may *edit* an entry rather than who may read it.
 | Layer | Choice |
 |---|---|
 | Backend | ASP.NET Core 10, layered `Api / Interface / Model / Repository / Service`, each with a sibling xUnit project |
-| Database | SQL Server via EF Core (Testcontainers `mssql` for integration tests) |
+| Database | **Azure SQL Server** via EF Core (provider swap from the inherited PostgreSQL still pending) |
 | Media | Azure Blob Storage — a **public** container for cover images, a **private** one for activity media, reached via short-lived SAS URLs |
 | Identity | Entra ID (bearer tokens; users auto-provisioned; one admin seeded) |
 | Frontend | React 19 + Vite + TypeScript + Tailwind, exported from **Figma Make** |
-| Local run | Docker Compose (API + SQL Server) |
+| Local run | Docker Compose (API + Azure SQL Server) |
 
 ## Working on it
 
@@ -41,11 +41,15 @@ The workflow lives in `.claude/` and runs on slash commands:
 
 Backend tests run from `src/api/` with `dotnet test`.
 
-## Two things to know before you start
+## Three things to know before you start
 
-1. **`develop` is not deployable until feature 09 merges.** Features 04–08 build the CRUD and
+1. **The test projects are scaffolding, not a suite yet.** They exist and are in
+   `src/api/TrailBlaze.slnx`, but they are **empty and reference no project under test** —
+   `dotnet test` builds green and discovers zero tests. Standing up the harness is
+   acceptance-criteria work in feature 01, so "the suite passes" is not yet a meaningful claim.
+2. **`develop` is not deployable until feature 09 merges.** Features 04–08 build the CRUD and
    media mechanics while every signed-in user can still write anything; 09 imposes the ownership
    and admin rules. See the sequencing note in the sprint file.
-2. **Azure Blob is real in every environment**, tests included. Unit tests inject an in-memory
+3. **Azure Blob is real in every environment**, tests included. Unit tests inject an in-memory
    `IStorageService` fake so the RED → GREEN loop stays offline; a tagged
    `Category=StorageIntegration` tier exercises the real account and needs credentials.

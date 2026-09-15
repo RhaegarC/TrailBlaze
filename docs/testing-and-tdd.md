@@ -14,13 +14,35 @@ The API is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBla
 xUnit test project (`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`,
 `TrailBlaze.Service.Test`). New tests go in the project matching the layer they exercise.
 
+**Current state (2026-09-15).** The three test projects exist and are listed in
+`src/api/TrailBlaze.slnx`, but they are **empty and reference no project under test** — `dotnet
+test` builds green and discovers zero tests. Standing the harness up is acceptance-criteria work
+in [feature 01](features/01-foundation.md), not something already in place.
+
 ## Test tiers
 
 | Tier | Scope | Tooling | Runs |
 |---|---|---|---|
 | Backend unit | Services, **ownership/permission evaluation**, upload validation, SAS policy construction, pagination clamping | xUnit | Always — fast, offline |
-| Backend integration | EF Core against SQL Server (`Testcontainers` mssql) or InMemory for fast CI; repositories, queries, cascade deletes | xUnit + EF Core | Always (container) or CI |
+| Backend integration | EF Core **with no database at all** — persistence, repositories, queries, cascade deletes | xUnit + EF Core | Always — offline |
 | Storage integration | The real Azure Blob implementation of `IStorageService` — upload, delete, SAS round-trip | xUnit + Azure SDK | **Explicitly tagged**; requires credentials |
+
+## Testing without a database
+
+The repository tier needs **nothing listening on a port**. EF Core's save interception runs
+before the provider opens a connection, so audit stamping, soft-delete filtering, and
+application-assigned keys are all provable offline — and a LINQ query can be inspected with
+`ToQueryString()` instead of executed.
+
+The pattern is specified in [src/api/STANDARD.md](../src/api/STANDARD.md) §10. In outline: the
+context is wired through the same `AddRepositoryPersistence` entry point the application uses, the
+HTTP-backed `IUserContextService` is replaced with a fake so a test can set the caller, and the
+repository is exercised against that. No container, no connection string, no credentials — which
+is why this tier runs on every test invocation rather than on a CI-only branch.
+
+This is what makes the tier *fast*, but not what makes it *trustworthy*: the fake user context is
+a stand-in, so anything that depends on the real token pipeline still needs the E2E tier
+(feature 11).
 
 ## The Azure dependency
 

@@ -42,7 +42,7 @@ git checkout -b feature/[number]-[feature-name]
 #### Phase 3: Write Tests First (RED)
 
 1. Create or update test files (in the matching layer's `*.Test` project under `src/api/`) based on acceptance criteria
-2. Write failing tests that define expected behavior — tiers per [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md): backend xUnit (unit, including the in-memory `IStorageService` fake) + EF Core integration against SQL Server
+2. Write failing tests that define expected behavior — tiers per [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md): backend xUnit (unit, including the in-memory `IStorageService` fake) + the repository tier, which runs with no database at all (the EF Core save interception fires before a connection opens, so audit, soft-delete and key behaviour are asserted offline)
 3. Ensure tests fail (validate test correctness)
 4. Test command: `dotnet test` (from `src/api/`)
 

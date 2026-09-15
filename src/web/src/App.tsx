@@ -1,6 +1,19 @@
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type AuthRole = "visitor" | "user" | "admin";
+type Theme = "dark" | "light";
+type Lang = "en" | "zh";
+
+interface Settings {
+  theme: Theme;
+  lang: Lang;
+  setTheme: (t: Theme) => void;
+  setLang: (l: Lang) => void;
+}
+
+type ActivityType = "public" | "shared" | "private";
 
 interface Activity {
   id: string;
@@ -12,6 +25,7 @@ interface Activity {
   createdBy: string;
   createdByUserId: string;
   mediaCount: number;
+  type: ActivityType;
 }
 
 interface MediaItem {
@@ -21,13 +35,190 @@ interface MediaItem {
   sizeBytes: number;
   url: string;
   contentType: string;
+  uploadedBy: string;
+  uploadedByUserId: string;
 }
 
 type View =
   | { name: "list" }
   | { name: "detail"; activityId: string }
   | { name: "create" }
-  | { name: "edit"; activityId: string };
+  | { name: "edit"; activityId: string }
+  | { name: "profile" };
+
+// ─── Settings context ────────────────────────────────────────────────────────
+
+const SettingsContext = createContext<Settings>({
+  theme: "dark",
+  lang: "en",
+  setTheme: () => {},
+  setLang: () => {},
+});
+
+const useSettings = () => useContext(SettingsContext);
+
+// ─── Translations ─────────────────────────────────────────────────────────────
+
+const T = {
+  en: {
+    newActivity: "New Activity",
+    uploadMedia: "Upload media",
+    signIn: "Sign in with Microsoft",
+    sharedJournal: "Shared Journal",
+    heroLine1: "Every trail,",
+    heroLine2: "one record.",
+    heroDesc: "A communal log of routes taken, summits chased, and coastlines walked. Public by default — media for those who sign in.",
+    activitiesLogged: "activities logged",
+    visitorCallout: "Sign in to view photos and videos, and to add your own activities to the journal.",
+    previous: "Previous",
+    next: "Next",
+    allActivities: "All activities",
+    edit: "Edit",
+    delete: "Delete",
+    confirm: "Confirm",
+    cancel: "Cancel",
+    photosVideos: "Photos & Videos",
+    signInToView: (n: number) => `Sign in to view ${n} photos and videos`,
+    noMedia: "No media uploaded yet.",
+    items: (n: number) => `${n} item${n !== 1 ? "s" : ""}`,
+    sasRequired: "SAS required",
+    details: "Details",
+    date: "Date",
+    location: "Location",
+    loggedBy: "Logged by",
+    media: "Media",
+    backToJournal: "Back to journal",
+    backToActivity: "Back to activity",
+    logActivityTitle: "Log an activity",
+    editActivityTitle: "Edit activity",
+    titleLabel: "Title *",
+    titlePlaceholder: "Summit attempt on Glacier Peak",
+    titleRequired: "Title is required",
+    activityDate: "Activity date *",
+    dateRequired: "Date is required",
+    locationLabel: "Location *",
+    locationPlaceholder: "Mount Rainier National Park, WA",
+    locationRequired: "Location is required",
+    descriptionLabel: "Description",
+    descPlaceholder: "What happened out there…",
+    coverImageLabel: "Cover image",
+    coverHint: "Public · any size · goes to public container",
+    uploadCover: "Upload cover image",
+    typeLabel: "Visibility",
+    typePublic: "Public",
+    typePublicDesc: "Anyone can access",
+    typeShared: "Shared",
+    typeSharedDesc: "Signed-in users only",
+    typePrivate: "Private",
+    typePrivateDesc: "Only you",
+    logBtn: "Log activity",
+    saveBtn: "Save changes",
+    activityLogged: "Activity logged.",
+    changesSaved: "Changes saved.",
+    returningToJournal: "Returning to journal…",
+    profile: "Profile",
+    profileSubtitle: "Your public identity on the journal.",
+    profilePhoto: "Profile photo",
+    photoHint: "Shown next to your media uploads. Square image recommended.",
+    remove: "Remove",
+    displayNameLabel: "Display name *",
+    displayNamePlaceholder: "Your name",
+    displayNameRequired: "Display name is required",
+    bioLabel: "Bio",
+    bioPlaceholder: "A few words about you and what you get up to out there…",
+    chars: "chars",
+    account: "Account — managed by Entra ID",
+    email: "Email",
+    role: "Role",
+    saved: "Saved",
+    preferences: "Preferences",
+    themeLabel: "Theme",
+    themeDark: "Dark",
+    themeLight: "Light",
+    languageLabel: "Language",
+    footerTagline: (n: number) => `One shared journal · ${n} activities`,
+  },
+  zh: {
+    newActivity: "新建活动",
+    uploadMedia: "上传媒体",
+    signIn: "使用 Microsoft 登录",
+    sharedJournal: "共享日志",
+    heroLine1: "每一条路，",
+    heroLine2: "皆有记录。",
+    heroDesc: "一个共同的旅程记录——路线、山峰与海岸。内容公开，媒体文件需登录查看。",
+    activitiesLogged: "条活动记录",
+    visitorCallout: "登录后可查看照片和视频，并添加您自己的活动记录。",
+    previous: "上一页",
+    next: "下一页",
+    allActivities: "所有活动",
+    edit: "编辑",
+    delete: "删除",
+    confirm: "确认",
+    cancel: "取消",
+    photosVideos: "照片与视频",
+    signInToView: (n: number) => `登录后查看 ${n} 张照片和视频`,
+    noMedia: "暂无媒体文件。",
+    items: (n: number) => `${n} 个文件`,
+    sasRequired: "需要 SAS",
+    details: "详情",
+    date: "日期",
+    location: "地点",
+    loggedBy: "记录者",
+    media: "媒体",
+    backToJournal: "返回日志",
+    backToActivity: "返回活动",
+    logActivityTitle: "记录活动",
+    editActivityTitle: "编辑活动",
+    titleLabel: "标题 *",
+    titlePlaceholder: "冰川峰登顶尝试",
+    titleRequired: "标题为必填项",
+    activityDate: "活动日期 *",
+    dateRequired: "日期为必填项",
+    locationLabel: "地点 *",
+    locationPlaceholder: "雷尼尔山国家公园，华盛顿州",
+    locationRequired: "地点为必填项",
+    descriptionLabel: "描述",
+    descPlaceholder: "记录此次经历……",
+    coverImageLabel: "封面图片",
+    coverHint: "公开 · 任意尺寸 · 上传至公开容器",
+    typeLabel: "可见性",
+    typePublic: "公开",
+    typePublicDesc: "所有人可访问",
+    typeShared: "共享",
+    typeSharedDesc: "仅登录用户",
+    typePrivate: "私密",
+    typePrivateDesc: "仅自己",
+    uploadCover: "上传封面图片",
+    logBtn: "记录活动",
+    saveBtn: "保存更改",
+    activityLogged: "活动已记录。",
+    changesSaved: "更改已保存。",
+    returningToJournal: "正在返回日志……",
+    profile: "个人资料",
+    profileSubtitle: "您在日志中的公开身份。",
+    profilePhoto: "头像",
+    photoHint: "显示在您的媒体上传旁边。建议使用方形图片。",
+    remove: "删除",
+    displayNameLabel: "显示名称 *",
+    displayNamePlaceholder: "您的姓名",
+    displayNameRequired: "显示名称为必填项",
+    bioLabel: "个人简介",
+    bioPlaceholder: "简单介绍一下您和您的户外经历……",
+    chars: "字符",
+    account: "账户 — 由 Entra ID 管理",
+    email: "邮箱",
+    role: "角色",
+    saved: "已保存",
+    preferences: "偏好设置",
+    themeLabel: "主题",
+    themeDark: "深色",
+    themeLight: "浅色",
+    languageLabel: "语言",
+    footerTagline: (n: number) => `共享日志 · ${n} 条活动`,
+  },
+} as const;
+
+// ─── Mock data ─────────────────────────────────────────────────────────────────
 
 const MOCK_ACTIVITIES: Activity[] = [
   {
@@ -35,135 +226,91 @@ const MOCK_ACTIVITIES: Activity[] = [
     title: "Summit Attempt on Mount Rainier",
     location: "Mount Rainier National Park, WA",
     activityDate: "2026-09-12",
-    description:
-      "Set out from Paradise at 0300 with crampon packs and a clear forecast. Hit the Disappointment Cleaver in whiteout conditions by 0900 — turned back at 12,400 ft. Not today, but the mountain is patient.",
-    coverImageUrl:
-      "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&h=500&fit=crop&auto=format",
+    description: "Set out from Paradise at 0300 with crampon packs and a clear forecast. Hit the Disappointment Cleaver in whiteout conditions by 0900 — turned back at 12,400 ft. Not today, but the mountain is patient.",
+    coverImageUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&h=500&fit=crop&auto=format",
     createdBy: "Rhys Caldwell",
     createdByUserId: "user-1",
     mediaCount: 12,
+    type: "public",
   },
   {
     id: "2",
     title: "Enchantments Through-Hike",
     location: "Alpine Lakes Wilderness, WA",
     activityDate: "2026-09-05",
-    description:
-      "Three days, 18 miles, elevation change that makes your legs ask hard questions. The Upper Enchantments at dawn — no words. Camped at Leprechaun Lake on night two. Permit lottery finally came through after four years of applying.",
-    coverImageUrl:
-      "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=800&h=500&fit=crop&auto=format",
+    description: "Three days, 18 miles, elevation change that makes your legs ask hard questions. The Upper Enchantments at dawn — no words. Camped at Leprechaun Lake on night two. Permit lottery finally came through after four years of applying.",
+    coverImageUrl: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=800&h=500&fit=crop&auto=format",
     createdBy: "Saoirse Mäkinen",
     createdByUserId: "user-2",
     mediaCount: 28,
+    type: "shared",
   },
   {
     id: "3",
     title: "Night Run on the PCT",
     location: "Snoqualmie Pass, WA",
     activityDate: "2026-08-29",
-    description:
-      "Full moon, headlamp as backup only. 22 miles north from the pass and back. Hit a black bear and her cub at mile 9 — gave them wide berth, continued. The trail at 2 AM has a different texture.",
-    coverImageUrl:
-      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=500&fit=crop&auto=format",
+    description: "Full moon, headlamp as backup only. 22 miles north from the pass and back. Hit a black bear and her cub at mile 9 — gave them wide berth, continued. The trail at 2 AM has a different texture.",
+    coverImageUrl: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=500&fit=crop&auto=format",
     createdBy: "Rhys Caldwell",
     createdByUserId: "user-1",
     mediaCount: 4,
+    type: "private",
   },
   {
     id: "4",
     title: "Glacier Crossing — Eldorado Peak",
     location: "North Cascades, WA",
     activityDate: "2026-08-17",
-    description:
-      "Approached via Roush Creek trail. Roped up on the glacier, navigated crevasse field in early morning freeze. Summit at 0745. Views east into the Cascades for 200 miles.",
-    coverImageUrl:
-      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=500&fit=crop&auto=format",
+    description: "Approached via Roush Creek trail. Roped up on the glacier, navigated crevasse field in early morning freeze. Summit at 0745. Views east into the Cascades for 200 miles.",
+    coverImageUrl: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=500&fit=crop&auto=format",
     createdBy: "Tomás Herrera",
     createdByUserId: "user-3",
     mediaCount: 19,
+    type: "public",
   },
   {
     id: "5",
     title: "Olympic Coast Packraft",
     location: "Olympic Peninsula, WA",
     activityDate: "2026-08-03",
-    description:
-      "Four days paddling and beach-camping from Rialto Beach to Oil City. Timed the headlands on the tides. Found a massive grey whale skeleton at Cape Johnson. Zero other humans from day two on.",
-    coverImageUrl:
-      "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=800&h=500&fit=crop&auto=format",
+    description: "Four days paddling and beach-camping from Rialto Beach to Oil City. Timed the headlands on the tides. Found a massive grey whale skeleton at Cape Johnson. Zero other humans from day two on.",
+    coverImageUrl: "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=800&h=500&fit=crop&auto=format",
     createdBy: "Saoirse Mäkinen",
     createdByUserId: "user-2",
     mediaCount: 33,
+    type: "shared",
   },
   {
     id: "6",
     title: "Ptarmigan Traverse",
     location: "North Cascades Wilderness, WA",
     activityDate: "2026-07-20",
-    description:
-      "Classic route. Six days, primarily on snow and glacier until late season. Caught a massive storm on day four and bivy'd in a crevasse lip. Emerged to complete the traverse in excellent style.",
-    coverImageUrl:
-      "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=800&h=500&fit=crop&auto=format",
+    description: "Classic route. Six days, primarily on snow and glacier until late season. Caught a massive storm on day four and bivy'd in a crevasse lip. Emerged to complete the traverse in excellent style.",
+    coverImageUrl: "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=800&h=500&fit=crop&auto=format",
     createdBy: "Tomás Herrera",
     createdByUserId: "user-3",
     mediaCount: 41,
+    type: "public",
   },
 ];
 
 const MOCK_MEDIA: MediaItem[] = [
-  {
-    id: "m1",
-    kind: "Image",
-    originalFileName: "summit_approach.jpg",
-    sizeBytes: 4200000,
-    contentType: "image/jpeg",
-    url: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&h=400&fit=crop&auto=format",
-  },
-  {
-    id: "m2",
-    kind: "Image",
-    originalFileName: "cleaver_camp.jpg",
-    sizeBytes: 3800000,
-    contentType: "image/jpeg",
-    url: "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=600&h=400&fit=crop&auto=format",
-  },
-  {
-    id: "m3",
-    kind: "Image",
-    originalFileName: "rope_team.jpg",
-    sizeBytes: 5100000,
-    contentType: "image/jpeg",
-    url: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=400&fit=crop&auto=format",
-  },
-  {
-    id: "m4",
-    kind: "Video",
-    originalFileName: "whiteout_conditions.mov",
-    sizeBytes: 48000000,
-    contentType: "video/quicktime",
-    url: "",
-  },
-  {
-    id: "m5",
-    kind: "Image",
-    originalFileName: "glacier_crevasse.jpg",
-    sizeBytes: 3200000,
-    contentType: "image/jpeg",
-    url: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=600&h=400&fit=crop&auto=format",
-  },
-  {
-    id: "m6",
-    kind: "Image",
-    originalFileName: "view_east.jpg",
-    sizeBytes: 6700000,
-    contentType: "image/jpeg",
-    url: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&h=400&fit=crop&auto=format",
-  },
+  { id: "m1", kind: "Image", originalFileName: "summit_approach.jpg", sizeBytes: 4200000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&h=400&fit=crop&auto=format", uploadedBy: "Rhys Caldwell", uploadedByUserId: "user-1" },
+  { id: "m2", kind: "Image", originalFileName: "cleaver_camp.jpg", sizeBytes: 3800000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=600&h=400&fit=crop&auto=format", uploadedBy: "Rhys Caldwell", uploadedByUserId: "user-1" },
+  { id: "m3", kind: "Image", originalFileName: "rope_team.jpg", sizeBytes: 5100000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=400&fit=crop&auto=format", uploadedBy: "Rhys Caldwell", uploadedByUserId: "user-1" },
+  { id: "m4", kind: "Video", originalFileName: "whiteout_conditions.mov", sizeBytes: 48000000, contentType: "video/quicktime", url: "", uploadedBy: "Rhys Caldwell", uploadedByUserId: "user-1" },
+  { id: "m5", kind: "Image", originalFileName: "glacier_below_cleaver.jpg", sizeBytes: 3200000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=600&h=400&fit=crop&auto=format", uploadedBy: "Saoirse Mäkinen", uploadedByUserId: "user-2" },
+  { id: "m6", kind: "Image", originalFileName: "view_east_from_summit.jpg", sizeBytes: 6700000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&h=400&fit=crop&auto=format", uploadedBy: "Saoirse Mäkinen", uploadedByUserId: "user-2" },
+  { id: "m7", kind: "Image", originalFileName: "team_at_camp.jpg", sizeBytes: 4800000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=600&h=400&fit=crop&auto=format", uploadedBy: "Tomás Herrera", uploadedByUserId: "user-3" },
+  { id: "m8", kind: "Video", originalFileName: "descent_timelapse.mp4", sizeBytes: 112000000, contentType: "video/mp4", url: "", uploadedBy: "Tomás Herrera", uploadedByUserId: "user-3" },
 ];
 
-function formatDate(dateStr: string) {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDate(dateStr: string, lang: Lang) {
   const d = new Date(dateStr + "T12:00:00");
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -175,30 +322,95 @@ function formatBytes(bytes: number) {
   return (bytes / 1e3).toFixed(0) + " KB";
 }
 
+// Shared style helpers based on CSS variables
+const C = {
+  bg: "bg-[var(--tb-bg)]",
+  fg: "text-[var(--tb-fg)]",
+  card: "bg-[var(--tb-card)]",
+  cardHover: "hover:bg-[var(--tb-card)]",
+  secondary: "bg-[var(--tb-secondary)]",
+  muted: "bg-[var(--tb-muted)]",
+  dim: "text-[var(--tb-dim)]",
+  secondaryFg: "text-[var(--tb-secondary-fg)]",
+  border: "border-[var(--tb-border)]",
+  borderBg: "bg-[var(--tb-border)]",
+  dimmer: "text-[var(--tb-dimmer)]",
+};
+
+// ─── Activity type badge ───────────────────────────────────────────────────────
+
+function ActivityTypeBadge({ type }: { type: ActivityType }) {
+  const { lang } = useSettings();
+  const t = T[lang];
+  const cfg: Record<ActivityType, { label: string; icon: React.ReactNode; color: string }> = {
+    public: {
+      label: t.typePublic,
+      color: "text-emerald-500",
+      icon: (
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M1.5 5C1.5 5 3 7.5 5 7.5C7 7.5 8.5 5 8.5 5C8.5 5 7 2.5 5 2.5C3 2.5 1.5 5 1.5 5Z" stroke="currentColor" strokeWidth="1.2" />
+          <circle cx="5" cy="5" r="1.2" fill="currentColor" />
+        </svg>
+      ),
+    },
+    shared: {
+      label: t.typeShared,
+      color: "text-sky-400",
+      icon: (
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <circle cx="3.5" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+          <circle cx="6.5" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M1 8.5C1 7.12 2.12 6 3.5 6H6.5C7.88 6 9 7.12 9 8.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    private: {
+      label: t.typePrivate,
+      color: "text-[#c8893a]",
+      icon: (
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <rect x="2" y="4.5" width="6" height="5" rx="0.8" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M3.5 4.5V3C3.5 2.17 4.17 1.5 5 1.5C5.83 1.5 6.5 2.17 6.5 3V4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+  };
+  const { label, icon, color } = cfg[type];
+  return (
+    <span className={`inline-flex items-center gap-1 font-mono-data text-[10px] uppercase tracking-wider ${color}`}>
+      {icon}
+      {label}
+    </span>
+  );
+}
+
+// ─── Nav ──────────────────────────────────────────────────────────────────────
+
 function Nav({
   authRole,
+  currentView,
   onNavigate,
 }: {
   authRole: AuthRole;
+  currentView: View;
   onNavigate: (v: View) => void;
 }) {
+  const { lang } = useSettings();
+  const t = T[lang];
+  const isDetail = currentView?.name === "detail";
+  const plusLabel = isDetail ? t.uploadMedia : t.newActivity;
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-[#2a2f26] bg-[#0f120e]/95 backdrop-blur-sm">
+    <header className={`fixed top-0 left-0 right-0 z-50 border-b ${C.border} ${C.bg}/95 backdrop-blur-sm transition-colors duration-300`}>
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-        <button
-          onClick={() => onNavigate({ name: "list" })}
-          className="flex items-center gap-3 group"
-        >
+        <button onClick={() => onNavigate({ name: "list" })} className="flex items-center gap-3 group">
           <span className="text-[#c8893a] text-lg leading-none">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path
-                d="M10 2L13 7H17L14 11L15.5 16L10 13L4.5 16L6 11L3 7H7L10 2Z"
-                fill="currentColor"
-                opacity="0.9"
-              />
+              <path d="M10 2L13 7H17L14 11L15.5 16L10 13L4.5 16L6 11L3 7H7L10 2Z" fill="currentColor" opacity="0.9" />
             </svg>
           </span>
-          <span className="font-display font-semibold text-[15px] tracking-wide text-[#e8e3d8] group-hover:text-[#c8893a] transition-colors">
+          <span className={`font-display font-semibold text-[15px] tracking-wide ${C.fg} group-hover:text-[#c8893a] transition-colors`}>
             TrailBlaze
           </span>
         </button>
@@ -206,58 +418,32 @@ function Nav({
         <div className="flex items-center gap-4">
           {authRole !== "visitor" && (
             <button
-              onClick={() => onNavigate({ name: "create" })}
-              className="hidden sm:flex items-center gap-2 text-sm font-medium text-[#7a7568] hover:text-[#e8e3d8] transition-colors"
+              onClick={() => onNavigate(isDetail ? { name: "create" } : { name: "create" })}
+              className={`hidden sm:flex items-center gap-2 text-sm font-medium ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path
-                  d="M7 1V13M1 7H13"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
+                <path d="M7 1V13M1 7H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
-              New Activity
+              {plusLabel}
             </button>
           )}
 
           {authRole === "visitor" ? (
-            <a
-              href="/auth/login"
-              className="flex items-center gap-2 text-sm font-medium text-[#7a7568] hover:text-[#e8e3d8] transition-colors"
-            >
+            <a href="/auth/login" className={`flex items-center gap-2 text-sm font-medium ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path
-                  d="M9 2H12C12.5523 2 13 2.44772 13 3V11C13 11.5523 12.5523 12 12 12H9"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M6 9.5L9 7L6 4.5"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M1 7H9"
-                  stroke="currentColor"
-                  strokeWidth="1.2"
-                  strokeLinecap="round"
-                />
+                <path d="M9 2H12C12.5523 2 13 2.44772 13 3V11C13 11.5523 12.5523 12 12 12H9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                <path d="M6 9.5L9 7L6 4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M1 7H9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
               </svg>
-              Sign in with Microsoft
+              {t.signIn}
             </a>
           ) : (
-            <div className="flex items-center gap-2">
+            <button onClick={() => onNavigate({ name: "profile" })} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               <span className="w-6 h-6 rounded-full bg-[#c8893a] flex items-center justify-center text-[10px] font-semibold text-[#0f120e]">
                 {authRole === "admin" ? "A" : "U"}
               </span>
-              <span className="hidden sm:block text-sm text-[#b8b2a4] capitalize">
-                {authRole}
-              </span>
-            </div>
+              <span className={`hidden sm:block text-sm ${C.secondaryFg} capitalize`}>{authRole}</span>
+            </button>
           )}
         </div>
       </div>
@@ -265,83 +451,58 @@ function Nav({
   );
 }
 
-function ActivityCard({
-  activity,
-  onClick,
-}: {
-  activity: Activity;
-  onClick: () => void;
-}) {
+// ─── Activity Card ─────────────────────────────────────────────────────────────
+
+function ActivityCard({ activity, onClick }: { activity: Activity; onClick: () => void }) {
+  const { lang } = useSettings();
+
   return (
     <article
-      className="group cursor-pointer border border-[#2a2f26] hover:border-[#3a4036] transition-all duration-300 bg-[#161a14] hover:bg-[#191d17]"
+      className={`group cursor-pointer border ${C.border} hover:border-[var(--tb-dim)] transition-all duration-300 ${C.card}`}
       onClick={onClick}
     >
-      <div className="aspect-[16/9] overflow-hidden bg-[#1a1e18] relative">
+      <div className={`aspect-[16/9] overflow-hidden ${C.muted} relative`}>
         {activity.coverImageUrl ? (
-          <img
-            src={activity.coverImageUrl}
-            alt={activity.title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
+          <img src={activity.coverImageUrl} alt={activity.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <svg
-              width="32"
-              height="32"
-              viewBox="0 0 32 32"
-              fill="none"
-              className="opacity-20"
-            >
-              <path
-                d="M4 24L11 14L16 20L21 16L28 24H4Z"
-                stroke="#e8e3d8"
-                strokeWidth="1.5"
-                fill="none"
-              />
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="opacity-20">
+              <path d="M4 24L11 14L16 20L21 16L28 24H4Z" stroke="currentColor" strokeWidth="1.5" fill="none" />
             </svg>
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#161a14]/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className={`absolute inset-0 bg-gradient-to-t from-[var(--tb-card)]/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
       </div>
 
       <div className="p-5">
         <div className="flex items-center gap-3 mb-3">
           <span className="font-mono-data text-[11px] text-[#c8893a] tracking-wider">
-            {formatDate(activity.activityDate)}
+            {formatDate(activity.activityDate, lang)}
           </span>
-          <span className="w-1 h-1 rounded-full bg-[#2a2f26]" />
-          <span className="text-[11px] text-[#7a7568] truncate">
-            {activity.location}
-          </span>
+          <span className={`w-1 h-1 rounded-full ${C.borderBg}`} />
+          <span className={`text-[11px] ${C.dim} truncate`}>{activity.location}</span>
         </div>
-
-        <h2 className="font-display font-semibold text-[18px] leading-snug text-[#e8e3d8] group-hover:text-white transition-colors mb-2 line-clamp-2">
+        <h2 className={`font-display font-semibold text-[18px] leading-snug ${C.fg} group-hover:text-white transition-colors mb-2 line-clamp-2`}>
           {activity.title}
         </h2>
-
-        <p className="text-sm text-[#7a7568] line-clamp-2 leading-relaxed mb-4">
-          {activity.description}
-        </p>
-
-        <div className="flex items-center justify-between pt-3 border-t border-[#2a2f26]">
-          <span className="text-[12px] text-[#7a7568]">{activity.createdBy}</span>
-          <span className="font-mono-data text-[11px] text-[#3a4036] tracking-wider">
-            {activity.mediaCount} media
-          </span>
+        <p className={`text-sm ${C.dim} line-clamp-2 leading-relaxed mb-4`}>{activity.description}</p>
+        <div className={`flex items-center justify-between pt-3 border-t ${C.border}`}>
+          <span className={`text-[12px] ${C.dim}`}>{activity.createdBy}</span>
+          <div className="flex items-center gap-3">
+            <ActivityTypeBadge type={activity.type} />
+            <span className={`font-mono-data text-[11px] ${C.dimmer} tracking-wider`}>{activity.mediaCount} media</span>
+          </div>
         </div>
       </div>
     </article>
   );
 }
 
-function ActivityList({
-  authRole,
-  onNavigate,
-}: {
-  authRole: AuthRole;
-  onNavigate: (v: View) => void;
-}) {
+// ─── Activity List ─────────────────────────────────────────────────────────────
+
+function ActivityList({ authRole, onNavigate }: { authRole: AuthRole; onNavigate: (v: View) => void }) {
+  const { lang } = useSettings();
+  const t = T[lang];
   const [page, setPage] = useState(1);
   const pageSize = 6;
   const total = MOCK_ACTIVITIES.length;
@@ -351,104 +512,66 @@ function ActivityList({
   return (
     <main className="pt-14">
       <div className="max-w-6xl mx-auto px-6">
-        {/* Hero bar */}
-        <div className="py-16 border-b border-[#2a2f26] mb-12">
+        <div className={`py-16 border-b ${C.border} mb-12`}>
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-8 items-end">
             <div>
-              <p className="font-mono-data text-[11px] text-[#c8893a] tracking-widest uppercase mb-4">
-                Shared Journal
-              </p>
-              <h1 className="font-display text-[52px] lg:text-[68px] leading-[0.95] font-light text-[#e8e3d8]">
-                Every trail,
+              <p className="font-mono-data text-[11px] text-[#c8893a] tracking-widest uppercase mb-4">{t.sharedJournal}</p>
+              <h1 className={`font-display text-[52px] lg:text-[68px] leading-[0.95] font-light ${C.fg}`}>
+                {t.heroLine1}
                 <br />
-                <em className="font-light not-italic text-[#c8893a]">one record.</em>
+                <em className="font-light not-italic text-[#c8893a]">{t.heroLine2}</em>
               </h1>
-              <p className="mt-5 text-[15px] text-[#7a7568] max-w-md leading-relaxed">
-                A communal log of routes taken, summits chased, and coastlines walked.
-                Public by default — media for those who sign in.
-              </p>
+              <p className={`mt-5 text-[15px] ${C.dim} max-w-md leading-relaxed`}>{t.heroDesc}</p>
             </div>
             <div className="lg:text-right">
               <div className="inline-flex flex-col gap-1">
-                <span className="font-mono-data text-[36px] font-medium text-[#e8e3d8]">
-                  {total}
-                </span>
-                <span className="text-[12px] text-[#7a7568] uppercase tracking-widest">
-                  activities logged
-                </span>
+                <span className={`font-mono-data text-[36px] font-medium ${C.fg}`}>{total}</span>
+                <span className={`text-[12px] ${C.dim} uppercase tracking-widest`}>{t.activitiesLogged}</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Auth callout for visitors */}
         {authRole === "visitor" && (
-          <div className="mb-10 flex items-start gap-4 px-5 py-4 border border-[#2a2f26] bg-[#161a14]">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              className="mt-0.5 shrink-0 text-[#c8893a]"
-            >
+          <div className={`mb-10 flex items-start gap-4 px-5 py-4 border ${C.border} ${C.card}`}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="mt-0.5 shrink-0 text-[#c8893a]">
               <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.2" />
               <path d="M8 7V11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               <circle cx="8" cy="5" r="0.75" fill="currentColor" />
             </svg>
-            <p className="text-sm text-[#b8b2a4]">
-              Sign in to view photos and videos, and to add your own activities to the journal.
-            </p>
+            <p className={`text-sm ${C.secondaryFg}`}>{t.visitorCallout}</p>
           </div>
         )}
 
-        {/* Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-px bg-[#2a2f26]">
+        <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-px ${C.borderBg}`}>
           {paged.map((a) => (
-            <div key={a.id} className="bg-[#0f120e]">
-              <ActivityCard
-                activity={a}
-                onClick={() => onNavigate({ name: "detail", activityId: a.id })}
-              />
+            <div key={a.id} className={C.bg}>
+              <ActivityCard activity={a} onClick={() => onNavigate({ name: "detail", activityId: a.id })} />
             </div>
           ))}
         </div>
 
-        {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between py-10 border-t border-[#2a2f26] mt-px">
+          <div className={`flex items-center justify-between py-10 border-t ${C.border} mt-px`}>
             <button
               disabled={page === 1}
               onClick={() => setPage(page - 1)}
-              className="flex items-center gap-2 text-sm text-[#7a7568] hover:text-[#e8e3d8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className={`flex items-center gap-2 text-sm ${C.dim} hover:text-[var(--tb-fg)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors`}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M10 12L6 8L10 4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Previous
+              {t.previous}
             </button>
-            <span className="font-mono-data text-[12px] text-[#7a7568]">
-              {page} / {totalPages}
-            </span>
+            <span className={`font-mono-data text-[12px] ${C.dim}`}>{page} / {totalPages}</span>
             <button
               disabled={page === totalPages}
               onClick={() => setPage(page + 1)}
-              className="flex items-center gap-2 text-sm text-[#7a7568] hover:text-[#e8e3d8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className={`flex items-center gap-2 text-sm ${C.dim} hover:text-[var(--tb-fg)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors`}
             >
-              Next
+              {t.next}
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M6 4L10 8L6 12"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+                <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
           </div>
@@ -458,12 +581,10 @@ function ActivityList({
   );
 }
 
+// ─── Activity Detail ───────────────────────────────────────────────────────────
+
 function ActivityDetail({
-  activityId,
-  authRole,
-  currentUserId,
-  onNavigate,
-  onDelete,
+  activityId, authRole, currentUserId, onNavigate, onDelete,
 }: {
   activityId: string;
   authRole: AuthRole;
@@ -471,63 +592,70 @@ function ActivityDetail({
   onNavigate: (v: View) => void;
   onDelete: (id: string) => void;
 }) {
+  const { lang, theme } = useSettings();
+  const t = T[lang];
+
   const activity = MOCK_ACTIVITIES.find((a) => a.id === activityId);
-  const [mediaLoaded, setMediaLoaded] = useState(false);
+  const isOwner = activity?.createdByUserId === currentUserId;
+  const canEdit = authRole === "admin" || (authRole === "user" && isOwner);
+  const canViewMedia = authRole !== "visitor";
+  const media = canViewMedia ? MOCK_MEDIA : [];
+
+  const mediaByUploader = media.reduce<{ userId: string; name: string; items: MediaItem[] }[]>(
+    (groups, item) => {
+      const existing = groups.find((g) => g.userId === item.uploadedByUserId);
+      if (existing) { existing.items.push(item); }
+      else { groups.push({ userId: item.uploadedByUserId, name: item.uploadedBy, items: [item] }); }
+      return groups;
+    }, []
+  );
+
+  const allImages = media.filter((m) => m.kind === "Image");
+
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [collapsedUploaders, setCollapsedUploaders] = useState<Set<string>>(
+    () => new Set(mediaByUploader.slice(1).map((g) => g.userId))
+  );
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  function toggleUploader(userId: string) {
+    setCollapsedUploaders((prev) => {
+      const next = new Set(prev);
+      next.has(userId) ? next.delete(userId) : next.add(userId);
+      return next;
+    });
+  }
 
   if (!activity) {
     return (
       <main className="pt-14 min-h-screen flex items-center justify-center">
-        <p className="text-[#7a7568]">Activity not found.</p>
+        <p className={C.dim}>Activity not found.</p>
       </main>
     );
   }
 
-  const isOwner = activity.createdByUserId === currentUserId;
-  const canEdit = authRole === "admin" || (authRole === "user" && isOwner);
-  const canViewMedia = authRole !== "visitor";
-  const media = canViewMedia && mediaLoaded ? MOCK_MEDIA : [];
-  const imageMedia = media.filter((m) => m.kind === "Image");
-
   return (
     <main className="pt-14">
-      {/* Cover hero */}
-      <div className="relative h-[55vh] min-h-[320px] bg-[#1a1e18]">
+      <div className={`relative h-[55vh] min-h-[320px] ${C.muted}`}>
         {activity.coverImageUrl && (
-          <img
-            src={activity.coverImageUrl}
-            alt={activity.title}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+          <img src={activity.coverImageUrl} alt={activity.title} className="absolute inset-0 w-full h-full object-cover" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0f120e] via-[#0f120e]/40 to-transparent" />
+        <div className={`absolute inset-0 bg-gradient-to-t from-[var(--tb-bg)] via-[var(--tb-bg)]/40 to-transparent`} />
 
         <div className="absolute bottom-0 left-0 right-0 max-w-6xl mx-auto px-6 pb-10">
-          <button
-            onClick={() => onNavigate({ name: "list" })}
-            className="flex items-center gap-2 text-sm text-[#b8b2a4] hover:text-[#e8e3d8] transition-colors mb-6"
-          >
+          <button onClick={() => onNavigate({ name: "list" })} className={`flex items-center gap-2 text-sm ${C.secondaryFg} hover:text-[var(--tb-fg)] transition-colors mb-6`}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path
-                d="M9 11L5 7L9 3"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+              <path d="M9 11L5 7L9 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            All activities
+            {t.allActivities}
           </button>
 
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <div>
               <div className="flex items-center gap-3 mb-3">
-                <span className="font-mono-data text-[11px] text-[#c8893a] tracking-wider">
-                  {formatDate(activity.activityDate)}
-                </span>
-                <span className="text-[#2a2f26]">·</span>
-                <span className="text-[12px] text-[#b8b2a4]">{activity.location}</span>
+                <span className="font-mono-data text-[11px] text-[#c8893a] tracking-wider">{formatDate(activity.activityDate, lang)}</span>
+                <span className={C.dimmer}>·</span>
+                <span className={`text-[12px] ${C.secondaryFg}`}>{activity.location}</span>
               </div>
               <h1 className="font-display font-semibold text-[36px] lg:text-[48px] leading-tight text-white max-w-3xl">
                 {activity.title}
@@ -538,30 +666,21 @@ function ActivityDetail({
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => onNavigate({ name: "edit", activityId: activity.id })}
-                  className="px-4 py-2 text-sm font-medium text-[#e8e3d8] border border-[#2a2f26] hover:border-[#c8893a] hover:text-[#c8893a] transition-colors"
+                  className={`px-4 py-2 text-sm font-medium ${C.fg} border ${C.border} hover:border-[#c8893a] hover:text-[#c8893a] transition-colors`}
                 >
-                  Edit
+                  {t.edit}
                 </button>
                 {!confirmDelete ? (
-                  <button
-                    onClick={() => setConfirmDelete(true)}
-                    className="px-4 py-2 text-sm font-medium text-[#7a7568] border border-[#2a2f26] hover:border-red-800 hover:text-red-400 transition-colors"
-                  >
-                    Delete
+                  <button onClick={() => setConfirmDelete(true)} className={`px-4 py-2 text-sm font-medium ${C.dim} border ${C.border} hover:border-red-800 hover:text-red-400 transition-colors`}>
+                    {t.delete}
                   </button>
                 ) : (
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => onDelete(activity.id)}
-                      className="px-3 py-2 text-sm font-medium text-red-400 border border-red-800 hover:bg-red-950 transition-colors"
-                    >
-                      Confirm
+                    <button onClick={() => onDelete(activity.id)} className="px-3 py-2 text-sm font-medium text-red-400 border border-red-800 hover:bg-red-950 transition-colors">
+                      {t.confirm}
                     </button>
-                    <button
-                      onClick={() => setConfirmDelete(false)}
-                      className="px-3 py-2 text-sm text-[#7a7568] hover:text-[#e8e3d8] transition-colors"
-                    >
-                      Cancel
+                    <button onClick={() => setConfirmDelete(false)} className={`px-3 py-2 text-sm ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
+                      {t.cancel}
                     </button>
                   </div>
                 )}
@@ -571,165 +690,114 @@ function ActivityDetail({
         </div>
       </div>
 
-      {/* Body */}
       <div className="max-w-6xl mx-auto px-6 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-12">
-          {/* Main content */}
           <div>
             {activity.description && (
-              <p className="text-[16px] text-[#b8b2a4] leading-[1.8] mb-10">
-                {activity.description}
-              </p>
+              <p className={`text-[16px] ${C.secondaryFg} leading-[1.8] mb-10`}>{activity.description}</p>
             )}
 
-            {/* Media section */}
             <section>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-display font-semibold text-[22px] text-[#e8e3d8]">
-                  Photos & Videos
-                </h2>
-                {canViewMedia && !mediaLoaded && (
-                  <button
-                    onClick={() => setMediaLoaded(true)}
-                    className="flex items-center gap-2 text-sm text-[#c8893a] hover:text-[#d9a050] transition-colors"
-                  >
-                    Load media
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <path
-                        d="M5 3L9 7L5 11"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </button>
-                )}
-              </div>
+              <h2 className={`font-display font-semibold text-[22px] ${C.fg} mb-6`}>{t.photosVideos}</h2>
 
               {authRole === "visitor" ? (
-                <div className="border border-dashed border-[#2a2f26] px-8 py-12 text-center">
-                  <div className="w-10 h-10 mx-auto mb-4 flex items-center justify-center border border-[#2a2f26]">
+                <div className={`border border-dashed ${C.border} px-8 py-12 text-center`}>
+                  <div className={`w-10 h-10 mx-auto mb-4 flex items-center justify-center border ${C.border}`}>
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                      <rect
-                        x="3"
-                        y="7"
-                        width="12"
-                        height="9"
-                        rx="1"
-                        stroke="#7a7568"
-                        strokeWidth="1.2"
-                      />
-                      <path
-                        d="M6 7V5C6 3.34315 7.34315 2 9 2C10.6569 2 12 3.34315 12 5V7"
-                        stroke="#7a7568"
-                        strokeWidth="1.2"
-                      />
+                      <rect x="3" y="7" width="12" height="9" rx="1" stroke="currentColor" strokeWidth="1.2" className={C.dim} />
+                      <path d="M6 7V5C6 3.34315 7.34315 2 9 2C10.6569 2 12 3.34315 12 5V7" stroke="currentColor" strokeWidth="1.2" className={C.dim} />
                     </svg>
                   </div>
-                  <p className="text-[14px] text-[#7a7568]">
-                    Sign in to view {activity.mediaCount} photos and videos
-                  </p>
+                  <p className={`text-[14px] ${C.dim}`}>{t.signInToView(activity.mediaCount)}</p>
                 </div>
-              ) : !mediaLoaded ? (
-                <div className="border border-dashed border-[#2a2f26] px-8 py-12 text-center">
-                  <p className="text-[14px] text-[#7a7568]">
-                    {activity.mediaCount} items — click "Load media" to fetch
-                  </p>
+              ) : mediaByUploader.length === 0 ? (
+                <div className={`border border-dashed ${C.border} px-8 py-12 text-center`}>
+                  <p className={`text-[14px] ${C.dim}`}>{t.noMedia}</p>
                 </div>
               ) : (
-                <div>
-                  {imageMedia.length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-1 mb-4">
-                      {imageMedia.map((m, i) => (
+                <div className="space-y-3">
+                  {mediaByUploader.map((group) => {
+                    const groupImages = group.items.filter((m) => m.kind === "Image");
+                    const groupVideos = group.items.filter((m) => m.kind === "Video");
+                    const isCollapsed = collapsedUploaders.has(group.userId);
+                    return (
+                      <div key={group.userId} className={`border ${C.border}`}>
                         <button
-                          key={m.id}
-                          className="aspect-square overflow-hidden bg-[#1a1e18] group relative"
-                          onClick={() => setLightboxIndex(i)}
+                          onClick={() => toggleUploader(group.userId)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 ${C.cardHover} transition-colors`}
                         >
-                          <img
-                            src={m.url}
-                            alt={m.originalFileName}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {media
-                    .filter((m) => m.kind === "Video")
-                    .map((m) => (
-                      <div
-                        key={m.id}
-                        className="flex items-center gap-4 px-4 py-3 border border-[#2a2f26] mb-2"
-                      >
-                        <div className="w-8 h-8 bg-[#1e2419] flex items-center justify-center shrink-0">
-                          <svg width="12" height="14" viewBox="0 0 12 14" fill="none">
-                            <path d="M1 1L11 7L1 13V1Z" fill="#c8893a" />
+                          <div className={`w-6 h-6 rounded-full ${C.secondary} border ${C.border} flex items-center justify-center text-[10px] font-semibold text-[#c8893a] shrink-0`}>
+                            {group.name.charAt(0)}
+                          </div>
+                          <span className={`text-[13px] ${C.secondaryFg} flex-1 text-left`}>{group.name}</span>
+                          <span className={`font-mono-data text-[11px] ${C.dimmer} mr-2`}>{t.items(group.items.length)}</span>
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={`${C.dim} transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`}>
+                            <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-[#e8e3d8] truncate">
-                            {m.originalFileName}
-                          </p>
-                          <p className="font-mono-data text-[11px] text-[#7a7568]">
-                            {formatBytes(m.sizeBytes)} · {m.contentType}
-                          </p>
-                        </div>
-                        <span className="font-mono-data text-[10px] text-[#3a4036] uppercase tracking-wider">
-                          SAS required
-                        </span>
+                        </button>
+
+                        {!isCollapsed && (
+                          <div className={`px-4 pb-4 pt-1 border-t ${C.border}`}>
+                            {groupImages.length > 0 && (
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-1 mb-3 mt-3">
+                                {groupImages.map((m) => {
+                                  const globalIdx = allImages.findIndex((img) => img.id === m.id);
+                                  return (
+                                    <button key={m.id} className={`aspect-square overflow-hidden ${C.muted} group relative`} onClick={() => setLightboxIndex(globalIdx)}>
+                                      <img src={m.url} alt={m.originalFileName} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {groupVideos.map((m) => (
+                              <div key={m.id} className={`flex items-center gap-4 px-4 py-3 border ${C.border} mb-2 mt-2`}>
+                                <div className={`w-8 h-8 ${C.secondary} flex items-center justify-center shrink-0`}>
+                                  <svg width="12" height="14" viewBox="0 0 12 14" fill="none">
+                                    <path d="M1 1L11 7L1 13V1Z" fill="#c8893a" />
+                                  </svg>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm ${C.fg} truncate`}>{m.originalFileName}</p>
+                                  <p className={`font-mono-data text-[11px] ${C.dim}`}>{formatBytes(m.sizeBytes)} · {m.contentType}</p>
+                                </div>
+                                <span className={`font-mono-data text-[10px] ${C.dimmer} uppercase tracking-wider`}>{t.sasRequired}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    );
+                  })}
                 </div>
               )}
             </section>
-
-            {/* Add media (owners/admin) */}
-            {canEdit && mediaLoaded && (
-              <div className="mt-6 border border-dashed border-[#2a2f26] hover:border-[#c8893a]/40 transition-colors">
-                <button className="w-full px-6 py-5 flex items-center gap-3 text-sm text-[#7a7568] hover:text-[#e8e3d8] transition-colors">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M8 1V15M1 8H15"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  Upload photos or videos
-                </button>
-              </div>
-            )}
           </div>
 
-          {/* Sidebar */}
-          <aside className="space-y-0">
-            <div className="border border-[#2a2f26] p-5">
-              <h3 className="font-mono-data text-[10px] text-[#7a7568] uppercase tracking-widest mb-4">
-                Details
-              </h3>
+          <aside>
+            <div className={`border ${C.border} p-5`}>
+              <h3 className={`font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-4`}>{t.details}</h3>
               <dl className="space-y-4">
                 <div>
-                  <dt className="text-[11px] text-[#7a7568] mb-1">Date</dt>
-                  <dd className="text-[14px] text-[#e8e3d8]">
-                    {formatDate(activity.activityDate)}
-                  </dd>
+                  <dt className={`text-[11px] ${C.dim} mb-1`}>{t.date}</dt>
+                  <dd className={`text-[14px] ${C.fg}`}>{formatDate(activity.activityDate, lang)}</dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] text-[#7a7568] mb-1">Location</dt>
-                  <dd className="text-[14px] text-[#e8e3d8]">{activity.location}</dd>
+                  <dt className={`text-[11px] ${C.dim} mb-1`}>{t.location}</dt>
+                  <dd className={`text-[14px] ${C.fg}`}>{activity.location}</dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] text-[#7a7568] mb-1">Logged by</dt>
-                  <dd className="text-[14px] text-[#e8e3d8]">{activity.createdBy}</dd>
+                  <dt className={`text-[11px] ${C.dim} mb-1`}>{t.loggedBy}</dt>
+                  <dd className={`text-[14px] ${C.fg}`}>{activity.createdBy}</dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] text-[#7a7568] mb-1">Media</dt>
-                  <dd className="font-mono-data text-[14px] text-[#e8e3d8]">
-                    {activity.mediaCount} items
-                  </dd>
+                  <dt className={`text-[11px] ${C.dim} mb-1`}>{t.typeLabel}</dt>
+                  <dd className="mt-1"><ActivityTypeBadge type={activity.type} /></dd>
+                </div>
+                <div>
+                  <dt className={`text-[11px] ${C.dim} mb-1`}>{t.media}</dt>
+                  <dd className={`font-mono-data text-[14px] ${C.fg}`}>{activity.mediaCount} items</dd>
                 </div>
               </dl>
             </div>
@@ -737,71 +805,26 @@ function ActivityDetail({
         </div>
       </div>
 
-      {/* Lightbox */}
       {lightboxIndex !== null && (
-        <div
-          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
-          onClick={() => setLightboxIndex(null)}
-        >
-          <button
-            className="absolute top-4 right-4 text-[#7a7568] hover:text-[#e8e3d8] transition-colors"
-            onClick={() => setLightboxIndex(null)}
-          >
+        <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center" onClick={() => setLightboxIndex(null)}>
+          <button className="absolute top-4 right-4 text-[#7a7568] hover:text-white transition-colors" onClick={() => setLightboxIndex(null)}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M18 6L6 18M6 6L18 18"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
+              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </button>
-          <button
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7a7568] hover:text-[#e8e3d8] transition-colors p-2"
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightboxIndex((prev) =>
-                prev !== null ? (prev - 1 + imageMedia.length) % imageMedia.length : 0
-              );
-            }}
-          >
+          <button className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7a7568] hover:text-white transition-colors p-2" onClick={(e) => { e.stopPropagation(); setLightboxIndex((prev) => prev !== null ? (prev - 1 + allImages.length) % allImages.length : 0); }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M15 18L9 12L15 6"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+              <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <img
-            src={imageMedia[lightboxIndex]?.url}
-            alt={imageMedia[lightboxIndex]?.originalFileName}
-            className="max-w-4xl max-h-[85vh] object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <button
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7a7568] hover:text-[#e8e3d8] transition-colors p-2"
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightboxIndex((prev) =>
-                prev !== null ? (prev + 1) % imageMedia.length : 0
-              );
-            }}
-          >
+          <img src={allImages[lightboxIndex]?.url} alt={allImages[lightboxIndex]?.originalFileName} className="max-w-4xl max-h-[85vh] object-contain" onClick={(e) => e.stopPropagation()} />
+          <button className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7a7568] hover:text-white transition-colors p-2" onClick={(e) => { e.stopPropagation(); setLightboxIndex((prev) => prev !== null ? (prev + 1) % allImages.length : 0); }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M9 18L15 12L9 6"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+              <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 font-mono-data text-[11px] text-[#7a7568]">
-            {lightboxIndex + 1} / {imageMedia.length}
+            {lightboxIndex + 1} / {allImages.length}
           </div>
         </div>
       )}
@@ -809,49 +832,36 @@ function ActivityDetail({
   );
 }
 
-function ActivityForm({
-  mode,
-  activityId,
-  onNavigate,
-}: {
-  mode: "create" | "edit";
-  activityId?: string;
-  onNavigate: (v: View) => void;
-}) {
-  const existing = activityId
-    ? MOCK_ACTIVITIES.find((a) => a.id === activityId)
-    : null;
+// ─── Activity Form ─────────────────────────────────────────────────────────────
 
-  const [form, setForm] = useState({
-    title: existing?.title ?? "",
-    location: existing?.location ?? "",
-    activityDate: existing?.activityDate ?? "",
-    description: existing?.description ?? "",
-  });
-  const [coverPreview, setCoverPreview] = useState<string | null>(
-    existing?.coverImageUrl ?? null
-  );
+function ActivityForm({ mode, activityId, onNavigate }: { mode: "create" | "edit"; activityId?: string; onNavigate: (v: View) => void }) {
+  const { lang, theme } = useSettings();
+  const t = T[lang];
+  const existing = activityId ? MOCK_ACTIVITIES.find((a) => a.id === activityId) : null;
+
+  const [form, setForm] = useState({ title: existing?.title ?? "", location: existing?.location ?? "", activityDate: existing?.activityDate ?? "", description: existing?.description ?? "", type: (existing?.type ?? "public") as ActivityType });
+  const [coverPreview, setCoverPreview] = useState<string | null>(existing?.coverImageUrl ?? null);
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   function validate() {
     const e: Record<string, string> = {};
-    if (!form.title.trim()) e.title = "Title is required";
-    if (!form.location.trim()) e.location = "Location is required";
-    if (!form.activityDate) e.activityDate = "Date is required";
+    if (!form.title.trim()) e.title = t.titleRequired;
+    if (!form.location.trim()) e.location = t.locationRequired;
+    if (!form.activityDate) e.activityDate = t.dateRequired;
     return e;
   }
 
   function handleSubmit(evt: React.FormEvent) {
     evt.preventDefault();
     const errs = validate();
-    if (Object.keys(errs).length) {
-      setErrors(errs);
-      return;
-    }
+    if (Object.keys(errs).length) { setErrors(errs); return; }
     setSubmitted(true);
     setTimeout(() => onNavigate({ name: "list" }), 1400);
   }
+
+  const inputClass = (hasError: boolean) =>
+    `w-full ${C.card} border px-4 py-3 text-[15px] ${C.fg} placeholder-[var(--tb-dimmer)] focus:outline-none focus:border-[#c8893a] transition-colors ${hasError ? "border-red-700" : C.border}`;
 
   if (submitted) {
     return (
@@ -859,19 +869,11 @@ function ActivityForm({
         <div className="text-center">
           <div className="w-12 h-12 border border-[#c8893a] flex items-center justify-center mx-auto mb-4">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path
-                d="M4 10L8 14L16 6"
-                stroke="#c8893a"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+              <path d="M4 10L8 14L16 6" stroke="#c8893a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <p className="font-display text-[22px] text-[#e8e3d8]">
-            {mode === "create" ? "Activity logged." : "Changes saved."}
-          </p>
-          <p className="text-sm text-[#7a7568] mt-1">Returning to journal…</p>
+          <p className={`font-display text-[22px] ${C.fg}`}>{mode === "create" ? t.activityLogged : t.changesSaved}</p>
+          <p className={`text-sm ${C.dim} mt-1`}>{t.returningToJournal}</p>
         </div>
       </main>
     );
@@ -880,182 +882,108 @@ function ActivityForm({
   return (
     <main className="pt-14">
       <div className="max-w-3xl mx-auto px-6 py-12">
-        <button
-          onClick={() =>
-            onNavigate(
-              activityId ? { name: "detail", activityId } : { name: "list" }
-            )
-          }
-          className="flex items-center gap-2 text-sm text-[#7a7568] hover:text-[#e8e3d8] transition-colors mb-8"
-        >
+        <button onClick={() => onNavigate(activityId ? { name: "detail", activityId } : { name: "list" })} className={`flex items-center gap-2 text-sm ${C.dim} hover:text-[var(--tb-fg)] transition-colors mb-8`}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path
-              d="M9 11L5 7L9 3"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <path d="M9 11L5 7L9 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          {mode === "create" ? "Back to journal" : "Back to activity"}
+          {mode === "create" ? t.backToJournal : t.backToActivity}
         </button>
 
-        <h1 className="font-display text-[38px] font-semibold text-[#e8e3d8] mb-8">
-          {mode === "create" ? "Log an activity" : "Edit activity"}
+        <h1 className={`font-display text-[38px] font-semibold ${C.fg} mb-8`}>
+          {mode === "create" ? t.logActivityTitle : t.editActivityTitle}
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Title */}
           <div>
-            <label className="block font-mono-data text-[10px] text-[#7a7568] uppercase tracking-widest mb-2">
-              Title *
-            </label>
-            <input
-              type="text"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="Summit attempt on Glacier Peak"
-              className={`w-full bg-[#161a14] border px-4 py-3 text-[15px] text-[#e8e3d8] placeholder-[#3a4036] focus:outline-none focus:border-[#c8893a] transition-colors ${
-                errors.title ? "border-red-700" : "border-[#2a2f26]"
-              }`}
-            />
-            {errors.title && (
-              <p className="mt-1 text-[12px] text-red-400">{errors.title}</p>
-            )}
+            <label className={`block font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-2`}>{t.titleLabel}</label>
+            <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t.titlePlaceholder} className={inputClass(!!errors.title)} />
+            {errors.title && <p className="mt-1 text-[12px] text-red-400">{errors.title}</p>}
           </div>
 
-          {/* Date + Location row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-mono-data text-[10px] text-[#7a7568] uppercase tracking-widest mb-2">
-                Activity date *
-              </label>
+              <label className={`block font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-2`}>{t.activityDate}</label>
               <input
                 type="date"
                 value={form.activityDate}
                 onChange={(e) => setForm({ ...form, activityDate: e.target.value })}
-                className={`w-full bg-[#161a14] border px-4 py-3 text-[15px] text-[#e8e3d8] focus:outline-none focus:border-[#c8893a] transition-colors [color-scheme:dark] ${
-                  errors.activityDate ? "border-red-700" : "border-[#2a2f26]"
-                }`}
+                className={`${inputClass(!!errors.activityDate)} ${theme === "dark" ? "[color-scheme:dark]" : "[color-scheme:light]"}`}
               />
-              {errors.activityDate && (
-                <p className="mt-1 text-[12px] text-red-400">{errors.activityDate}</p>
-              )}
+              {errors.activityDate && <p className="mt-1 text-[12px] text-red-400">{errors.activityDate}</p>}
             </div>
             <div>
-              <label className="block font-mono-data text-[10px] text-[#7a7568] uppercase tracking-widest mb-2">
-                Location *
-              </label>
-              <input
-                type="text"
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-                placeholder="Mount Rainier National Park, WA"
-                className={`w-full bg-[#161a14] border px-4 py-3 text-[15px] text-[#e8e3d8] placeholder-[#3a4036] focus:outline-none focus:border-[#c8893a] transition-colors ${
-                  errors.location ? "border-red-700" : "border-[#2a2f26]"
-                }`}
-              />
-              {errors.location && (
-                <p className="mt-1 text-[12px] text-red-400">{errors.location}</p>
-              )}
+              <label className={`block font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-2`}>{t.locationLabel}</label>
+              <input type="text" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder={t.locationPlaceholder} className={inputClass(!!errors.location)} />
+              {errors.location && <p className="mt-1 text-[12px] text-red-400">{errors.location}</p>}
             </div>
           </div>
 
-          {/* Description */}
           <div>
-            <label className="block font-mono-data text-[10px] text-[#7a7568] uppercase tracking-widest mb-2">
-              Description
-            </label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="What happened out there…"
-              rows={5}
-              className="w-full bg-[#161a14] border border-[#2a2f26] px-4 py-3 text-[15px] text-[#e8e3d8] placeholder-[#3a4036] focus:outline-none focus:border-[#c8893a] transition-colors resize-none"
-            />
+            <label className={`block font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-2`}>{t.descriptionLabel}</label>
+            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={t.descPlaceholder} rows={5} className={`${inputClass(false)} resize-none`} />
           </div>
 
-          {/* Cover image */}
+          {/* Visibility */}
           <div>
-            <label className="block font-mono-data text-[10px] text-[#7a7568] uppercase tracking-widest mb-2">
-              Cover image
-            </label>
-            <div className="border border-dashed border-[#2a2f26] hover:border-[#c8893a]/40 transition-colors">
+            <label className={`block font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-3`}>{t.typeLabel}</label>
+            <div className="grid grid-cols-3 gap-2">
+              {(["public", "shared", "private"] as ActivityType[]).map((opt) => {
+                const labelKey = `type${opt.charAt(0).toUpperCase() + opt.slice(1)}` as "typePublic" | "typeShared" | "typePrivate";
+                const descKey = `${labelKey}Desc` as "typePublicDesc" | "typeSharedDesc" | "typePrivateDesc";
+                const selected = form.type === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setForm({ ...form, type: opt })}
+                    className={`flex flex-col items-start gap-1 px-4 py-3 border transition-colors text-left ${
+                      selected
+                        ? "border-[#c8893a] bg-[#c8893a]/5"
+                        : `${C.border} ${C.card} hover:border-[var(--tb-dim)]`
+                    }`}
+                  >
+                    <span className={selected ? "text-[#c8893a]" : ""}>
+                      <ActivityTypeBadge type={opt} />
+                    </span>
+                    <span className={`text-[11px] ${C.dim} leading-snug`}>{t[descKey]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className={`block font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-2`}>{t.coverImageLabel}</label>
+            <div className={`border border-dashed ${C.border} hover:border-[#c8893a]/40 transition-colors`}>
               {coverPreview ? (
                 <div className="relative">
-                  <img
-                    src={coverPreview}
-                    alt="Cover preview"
-                    className="w-full h-40 object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setCoverPreview(null)}
-                    className="absolute top-2 right-2 w-7 h-7 bg-[#0f120e]/80 flex items-center justify-center text-[#7a7568] hover:text-[#e8e3d8] transition-colors"
-                  >
+                  <img src={coverPreview} alt="Cover preview" className="w-full h-40 object-cover" />
+                  <button type="button" onClick={() => setCoverPreview(null)} className={`absolute top-2 right-2 w-7 h-7 ${C.bg}/80 flex items-center justify-center ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path
-                        d="M9 3L3 9M3 3L9 9"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
+                      <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  className="w-full px-6 py-8 flex flex-col items-center gap-2 text-[#7a7568] hover:text-[#e8e3d8] transition-colors"
-                >
+                <button type="button" className={`w-full px-6 py-8 flex flex-col items-center gap-2 ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15"
-                      stroke="currentColor"
-                      strokeWidth="1.2"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M17 8L12 3L7 8"
-                      stroke="currentColor"
-                      strokeWidth="1.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M12 3V15"
-                      stroke="currentColor"
-                      strokeWidth="1.2"
-                      strokeLinecap="round"
-                    />
+                    <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                    <path d="M17 8L12 3L7 8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M12 3V15" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
                   </svg>
-                  <span className="text-sm">Upload cover image</span>
-                  <span className="font-mono-data text-[11px] text-[#3a4036]">
-                    Public · any size · goes to public container
-                  </span>
+                  <span className="text-sm">{t.uploadCover}</span>
+                  <span className={`font-mono-data text-[11px] ${C.dimmer}`}>{t.coverHint}</span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-3 pt-4 border-t border-[#2a2f26]">
-            <button
-              type="submit"
-              className="px-6 py-3 bg-[#c8893a] text-[#0f120e] text-sm font-semibold hover:bg-[#d9a050] transition-colors"
-            >
-              {mode === "create" ? "Log activity" : "Save changes"}
+          <div className={`flex items-center gap-3 pt-4 border-t ${C.border}`}>
+            <button type="submit" className="px-6 py-3 bg-[#c8893a] text-[#0f120e] text-sm font-semibold hover:bg-[#d9a050] transition-colors">
+              {mode === "create" ? t.logBtn : t.saveBtn}
             </button>
-            <button
-              type="button"
-              onClick={() =>
-                onNavigate(
-                  activityId ? { name: "detail", activityId } : { name: "list" }
-                )
-              }
-              className="px-6 py-3 text-sm text-[#7a7568] hover:text-[#e8e3d8] transition-colors"
-            >
-              Cancel
+            <button type="button" onClick={() => onNavigate(activityId ? { name: "detail", activityId } : { name: "list" })} className={`px-6 py-3 text-sm ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
+              {t.cancel}
             </button>
           </div>
         </form>
@@ -1064,57 +992,236 @@ function ActivityForm({
   );
 }
 
+// ─── User Profile ──────────────────────────────────────────────────────────────
+
+function SegmentedControl<T extends string>({
+  value, onChange, options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+}) {
+  return (
+    <div className={`inline-flex border ${C.border} p-0.5 gap-0.5`}>
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+            value === opt.value
+              ? "bg-[#c8893a] text-[#0f120e]"
+              : `${C.dim} hover:text-[var(--tb-fg)]`
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function UserProfile({ authRole, onNavigate }: { authRole: AuthRole; onNavigate: (v: View) => void }) {
+  const { theme, lang, setTheme, setLang } = useSettings();
+  const t = T[lang];
+
+  const [displayName, setDisplayName] = useState(authRole === "admin" ? "Admin User" : "Rhys Caldwell");
+  const [bio, setBio] = useState(
+    authRole === "admin" ? "" : "Alpine climber, packrafter, and occasional trail runner based in Seattle. Chasing summits in the Cascades since 2018."
+  );
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setAvatarPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const errs: Record<string, string> = {};
+    if (!displayName.trim()) errs.displayName = t.displayNameRequired;
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  const initials = displayName.trim().split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
+  const inputClass = (hasError: boolean) =>
+    `w-full ${C.card} border px-4 py-3 text-[15px] ${C.fg} placeholder-[var(--tb-dimmer)] focus:outline-none focus:border-[#c8893a] transition-colors ${hasError ? "border-red-700" : C.border}`;
+
+  return (
+    <main className="pt-14">
+      <div className="max-w-2xl mx-auto px-6 py-12">
+        <button onClick={() => onNavigate({ name: "list" })} className={`flex items-center gap-2 text-sm ${C.dim} hover:text-[var(--tb-fg)] transition-colors mb-8`}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 11L5 7L9 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {t.backToJournal}
+        </button>
+
+        <h1 className={`font-display text-[38px] font-semibold ${C.fg} mb-1`}>{t.profile}</h1>
+        <p className={`text-sm ${C.dim} mb-10`}>{t.profileSubtitle}</p>
+
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Avatar */}
+          <div className="flex items-center gap-6">
+            <div className="relative shrink-0">
+              <div className={`w-20 h-20 rounded-full ${C.secondary} border-2 ${C.border} overflow-hidden flex items-center justify-center`}>
+                {avatarPreview
+                  ? <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                  : <span className="font-display text-[26px] font-semibold text-[#c8893a]">{initials}</span>}
+              </div>
+              <label className="absolute -bottom-1 -right-1 w-7 h-7 bg-[#c8893a] flex items-center justify-center cursor-pointer hover:bg-[#d9a050] transition-colors rounded-full">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M6 1V11M1 6H11" stroke="#0f120e" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              </label>
+            </div>
+            <div>
+              <p className={`text-[13px] ${C.fg} font-medium mb-1`}>{t.profilePhoto}</p>
+              <p className={`text-[12px] ${C.dim} leading-relaxed`}>{t.photoHint}</p>
+              {avatarPreview && (
+                <button type="button" onClick={() => setAvatarPreview(null)} className={`mt-2 text-[12px] ${C.dim} hover:text-red-400 transition-colors`}>
+                  {t.remove}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className={`border-t ${C.border}`} />
+
+          {/* Display name */}
+          <div>
+            <label className={`block font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-2`}>{t.displayNameLabel}</label>
+            <input type="text" value={displayName} onChange={(e) => { setDisplayName(e.target.value); setErrors({}); }} placeholder={t.displayNamePlaceholder} className={inputClass(!!errors.displayName)} />
+            {errors.displayName && <p className="mt-1 text-[12px] text-red-400">{errors.displayName}</p>}
+          </div>
+
+          {/* Bio */}
+          <div>
+            <label className={`block font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-2`}>{t.bioLabel}</label>
+            <textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder={t.bioPlaceholder} rows={4} className={`${inputClass(false)} resize-none`} />
+            <p className={`mt-1 text-[11px] ${C.dimmer} text-right font-mono-data`}>{bio.length} {t.chars}</p>
+          </div>
+
+          <div className={`border-t ${C.border}`} />
+
+          {/* Preferences */}
+          <div>
+            <h3 className={`font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-5`}>{t.preferences}</h3>
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <span className={`text-[14px] ${C.secondaryFg}`}>{t.themeLabel}</span>
+                <SegmentedControl
+                  value={theme}
+                  onChange={setTheme}
+                  options={[
+                    { value: "dark", label: t.themeDark },
+                    { value: "light", label: t.themeLight },
+                  ]}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className={`text-[14px] ${C.secondaryFg}`}>{t.languageLabel}</span>
+                <SegmentedControl
+                  value={lang}
+                  onChange={setLang}
+                  options={[
+                    { value: "en", label: "English" },
+                    { value: "zh", label: "中文" },
+                  ]}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className={`border-t ${C.border}`} />
+
+          {/* Account (read-only) */}
+          <div className={`border ${C.border} p-5`}>
+            <h3 className={`font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-4`}>{t.account}</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className={`text-[11px] ${C.dim} mb-1`}>{t.email}</p>
+                <p className={`text-[14px] ${C.secondaryFg}`}>{authRole === "admin" ? "admin@trailblaze.app" : "rhys.caldwell@trailblaze.app"}</p>
+              </div>
+              <div>
+                <p className={`text-[11px] ${C.dim} mb-1`}>{t.role}</p>
+                <p className="font-mono-data text-[13px] text-[#c8893a] capitalize">{authRole}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Save */}
+          <div className={`flex items-center gap-4 pt-2 border-t ${C.border}`}>
+            <button type="submit" className="px-6 py-3 bg-[#c8893a] text-[#0f120e] text-sm font-semibold hover:bg-[#d9a050] transition-colors">
+              {t.saveBtn}
+            </button>
+            {saved && (
+              <span className={`flex items-center gap-2 text-sm ${C.dim}`}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2.5 7L5.5 10L11.5 4" stroke="#c8893a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t.saved}
+              </span>
+            )}
+          </div>
+        </form>
+      </div>
+    </main>
+  );
+}
+
+// ─── App ───────────────────────────────────────────────────────────────────────
+
 export default function App() {
-  const [authRole, setAuthRole] = useState<AuthRole>("user");
+  const [authRole] = useState<AuthRole>("user");
   const [view, setView] = useState<View>({ name: "list" });
+  const [theme, setTheme] = useState<Theme>("dark");
+  const [lang, setLang] = useState<Lang>("en");
 
   const currentUserId = authRole === "user" ? "user-1" : authRole === "admin" ? "admin-1" : "";
 
   function handleNavigate(v: View) {
-    if ((v.name === "create" || v.name === "edit") && authRole === "visitor") return;
+    if ((v.name === "create" || v.name === "edit" || v.name === "profile") && authRole === "visitor") return;
     setView(v);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function handleDelete(_id: string) {
-    setView({ name: "list" });
-  }
+  const t = T[lang];
 
   return (
-    <div className="min-h-screen bg-[#0f120e]">
-      <Nav authRole={authRole} onNavigate={handleNavigate} />
+    <SettingsContext.Provider value={{ theme, lang, setTheme, setLang }}>
+      <div data-theme={theme} className={`min-h-screen ${C.bg} ${C.fg} transition-colors duration-300`}>
+        <Nav authRole={authRole} currentView={view} onNavigate={handleNavigate} />
 
-      {view.name === "list" && (
-        <ActivityList authRole={authRole} onNavigate={handleNavigate} />
-      )}
-      {view.name === "detail" && (
-        <ActivityDetail
-          activityId={view.activityId}
-          authRole={authRole}
-          currentUserId={currentUserId}
-          onNavigate={handleNavigate}
-          onDelete={handleDelete}
-        />
-      )}
-      {view.name === "create" && (
-        <ActivityForm mode="create" onNavigate={handleNavigate} />
-      )}
-      {view.name === "edit" && (
-        <ActivityForm
-          mode="edit"
-          activityId={view.activityId}
-          onNavigate={handleNavigate}
-        />
-      )}
+        {view.name === "list" && <ActivityList authRole={authRole} onNavigate={handleNavigate} />}
+        {view.name === "detail" && (
+          <ActivityDetail
+            activityId={view.activityId}
+            authRole={authRole}
+            currentUserId={currentUserId}
+            onNavigate={handleNavigate}
+            onDelete={() => setView({ name: "list" })}
+          />
+        )}
+        {view.name === "create" && <ActivityForm mode="create" onNavigate={handleNavigate} />}
+        {view.name === "edit" && <ActivityForm mode="edit" activityId={view.activityId} onNavigate={handleNavigate} />}
+        {view.name === "profile" && <UserProfile authRole={authRole} onNavigate={handleNavigate} />}
 
-      <footer className="border-t border-[#2a2f26] mt-20">
-        <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
-          <span className="font-display text-[13px] text-[#3a4036]">TrailBlaze</span>
-          <span className="font-mono-data text-[11px] text-[#3a4036]">
-            One shared journal · {MOCK_ACTIVITIES.length} activities
-          </span>
-        </div>
-      </footer>
-    </div>
+        <footer className={`border-t ${C.border} mt-20`}>
+          <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
+            <span className={`font-display text-[13px] ${C.dimmer}`}>TrailBlaze</span>
+            <span className={`font-mono-data text-[11px] ${C.dimmer}`}>{t.footerTagline(MOCK_ACTIVITIES.length)}</span>
+          </div>
+        </footer>
+      </div>
+    </SettingsContext.Provider>
   );
 }

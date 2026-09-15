@@ -22,6 +22,35 @@
   --radius: 2px;
 }
 
+/* Light theme overrides */
+[data-theme="light"] {
+  --tb-bg: #f4f1ea;
+  --tb-fg: #1a1e18;
+  --tb-card: #ffffff;
+  --tb-card-fg: #1a1e18;
+  --tb-secondary: #e8e4db;
+  --tb-secondary-fg: #4a4a42;
+  --tb-muted: #ede9e0;
+  --tb-muted-fg: #7a7568;
+  --tb-border: #d8d3c8;
+  --tb-dim: #a09a90;
+  --tb-dimmer: #c8c2b6;
+}
+
+[data-theme="dark"] {
+  --tb-bg: #0f120e;
+  --tb-fg: #e8e3d8;
+  --tb-card: #161a14;
+  --tb-card-fg: #e8e3d8;
+  --tb-secondary: #1e2419;
+  --tb-secondary-fg: #b8b2a4;
+  --tb-muted: #1a1e18;
+  --tb-muted-fg: #7a7568;
+  --tb-border: #2a2f26;
+  --tb-dim: #7a7568;
+  --tb-dimmer: #3a4036;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -33,14 +33,31 @@ state the full permission matrix as its own acceptance criteria. The consequence
 **04–08 are not safe to deploy**, and `develop` should not be treated as a usable environment
 until 09 is merged. If that trade is unwelcome, move 09 to run immediately after 04.
 
+### Where the code actually stands (2026-09-15)
+
+The repository was initialised from a generic layered .NET scaffold, which landed parts of 01 and
+02 early. Read the `Status` column above with that in mind:
+
+- **01 — in progress.** The five layers, the solution file, `EntityBase`, the audit interceptor, the
+  soft-delete filter, `/health` and the OpenAPI document all exist. What is missing is the
+  substance: the three `*.Test` projects are **empty and reference no project under test**, so
+  `dotnet test` builds green and discovers nothing; the provider is still PostgreSQL (`Npgsql`);
+  there is no `IStorageService`, no `docker-compose`, and no CI.
+- **02 — in progress.** Entra bearer validation, the caller abstraction, and auto-provisioning
+  behind `GET /user/me` are implemented. Remaining: the key-shape decision in Open items,
+  concurrency safety on first-sight provisioning, claim truncation, and the email question.
+- **03–11 — not started.**
+
+The full accounting is in the PRD's [Current state vs. target](../PRD.md#current-state-vs-target).
+
 ## Feature breakdown
 
 Number = priority (lowest first = next to implement); file = `docs/features/NN-name.md`.
 
 | # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
 |---|---|---|---|---|
-| 01 | [foundation](01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects build green; SQL Server via EF Core with migrations at startup; `docker-compose` (api + SQL Server); `IStorageService` abstraction with a fake; OpenAPI/Swagger; health endpoint; config for Azure Blob + Entra | not started |
-| 02 | [entra-auth](02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services | not started |
+| 01 | [foundation](01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Server via EF Core with migrations at startup; `docker-compose` (api + Azure SQL Server); `IStorageService` abstraction with a fake; config for Azure Blob | in progress |
+| 02 | [entra-auth](02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services | in progress |
 | 03 | [admin-seeding](03-admin-seeding.md) | 02 | `Role` stored on `users`; exactly one admin seeded from configuration at startup; role readable by the authorization path | not started |
 | 04 | [activity-crud](04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description. Validation: title/location/date required; `ActivityDate` is a calendar date | not started |
 | 05 | [public-activity-list](05-public-activity-list.md) | 04 | **Anonymous** `GET /api/activities` — paged, date descending, `pageSize` clamped server-side; returns text + cover URL only | not started |
@@ -59,7 +76,9 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 
 ## Definition of Done (checked by `/sprint-status`)
 
-- [ ] Layered `TrailBlaze.*` backend solution builds; `dotnet test` green from `src/api/`
+- [ ] Layered `TrailBlaze.*` backend solution builds; `dotnet test` green from `src/api/` **with a
+      non-zero test count** — a green run over zero discovered tests does not count, and is the
+      state today
 - [ ] Entra auth: backend validates bearer tokens; users auto-provisioned; exactly one admin seeded
 - [ ] Activity CRUD complete with validation (title, location, calendar-date `ActivityDate`)
 - [ ] Anonymous visitors can page the activity list, date descending; `pageSize` clamped
@@ -72,6 +91,10 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 
 ## Open items
 
+- **The `users` key shape — needs a decision, not an edit.** The PRD data model gives `users` a
+  surrogate `Id` plus a unique `EntraObjectId`; the code instead uses the Entra object id **as**
+  the primary key and has neither an `EntraObjectId` nor an `Email` column. Feature 02 and the
+  PRD's `users` row cannot both be closed until one side moves.
 - **Figma export timing** — feature 10 is blocked until the Figma Make export exists; everything
   before it is unblocked.
 - **Azure credentials in CI** — the tagged storage integration tier needs them to run; without

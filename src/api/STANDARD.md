@@ -23,7 +23,7 @@ standard and the code do not yet agree** — read that one before trusting the r
 | `TrailBlaze.Service` | Business logic. Implements `TrailBlaze.Interface` service contracts. | `TrailBlaze.Interface`, `TrailBlaze.Model` |
 | `TrailBlaze.Repository` | Data access. Implements `TrailBlaze.Interface` repository contracts. | `TrailBlaze.Interface`, `TrailBlaze.Model` |
 | `TrailBlaze.Api` | Composition root: hosting, DI wiring, controllers, middleware, configuration. | all of the above |
-| `TrailBlaze.Tests` | xUnit tests. | `TrailBlaze.Api`, `TrailBlaze.Repository`, `TrailBlaze.Interface`, `TrailBlaze.Model` |
+| `TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`, `TrailBlaze.Service.Test` | xUnit tests — one project per layer, holding the tests for that layer. | the layer each project tests, plus `TrailBlaze.Interface` and `TrailBlaze.Model` |
 
 Dependencies point **inward**. `TrailBlaze.Interface` is the pivot: both `Service` and `Repository`
 depend on it because both *implement* it, and neither knows the other exists. `TrailBlaze.Api` is the
@@ -324,7 +324,7 @@ then user-secrets, then environment variables, then command line. Later sources 
   handed to every clone. Use user-secrets:
 
   ```bash
-  dotnet user-secrets set "DbConnection" "Host=localhost;Database=Orders;Username=<user>;Password=<password>"
+  dotnet user-secrets set "DbConnection" "Server=localhost;Database=TrailBlaze;User Id=<user>;Password=<password>;TrustServerCertificate=True"
   ```
 
 - **A missing required setting fails at startup with a message naming the setting** — not with
@@ -435,17 +435,24 @@ to put it there.
 
 ## 10. Testing
 
-Tests live in `TrailBlaze.Tests` and run with `dotnet test`. **A behaviour change without a test is
-not finished**; the tests in this solution exist because every one of them catches a specific
-regression that had already happened once.
+Tests live in the per-layer `*.Test` projects (section 1) and run with `dotnet test`. **A behaviour
+change without a test is not finished**; where tests exist in this solution, they exist because
+each one catches a specific regression that had already happened once.
+
+> **State as of 2026-09-15:** the three test projects exist but are empty and reference no project
+> under test — `dotnet test` builds green and discovers zero tests. The pattern below describes the
+> standard to write them against; standing the harness up is acceptance-criteria work in
+> feature 01, and `TestSupport/AuditHarness.cs` and `FakeUserContext` must be (re)created as part
+> of it.
 
 ### The pattern: no database required
 
 EF Core runs save interception **before it opens a connection**. Point the context at a port
 nothing listens on, and the audit entries are already staged in the change tracker by the time
 the save fails — so audit behaviour is testable with no database at all. `TestSupport/AuditHarness.cs`
-wraps this, and wires the context through `AddRepositoryPersistence` rather than by hand, so
-tests exercise the same composition the application uses.
+is the helper that wraps this — **to be added in feature 01** — and it wires the context through
+`AddRepositoryPersistence` rather than by hand, so tests exercise the same composition the
+application uses.
 
 ```csharp
 [Fact]
@@ -484,6 +491,12 @@ and stops.
 
 ## 11. Continuous integration
 
+> **State as of 2026-09-15:** this repository has no CI workflow — there is no `.github/`
+> directory, so neither job below runs. The section describes the target, and wiring it is part of
+> the foundation work. The **second** job belongs to the upstream template repository this
+> solution was generated from: there is no `SampleTemplate/` and no template package here to pack,
+> so only the first job is in scope.
+
 Two jobs run on every push and pull request.
 
 **Build and test** — builds `TrailBlaze.slnx` and runs the suite.
@@ -512,20 +525,29 @@ Listed so you are not surprised by them, and so fixing one is an obvious pull re
    `default(DateTime)` and `LastModified*` cannot be trusted.
 2. **`DeleteAsync` issues one `FindAsync` per id** and wraps the batch in no transaction, so a
    large delete is N round trips and can partially apply.
-3. **No EF Core migrations are present.** Schema changes have no defined home yet. This is the
-   largest gap in the template: decide the migration strategy before the first real table.
-4. **`IUserService` and `UserService` are empty** and `UserController` has a single placeholder
-   action. That controller also inherits `Controller` rather than `ControllerBase`, and routes
-   on `[controller]` rather than `api/[controller]` as section 2 shows. All of it is scaffolding
-   to replace, not an example to copy.
+3. **Migrations exist but are Npgsql-shaped.** `TrailBlaze.Repository/Migrations` holds an initial
+   migration and a model snapshot, both generated for PostgreSQL. Regenerating them for Azure SQL
+   Server is part of the provider swap (feature 01). The strategy question this item used to raise
+   is settled: migrations are applied at startup.
+4. **`UserController` diverges from section 2's route convention.** It inherits `Controller` rather
+   than `ControllerBase`, routes on `[controller]` rather than `api/[controller]`, and its `index`
+   action is a placeholder returning a bare string. `UserService` is no longer empty —
+   `GetOrCreateAsync` implements first-sight provisioning — so the scaffolding to replace here is
+   the controller, not the service.
 5. **A soft delete is recorded as `"Modified"`,** not as a distinct `"Deleted"`, because
    `Action` holds the EF `EntityState`. A soft delete is therefore indistinguishable in the
    history from an ordinary update.
-6. **Timestamps are inconsistent.** `EntityBase` uses `DateTime`, `AuditLog` uses
-   `DateTimeOffset`, and `DatabaseRepository` uses `DateTime.UtcNow`.
+6. **Timestamps are inconsistent.** `EntityBase` and `AuditLog` both use `DateTimeOffset` now, but
+   `DatabaseRepository` writes `DateTime.UtcNow` into them.
 7. **`TrailBlaze.Api.http` requests `/weatherforecast/`,** which does not exist in this solution.
-8. **`SampleTemplate/placeholder.txt`** ships into every generated project and serves no
-   purpose once the template has been applied.
+8. **`SampleTemplate/placeholder.txt` — resolved, and now historical.** That file belonged to the
+   upstream template this solution was generated from, and neither it nor the template lives here
+   any more. The template CI job described in section 11 referred to it; this repository has no CI
+   at all.
+9. **`DbConnection` is accepted empty.** Section 6 requires a missing required setting to fail
+   startup by name, and `AllowCORS` does exactly that for `AllowedOrigins` — but an empty
+   `DbConnection` boots happily and fails later, on the first request that touches the database.
+   Closing this is part of feature 01.
 
 ---
 

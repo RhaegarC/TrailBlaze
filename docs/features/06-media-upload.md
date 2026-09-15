@@ -32,11 +32,11 @@ the day actually looked like.
 - [ ] `Kind` is derived from the content type — `image/*` → `Image`, `video/*` → `Video` — and is stored on the row
 - [ ] A maximum of 20 media items per activity is enforced against the activity's **existing** row count: an upload at 20 returns a conflict (409) and writes no blob
 - [ ] The count check and the insert are not racy — a concurrent pair of uploads at the boundary cannot leave 21 rows
-- [ ] On success a `media` row persists with `ActivityId`, `Kind`, `BlobPath`, `ContentType`, `SizeBytes`, `OriginalFileName`, and `CreatedUtc`; `SizeBytes` equals the bytes actually stored and `OriginalFileName` is kept for display only
+- [ ] On success a `media` row persists with `ActivityId`, `Kind`, `BlobPath`, `ContentType`, `SizeBytes`, `OriginalFileName`, and `CreatedOn`; `SizeBytes` equals the bytes actually stored and `OriginalFileName` is kept for display only
 - [ ] The blob is written to the **private** container through `IStorageService`; this endpoint never writes to the public container
 - [ ] A rejection (bad type, oversize, count exceeded) leaves no blob and no row — no partial state
 - [ ] Blob bytes are stored unmodified, including video — the stored length and content hash match the uploaded file (Decision #15)
-- [ ] `GET /api/activities/{id}/media` returns metadata only (`Id`, `Kind`, `ContentType`, `SizeBytes`, `OriginalFileName`, `CreatedUtc`) for a signed-in caller, and exposes no value that is directly fetchable without a SAS
+- [ ] `GET /api/activities/{id}/media` returns metadata only (`Id`, `Kind`, `ContentType`, `SizeBytes`, `OriginalFileName`, `CreatedOn`) for a signed-in caller, and exposes no value that is directly fetchable without a SAS
 - [ ] `DELETE /api/media/{id}` deletes the blob and the row; an unknown id returns 404
 - [ ] `DELETE /api/activities/{id}` cascades to that activity's media rows (FK cascade), and the stored blobs are cleaned up
 - [ ] `GET /api/activities/{id}/media` against a non-existent activity returns 404
@@ -45,7 +45,7 @@ the day actually looked like.
 
 - Unit (`TrailBlaze.Service.Test`) **hot spot (upload validation — must be test-first):** the content-type allowlist as an accept/reject table including a video type sent as an image and vice versa; the size boundary at exactly the cap and cap+1 for both kinds; the count cap at 19/20/21. The fake `IStorageService` records every call, so a rejection test asserts the fake was **never invoked** for a write — proving no orphan blob.
 - Unit (`TrailBlaze.Service.Test`): `Kind` derivation; the private container name being the one requested (a covers write here is a test failure).
-- Integration (`TrailBlaze.Repository.Test`): `media` rows persist with their FK; the per-activity count query returns the right number; deleting an activity cascades its media rows; `SizeBytes`/`ContentType`/`OriginalFileName` round-trip through SQL Server.
+- Integration (`TrailBlaze.Repository.Test`): `media` rows persist with no database behind them — the save interception assigns the string key and stamps `CreatedOn` before a connection opens, the per-activity count query is inspected with `ToQueryString()`, the activity → media cascade is asserted from the EF model, and `SizeBytes`/`ContentType`/`OriginalFileName` are carried through the mapping ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Api.Test`): a multipart request end-to-end against the fake storage, 201 plus a metadata body; an oversize and a bad-type request returning 400; the 21st upload returning 409.
 - Storage integration (`TrailBlaze.Service.Test`, tagged `Category=StorageIntegration`): the real Azure implementation — upload to the private container, read the bytes back unmodified, delete, confirm the content type round-trips. Without credentials in CI this tier is skipped, so the fake is proven but the blob implementation is not.
 

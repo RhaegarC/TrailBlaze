@@ -6,12 +6,12 @@ Source: [PRD](../PRD.md) — Decisions #5/#8/#19 + "Deployment (stage 1)" + "Def
 ## Summary
 
 The closing verification feature. It adds no new functionality: it is a full-stack pass of the
-whole product against a **running** stack — `docker-compose` (API + SQL Server), the **real**
-Azure Blob account, and the **real** Entra ID tenant — with the Figma-integrated app in front of
-it. Its job is to prove the pieces work *together* in the environment they will actually run in,
-which no single feature's tests can show, and to walk the end-to-end journey from anonymous
-browsing through admin override. The sprint's Definition of Done items are this feature's exit
-condition: when they all check, Mission 1 is done.
+whole product against a **running** stack — `docker-compose` (API + Azure SQL Server), the
+**real** Azure Blob account, and the **real** Entra ID tenant — with the Figma-integrated app in
+front of it. Its job is to prove the pieces work *together* in the environment they will
+actually run in, which no single feature's tests can show, and to walk the end-to-end journey
+from anonymous browsing through admin override. The sprint's Definition of Done items are this
+feature's exit condition: when they all check, Mission 1 is done.
 
 ## Story
 
@@ -28,12 +28,12 @@ unless they all pass. It is last in the ladder by design.
 
 ## Acceptance criteria
 
-Each is performed against a running stack: `docker-compose up` bringing up the API and SQL Server,
-configured against the real Azure Blob account and real Entra ID, with the `src/web/` app served
-alongside. No fake `IStorageService`, no emulator, no `InMemory` provider.
+Each is performed against a running stack: `docker-compose up` bringing up the API and Azure SQL
+Server, configured against the real Azure Blob account and real Entra ID, with the `src/web/` app
+served alongside. No fake `IStorageService`, no emulator, no `InMemory` provider.
 
-- [ ] `docker-compose up` brings the API and SQL Server up together; `GET /health` returns 200,
-      and EF migrations have been applied at startup with the schema the PRD data model describes
+- [ ] `docker-compose up` brings the API and Azure SQL Server up together; `GET /health` returns
+      200, and EF migrations have been applied at startup with the schema the PRD data model describes
 - [ ] The running API reaches the **real** `covers` (public) and `media` (private) containers and
       the **real** Entra tenant by configuration; the fake used in unit tests is nowhere in this
       path
@@ -79,7 +79,7 @@ What it runs is everything that already exists, plus the tiers that only this pa
 
 - Unit / integration (`dotnet test` from `src/api/`): the full suite must be green on the same
   commit under verification. This is a precondition of the pass, not the pass itself.
-- Storage integration (`TrailBlaze.Repository.Test`, tagged): `dotnet test --filter
+- Storage integration (`TrailBlaze.Service.Test`, tagged): `dotnet test --filter
   Category=StorageIntegration` runs against the real Azure account — the tier that proves the blob
   implementation rather than the fake, and the only tier that can catch SAS generation and
   content-type round-tripping defects.
@@ -107,3 +107,6 @@ What it runs is everything that already exists, plus the tiers that only this pa
   here.
 - Not a release gate for the pipeline, and not a substitute for the per-feature tests that produced
   the green suite it starts from.
+- **Database target vs. current code.** The target database is **Azure SQL Server** (PRD Decision #16),
+  but the code today runs on PostgreSQL/Npgsql and that provider swap is still pending — so the pass
+  records which provider it actually ran against rather than assuming the target one.

@@ -81,7 +81,9 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   `POST /api/activities/{id}/media`, `DELETE /api/media/{id}`, or `GET /api/media/{id}/url`, and
   that a denied request makes **no** call into the fake `IStorageService`.
 - Integration (`TrailBlaze.Repository.Test`) — the `CreatedByUserId` lookup the ownership decision
-  reads returns the right owner, including after an update.
+  reads returns the right owner, including after an update. This tier needs no database: the lookup is
+  exercised through the `DbContext` and the generated SQL is inspected with `ToQueryString()`
+  ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Regression guard: a test asserting the anonymous-allowed route set is exactly
   `GET /api/activities` and `GET /api/activities/{id}`, so a new endpoint added later without an
   explicit decision fails rather than silently defaulting open.

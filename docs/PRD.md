@@ -27,17 +27,59 @@ feed. Ownership decides who may *edit* an entry, not who may *read* it.
 |---|---|---|
 | Web app | React 19 (Vite) + TypeScript + Tailwind, exported from **Figma Make** | Single role-gated app: the public activity list, activity detail with media, and the create/edit form. Auth via MSAL. |
 | Backend | ASP.NET Core 10 | REST + OAuth 2.0 bearer; activities CRUD; media upload; SAS URL issuance; authn/authz |
-| Database | SQL Server | Users, activities, media metadata. Binary media lives in Azure Blob, never in the DB. |
+| Database | **Azure SQL Server** | Users, activities, media metadata. Binary media lives in Azure Blob, never in the DB. |
 | Blob storage | Azure Blob Storage | Two containers: a **public** one for cover images, a **private** one for activity media. |
 | Identity | Entra ID | Sign-in, bearer tokens, role claims |
 
 The backend is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBlaze.Repository`,
 `TrailBlaze.Service`, `TrailBlaze.Interface`, `TrailBlaze.Api` — each layer carrying a sibling
-xUnit test project. Test command: `dotnet test` (from `src/api/`).
+xUnit test project. The solution file is `src/api/TrailBlaze.slnx`; the test projects are
+`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`, and `TrailBlaze.Service.Test`. Test command:
+`dotnet test` (from `src/api/`).
 
-Deployment (stage 1): **local Docker**. `docker-compose` runs the backend and a SQL Server
-container; the web app joins at frontend integration. Azure Blob and Entra ID are **real cloud
-resources** in every environment, including development.
+Data conventions — application-assigned string GUID keys, soft delete, and the audit trail — are
+specified in [src/api/STANDARD.md](../src/api/STANDARD.md) §3 and §10, and enforced by
+`EntityBase` plus the save interceptor. This PRD states *what* the data holds; STANDARD.md states
+*how* it is shaped.
+
+Deployment (stage 1): **local Docker**. `docker-compose` runs the backend and an Azure SQL
+Server container; the web app joins at frontend integration. Azure Blob and Entra ID are **real
+cloud resources** in every environment, including development.
+
+### Current state vs. target
+
+This PRD describes the **target** product. The code is built up to it feature by feature
+(`docs/features/`), so the two differ today. Each difference is a deliberate, sequenced gap — not
+drift — and each is tracked below. Anything not listed here is expected to match the code.
+
+**Built ahead of the ladder.** The repository started from a generic layered .NET scaffold, so
+some work the ladder attributes to features 01–02 already exists:
+
+| Already in the code | Where |
+|---|---|
+| Entra ID bearer-token validation, wired only when `TenantId` and `Audience` are both configured; anonymous otherwise, with a startup warning saying so | `TrailBlaze.Api/ServiceExt.cs`, `Program.cs` |
+| Caller auto-provisioning — `GET /user/me` inserts the caller's row on first authenticated call | `UserService.GetOrCreateAsync`, `UserController` |
+| `GET /health` and an OpenAPI document (development only) | `Program.cs` |
+| Application-assigned GUID keys, soft delete, and the append-only audit trail | `EntityBase`, `AuditSaveChangesInterceptor`, `AuditLog` |
+
+**Not yet built.** These are the real gaps:
+
+| Area | Target (this document) | Code today | Closes in |
+|---|---|---|---|
+| Database engine | **Azure SQL Server** | PostgreSQL via `Npgsql`; migrations exist but are Npgsql-shaped | feature 01 |
+| Local orchestration | `docker-compose` (API + Azure SQL Server) | no compose file, and no CI workflow either | feature 01 |
+| Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | the three `*.Test` projects exist but are empty and reference no project under test | feature 01 |
+| Blob abstraction | `IStorageService` with an in-memory fake | does not exist | feature 01 |
+| Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
+
+**One divergence needs a decision, not a fix.** The data model below gives `users` a surrogate
+`Id` plus a separate unique `EntraObjectId`. The code instead uses the Entra object id **as** the
+primary key (`User.Id = entraObjectId`) and has neither an `EntraObjectId` nor an `Email` column.
+Both are defensible: the code's version is simpler and the `oid` is immutable in Entra, while this
+document's version keeps the key opaque and leaves room for a user row that exists before its
+owner ever signs in. Pick one and make the other side match it — until then, read the data model
+below as a proposal rather than a description. This is the one row here that a doc edit cannot
+close.
 
 ## Frontend build
 
@@ -62,13 +104,13 @@ Every requirement decision from the grilling session, in order:
 | 7 | How media reaches the browser | **Short-lived SAS URLs** issued by an authenticated endpoint; container stays private |
 | 8 | Authentication | **Entra ID** |
 | 9 | Roles | **User + Admin**; admin can edit/delete any activity |
-| 10 | Which date drives the sort | **User-chosen activity date**; backdating allowed; a `CreatedUtc` is kept for audit only |
+| 10 | Which date drives the sort | **User-chosen activity date**; backdating allowed; a `CreatedOn` audit timestamp is kept as the tiebreaker |
 | 11 | Activity fields | `Date`, `Location`, `Title`, `Description` (optional), `CoverImage` (optional) |
 | 12 | Location capture | **Free-text place name** — no lookup, no structured fields |
 | 13 | Cover image audience | **Always public** — an explicit exception to the media rule |
 | 14 | Where the cover comes from | **Its own upload** into the public container; never picked from private media |
 | 15 | Video handling | **Store as-is**; validate content type and size; no transcoding, no thumbnails |
-| 16 | Backend & data stack | **.NET 10 layered + SQL Server** (swapped from the inherited PostgreSQL) |
+| 16 | Backend & data stack | **.NET 10 layered + Azure SQL Server** (swapped from the inherited PostgreSQL; the provider swap is pending — see Current state vs. target) |
 | 17 | Where the UI comes from | **Figma Make export**, as in the source project; frontend not test-first |
 | 18 | Feature ladder | **Written fresh for TrailBlaze** — the inherited ladder described a dynamic-form platform |
 | 19 | Repository | **New GitHub repository** (`github.com/RhaegarC`), `develop` integration / `master` production |
@@ -81,64 +123,86 @@ Every requirement decision from the grilling session, in order:
 
 ## Data model
 
+Every entity derives from **`EntityBase`**, so the shared columns below are present on all three
+tables. They are drawn once, here, rather than repeated in the diagram:
+
+| Column | Type | Notes |
+|---|---|---|
+| `Id` | string (GUID) | PK — **assigned by the application at construction**, not by the database |
+| `CreatedBy` | string, nullable | caller identity at insert |
+| `CreatedOn` | datetimeoffset | set at insert, then immutable. Not yet stamped on every write path — see STANDARD.md §12 |
+| `LastModifiedBy` | string, nullable | caller identity at the last update |
+| `LastModifiedOn` | datetimeoffset | set at insert and on every update |
+| `IsDeleted` | bit, nullable | soft delete — a global query filter hides `true` rows by default |
+
+The `users` row is the one exception to the `Id` rule: see the open key-shape decision below the
+current-state table.
+
 ```mermaid
 erDiagram
     User ||--o{ Activity : creates
     Activity ||--o{ Media : contains
     User {
-        uniqueidentifier Id PK
-        nvarchar EntraObjectId UK
-        nvarchar Email
-        nvarchar DisplayName
-        nvarchar Role
-        datetime2 CreatedUtc
+        string Id PK "GUID, app-assigned"
+        string EntraObjectId UK
+        string Email
+        string DisplayName
+        string Role
     }
     Activity {
-        uniqueidentifier Id PK
-        nvarchar Title
-        nvarchar Location
+        string Id PK "GUID, app-assigned"
+        string Title
+        string Location
         date ActivityDate
-        nvarchar Description "nullable"
-        nvarchar CoverImageBlobPath "nullable, public container"
-        uniqueidentifier CreatedByUserId FK
-        datetime2 CreatedUtc
+        string Description "nullable"
+        string CoverImageBlobPath "nullable, public container"
+        string CreatedByUserId FK
     }
     Media {
-        uniqueidentifier Id PK
-        uniqueidentifier ActivityId FK
-        nvarchar Kind "Image | Video"
-        nvarchar BlobPath "private container"
-        nvarchar ContentType
+        string Id PK "GUID, app-assigned"
+        string ActivityId FK
+        string Kind "Image | Video"
+        string BlobPath "private container"
+        string ContentType
         bigint SizeBytes
-        nvarchar OriginalFileName
-        datetime2 CreatedUtc
+        string OriginalFileName
     }
 ```
 
+
 | Table | Column | Type | Notes |
 |---|---|---|---|
-| `users` | `Id` | uniqueidentifier | PK |
+| `users` | `Id` | string (GUID) | PK, app-assigned |
 | | `EntraObjectId` | nvarchar(64) | unique — the Entra `oid` claim |
 | | `Email` | nvarchar(320) | from the token |
 | | `DisplayName` | nvarchar(200) | from the token |
 | | `Role` | nvarchar(16) | `User` \| `Admin` |
-| | `CreatedUtc` | datetime2 | auto-provisioned on first authenticated request |
-| `activities` | `Id` | uniqueidentifier | PK |
+| `activities` | `Id` | string (GUID) | PK, app-assigned |
 | | `Title` | nvarchar(200) | required |
 | | `Location` | nvarchar(200) | required, free text |
 | | `ActivityDate` | date | required; **calendar date, no time**; drives the sort |
 | | `Description` | nvarchar(max) | optional |
 | | `CoverImageBlobPath` | nvarchar(512) | optional; **public** container |
-| | `CreatedByUserId` | uniqueidentifier | FK → `users.Id` |
-| | `CreatedUtc` | datetime2 | audit + same-day sort tiebreaker |
-| `media` | `Id` | uniqueidentifier | PK |
-| | `ActivityId` | uniqueidentifier | FK → `activities.Id`, cascade delete |
+| | `CreatedByUserId` | string (GUID) | FK → `users.Id` |
+| `media` | `Id` | string (GUID) | PK, app-assigned |
+| | `ActivityId` | string (GUID) | FK → `activities.Id` |
 | | `Kind` | nvarchar(16) | `Image` \| `Video` |
 | | `BlobPath` | nvarchar(512) | **private** container; served only via SAS |
 | | `ContentType` | nvarchar(128) | validated allowlist |
 | | `SizeBytes` | bigint | validated ≤ 10 MB image / ≤ 200 MB video |
 | | `OriginalFileName` | nvarchar(260) | display only |
-| | `CreatedUtc` | datetime2 | |
+
+Three consequences follow from the conventions above, and features below depend on them:
+
+- **The sort tiebreaker is `CreatedOn`** (from `EntityBase`), not a column of its own. Ordering is
+  `ActivityDate DESC, CreatedOn DESC` (Decision #10, feature 05).
+- **Keys are strings the application assigns**, so an entity has its id before it is saved. This
+  is what lets the audit trail record an `EntityId` on insert.
+- **Deletes are soft.** `DELETE /api/activities/{id}` and `DELETE /api/media/{id}` mark rows
+  `IsDeleted`; the global query filter removes them from every read path.
+
+`AuditLog` is the one table that does **not** derive from `EntityBase`: it is append-only and
+records `EntityId` as a plain string, because it must outlive the row it describes.
 
 **Schema-change discipline.** A feature that changes the data model updates the table above in
 the same PR. `docs/PRD.md#data-model` (this section) is the canonical reference.
@@ -200,16 +264,17 @@ and a count check against the activity's existing media.
 | `POST` | `/api/activities/{id}/media` | owner/admin | Upload image/video → private container |
 | `GET` | `/api/media/{id}/url` | user | Mint a short-lived SAS URL |
 | `DELETE` | `/api/media/{id}` | owner/admin | Delete media (row + blob) |
-| `GET` | `/health` | anonymous | Liveness |
+| `GET` | `/user/me` | user | The caller's own row, inserted on first call — **already implemented** |
+| `GET` | `/health` | anonymous | Liveness — **already implemented** |
 
 `pageSize` is capped server-side (default 20, max 100) so the endpoint cannot be made to return
 an unbounded result set.
 
 ## Deployment (stage 1)
 
-**Local Docker**, no reverse proxy — `docker-compose` brings up the API and SQL Server. Azure
-Blob and Entra ID are real cloud resources reached by configuration, so secrets live in user
-secrets locally and in CI variables for the pipeline. EF migrations run at startup.
+**Local Docker**, no reverse proxy — `docker-compose` brings up the API and an Azure SQL Server
+container. Azure Blob and Entra ID are real cloud resources reached by configuration, so secrets
+live in user secrets locally and in CI variables for the pipeline. EF migrations run at startup.
 
 ## Out of scope / deferred
 

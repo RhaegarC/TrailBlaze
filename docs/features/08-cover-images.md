@@ -41,7 +41,7 @@ visitors see a picture beside it without any of the activity's private media bec
 
 - Unit (`TrailBlaze.Service.Test`) **hot spot (upload validation + container separation — test-first):** the image allowlist accept/reject table including a video type; the size boundary at exactly 10 MB and 10 MB + 1 byte; and the container assertion — the fake `IStorageService` records the container it was asked for, so a test fails if the private container is used, and a second asserts the private container is never touched by this path.
 - Unit (`TrailBlaze.Service.Test`): replacement deletes the previously stored cover blob and stores the new path; a rejected upload leaves the existing cover and its blob intact.
-- Integration (`TrailBlaze.Repository.Test`): `CoverImageBlobPath` persists on the activity row; a cover upload leaves the activity's `media` rows unchanged.
+- Integration (`TrailBlaze.Repository.Test`): with no database, `CoverImageBlobPath` persists on the activity row through the `DbContext` (the reads are inspected with `ToQueryString()`), and a cover upload leaves the activity's `media` rows unchanged ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Api.Test`): the anonymous list and detail JSON carry the cover URL for an activity that has one; an activity without a cover returns null/absent rather than an error.
 - Storage integration (`TrailBlaze.Service.Test`, tagged `Category=StorageIntegration`): a real round-trip against the public container — upload, then fetch the returned URL with a **credential-free** HTTP GET and receive 200 with the original bytes. That anonymous fetch is the proof the container is genuinely public-read, which the fake cannot demonstrate.
 

@@ -28,7 +28,9 @@ origin develop`), then create the branch: `git checkout -b feature/<number>-<nam
 
 **Phase 3 (RED)** — Write failing tests for the acceptance criteria, following the test
 tiers in [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md) (backend xUnit unit tests
-with the in-memory `IStorageService` fake, plus EF Core integration against SQL Server).
+with the in-memory `IStorageService` fake, plus the repository tier, which runs with no
+database at all — the EF Core save interception fires before a connection opens, so audit,
+soft-delete and key behaviour are asserted offline).
 Run `dotnet test` and confirm the new tests fail for the expected reason.
 
 **Phase 4 (GREEN)** — Implement the minimum code to make the tests pass. Follow existing
