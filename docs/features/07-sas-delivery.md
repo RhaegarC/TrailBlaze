@@ -32,7 +32,15 @@ image or video that is otherwise private.
 - [ ] Expiry is **bounded and asserted in tests** — a test fails if the window is absent, non-positive, or longer than the cap. The expiry returned must equal the expiry actually embedded in the token
 - [ ] The SAS grants **read only** — no write, create, or delete permission
 - [ ] The SAS is scoped to the **single blob**, not to the container
-- [ ] The SAS is minted against the **private** container only; no SAS is ever minted for a `covers` blob, which is world-readable by design (Decision #13)
+- [ ] The SAS is minted against the **private** container only, and never against a blob in a
+      **public** container. Note where that line now falls: since Decision #29 `covers` holds only
+      `Public` activities' covers, while a `Shared` or `Private` activity's cover lives in `media`
+      and **does** get a SAS (feature 08). The rule is therefore about *containers*, not about
+      "covers" — a `covers` blob is world-readable by design (Decision #13, amended by #29) and a
+      SAS there would add a credential to content that needs none
+- [ ] Minting for a cover in the private container is the **same** operation as for a media blob,
+      reached through the same service method — feature 05 and feature 08 must not construct SAS
+      URLs by a second path, or the TTL cap and the read-only scope stop being single-sourced
 - [ ] A URL for a blob whose bytes are no longer present is the client's problem, not a minting failure — the failure mode is documented and does not 500
 - [ ] Minting goes through `IStorageService`, so unit tests run against the in-memory fake and the Azure-specific construction is covered by the tagged tier
 - [ ] The generated URL is not written to logs (it is a credential)
@@ -51,7 +59,10 @@ image or video that is otherwise private.
 ## Notes / non-goals
 
 - **The SAS URL is a bearer token.** Anyone holding the string can read that blob until it expires; the URL's secrecy is not a control, so the **expiry window is the real control**. The consequences this feature accepts: a short TTL, a hard server-side cap, no long-lived SAS values persisted anywhere, no full URLs logged, and no SAS embedded in stored data.
-- **No ownership check here.** Any signed-in user may obtain a URL for any media item; feature [09-permission-enforcement](09-permission-enforcement.md) adds the owner/admin rules. This feature is accordingly **not safe to deploy** on its own — the authentication boundary is real, the authorization one arrives in 09.
+- **No authorization check here beyond authentication.** Any signed-in user may currently obtain a URL for any media item. Both halves of the matrix arrive later and neither is present in this feature: the **visibility** gate — a caller who cannot read the activity gets **404**, not a URL (Decisions #26/#29) — is applied by features [05](05-public-activity-list.md)/[09](09-permission-enforcement.md), and the owner/admin rules by 09. This feature is accordingly **not safe to deploy** on its own: the authentication boundary is real, the authorization one arrives in 09. Stated with the visibility half included because a private activity's media being mint-able by any signed-in stranger is exactly the leak a reader might assume 05 had already closed.
 - No revocation list, no one-time-use tokens, and no forced re-mint on download — with a bounded TTL, expiry is the only lever and that is deliberate.
 - No CDN, no range-request tuning, no download throttling or bandwidth accounting.
-- No SAS for the public `covers` container — a SAS there would add a credential to content that needs none.
+- No SAS for a blob in a **public** container (`covers`, `avatars`) — a SAS there would add a
+  credential to content that needs none. This is a statement about containers, not about cover
+  images as a category: a `Shared`/`Private` activity's cover is a `media` blob and is served by
+  SAS like any other (Decision #29).

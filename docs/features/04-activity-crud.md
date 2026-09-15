@@ -1,15 +1,20 @@
 # 04 — Activity CRUD
 
 Status: **Not started** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #10/#11/#12/#25 + "API surface" and the `activities` data-model row.
+Source: [PRD](../PRD.md) — Decisions #10/#11/#12/#25/#26 + "API surface" and the `activities` data-model row.
 
 ## Summary
 
 Create, read, update, and delete an activity. The field set is fixed: `Title`, `Location`,
-`ActivityDate` (a **calendar date — no time, no timezone**), optional `Description`, and optional
-`CoverImageBlobPath`. `CreatedOn` is recorded for audit and doubles as the tiebreaker that orders
-two activities logged on the same day. This feature ships the CRUD mechanics only; who is allowed
-to call them is feature 09.
+`ActivityDate` (a **calendar date — no time, no timezone**), optional `Description`, optional
+`CoverImageBlobPath`, and `Type` — the **visibility** (`Public` | `Shared` | `Private`, Decision
+#26). `CreatedOn` is recorded for audit and doubles as the tiebreaker that orders two activities
+logged on the same day. This feature ships the CRUD mechanics only; **who is allowed to call
+them, and who is allowed to read the result, are features 09 and 05** — this feature stores and
+round-trips `Type`, it does not enforce it.
+
+Storing `Type` here rather than in feature 09 is deliberate: it is a column on the activity, so
+it belongs with the other columns. Feature 09 owns the *evaluation* of it.
 
 ## Story
 
@@ -23,12 +28,21 @@ where I went and when.
 ## Acceptance criteria
 
 - [ ] `activities` matches the PRD data model. Its own columns are `Title`, `Location`,
-      `ActivityDate` (`date`), `Description` (nullable), `CoverImageBlobPath` (nullable) and
-      `CreatedByUserId` FK → `users.Id`; `Id` and the remaining audit and soft-delete columns come
-      from `EntityBase` (the PRD draws them once), so `IsDeleted` is present and the global query
-      filter applies to this table
+      `ActivityDate` (`date`), `Description` (nullable), `Type` (`nvarchar(16)`), `CoverImageBlobPath`
+      (nullable) and `CreatedByUserId` FK → `users.Id`; `Id` and the remaining audit and soft-delete
+      columns come from `EntityBase` (the PRD draws them once), so `IsDeleted` is present and the
+      global query filter applies to this table
 - [ ] Routes exist for `POST /api/activities`, `GET /api/activities/{id}`,
       `PUT /api/activities/{id}`, and `DELETE /api/activities/{id}`
+- [ ] `Type` accepts only `Public`, `Shared`, and `Private`; any other value is rejected with 400
+      naming the field, and no row is written. Input comparison is case-insensitive but the stored
+      value is canonical, so a reader never has to normalise it
+- [ ] `Type` is required on `POST` in the sense that it defaults to `Public` when omitted — an
+      existing client that does not send the field keeps working, and the default is asserted
+      rather than assumed
+- [ ] `PUT` may change `Type`; the new value is visible to the next read with no separate
+      publish step. Crossing the public line is what triggers the cover move owned by feature
+      [08-cover-images](08-cover-images.md), so this route must not block or mask that transition
 - [ ] `POST` sets `CreatedByUserId` from the caller's provisioned `users.Id` and ignores any
       `CreatedByUserId` supplied in the request body
 - [ ] `CreatedOn` is set server-side at insert and ignores any client-supplied value
@@ -92,3 +106,8 @@ where I went and when.
   table is written by an `AuditSaveChangesInterceptor`. Neither is configured or exposed here.
 - The anonymous/user/admin access matrix for these four routes is stated and enforced in 09, not
   here.
+- **`Type` is stored, not enforced, in this slice.** `GET /api/activities/{id}` here returns the
+  row for any id; hiding a `Shared` or `Private` entry from a caller who may not read it is the
+  read-filtering rule owned by [05-public-activity-list](05-public-activity-list.md) and
+  [09-permission-enforcement](09-permission-enforcement.md). Splitting it this way keeps the CRUD
+  mechanics testable on their own, exactly as the ownership rules are split out.

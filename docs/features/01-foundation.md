@@ -69,9 +69,18 @@ that every later feature begins from a failing test rather than from project set
 - [ ] `docker-compose` brings up the API container and the Azure SQL Server container together,
       and the API reaches the database by service name rather than by `localhost`
 - [ ] `IStorageService` is declared in `TrailBlaze.Interface` with the operations the media
-      features need (upload, delete, mint a read URL); no call site names a concrete Azure type
+      features need (upload, delete, mint a read URL, and **move** — copy to a second container plus
+      delete the source, which feature 08's visibility change requires); no call site names a
+      concrete Azure type
+- [ ] The abstraction addresses **three** containers, named rather than hard-coded at call sites:
+      `covers` (public), `avatars` (public) and `media` (private, SAS-only). The container is a
+      parameter of the operation, because the destination is a *decision* — feature 08 routes a
+      cover by the activity's `Type`, and feature 02 writes avatars to their own container. The
+      container name is the whole of the public/private answer, so the set closes here
 - [ ] An in-memory `IStorageService` fake exists in test support and is what
-      `TrailBlaze.Service.Test` injects; unit tests make no network call (PRD Decisions #5/#6)
+      `TrailBlaze.Service.Test` injects; unit tests make no network call (PRD Decisions #5/#6). The
+      fake **records the container** each call asked for, which is what lets 02, 06 and 08 assert
+      "the right container" at unit level
 - [ ] Configuration binds an Azure Blob connection string alongside the existing Entra `TenantId`
       and `Audience`; note that **no client secret is needed** — validating inbound tokens uses
       only the public signing keys the authority serves (see [02-entra-auth.md](02-entra-auth.md))

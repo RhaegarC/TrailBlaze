@@ -1,14 +1,20 @@
 # 02 — Entra Auth
 
 Status: **In progress** — validation and provisioning exist; hardening outstanding · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decision #8 + "Authentication & authorization" and the `users` data-model row.
+Source: [PRD](../PRD.md) — Decisions #8/#28 + "Authentication & authorization" and the `users` data-model row.
 
 ## Summary
 
-Entra ID bearer validation and caller identity. The API validates the token against the configured
-tenant, extracts the `oid` and display-name claims, and **auto-provisions** a `users` row the first
-time it sees a new `oid` — there is no registration step and no local password. The resulting
-identity is handed to services through an abstraction so that no service reads `HttpContext`.
+Entra ID bearer validation, caller identity, and the caller's own profile. The API validates the
+token against the configured tenant, extracts the `oid` and display-name claims, and
+**auto-provisions** a `users` row the first time it sees a new `oid` — there is no registration
+step and no local password. The resulting identity is handed to services through an abstraction so
+that no service reads `HttpContext`.
+
+The profile slice (added 2026-09-15, Decision #28) extends this feature rather than forming a new
+one, because every part of it is a statement about the `users` row this feature already owns:
+display name, bio, avatar, and the two presentation preferences. It is **strictly self-service** —
+a caller may edit their own row and no other, and may not touch `Role`.
 
 ### Current state (2026-09-15)
 
@@ -25,7 +31,9 @@ The scaffold already implements the core of this feature. What exists:
 
 Three things the code does **not** yet do, and one it does differently:
 
-- **No email claim is read or stored.** The `users` table has `DisplayName` and `Role` only.
+- **No email claim is read or stored.** The `users` table carries `DisplayName`, `Role` and
+  `Description`; the profile screen displays an email, so this is now a visible gap in the UI's
+  data rather than only a missing column.
 - **No truncation to column lengths**, so an over-long claim is not defended against.
 - **No concurrency handling.** Provisioning is get-then-insert with no unique constraint behind it,
   so a duplicate-key race between two first requests surfaces as a 500 rather than converging.
@@ -78,6 +86,42 @@ attributed for what I write without registering, inviting, or waiting for an adm
 - [ ] An email claim is captured, or the decision not to store one is recorded — the PRD's
       `users` row lists `Email` and the code currently reads no email claim at all
 
+### Profile and preferences
+
+Added 2026-09-15 from the Figma export's profile screen (Decision #28). The screen's fields are the
+source of these criteria; the avatar is the only one with a storage story.
+
+- [ ] `GET /user/me` returns the whole row — `Id`, `Email`, `DisplayName`, `Role`, `Description`,
+      the avatar (path, or the resolved public URL) and both preferences — so the profile screen
+      populates from one request rather than several
+- [ ] `PUT /user/me` updates `DisplayName`, `Description`, `PreferredTheme` and
+      `PreferredLanguage` on the **caller's own row only**. The route carries no user id, so there
+      is no parameter through which one caller could reach another's profile
+- [ ] `PUT /user/me` never writes `Role`, `Email` or `Id`. Those fields are absent from the request
+      model, and a test asserts that shape rather than trusting it — **`Role` must not be
+      self-assignable**, because a caller who could set it would grant themselves admin and defeat
+      feature 03's seeding entirely (Decision #9)
+- [ ] `DisplayName` is required and non-blank, max 200 characters; `Description` is optional,
+      accepts long text, and normalises a whitespace-only value to null — the same rule an
+      activity's `Description` follows, so the two do not diverge
+- [ ] `PreferredTheme` accepts only `Dark` and `Light`; `PreferredLanguage` only `en` and `zh`.
+      Anything else is rejected with 400, and both columns are **non-nullable with a default**
+      (`Dark`, `en`) so no client ever has to decide what an absent preference means. These are
+      presentation preferences only and carry no authorization meaning
+- [ ] `POST /user/me/avatar` accepts an image on the same allowlist and size cap as a cover, writes
+      it to the **public `avatars`** container through `IStorageService`, stores the path on the
+      caller's row, and returns the public URL
+- [ ] An avatar upload replaces any previous one and **deletes the old blob**, so exactly one avatar
+      blob exists per user and none are orphaned
+- [ ] `DELETE /user/me/avatar` clears the field and deletes the blob; a caller who has no avatar
+      gets a no-op success rather than a 404 or an error
+- [ ] **An avatar is public by design** (Decision #28) and is the one user-owned image that is: a
+      plain unauthenticated HTTP GET against the returned URL returns the image, asserted in the
+      tagged storage tier. This is exactly the opposite of an activity's media, and the contrast is
+      deliberate — an avatar is an identity, not a record of a private day
+- [ ] The profile routes are reachable only when authenticated: **401** anonymously, and there is
+      no route by which one caller reads or writes another's profile
+
 ## Tests (TDD)
 
 - Unit (`TrailBlaze.Service.Test`) — **hot spot (identity)**: provisioning is idempotent (same
@@ -88,10 +132,29 @@ attributed for what I write without registering, inviting, or waiting for an adm
   — a second insert for the same id is rejected — and get-by-object-id returns the provisioned row
   while returning nothing for an unknown one. Runs with no database, per the no-database pattern
   ([testing-and-tdd.md](../testing-and-tdd.md)).
+- Unit (`TrailBlaze.Service.Test`) — **hot spot (privilege escalation):** the profile update model
+  carries no `Role` field, and a `PUT /user/me` body attempting to set `Role`, `Email` or `Id`
+  leaves the stored `Role` unchanged. Asserted as a RED-first test because the failure it guards
+  against — a user promoting themselves to admin — is silent, permanent, and defeats feature 03.
+  Also the preference enums: an out-of-range theme or language is rejected, and both default when
+  omitted.
+- Unit (`TrailBlaze.Service.Test`): avatar upload validation reuses the cover allowlist and size
+  cap; replacing an avatar deletes the previous blob; removing an avatar with none present is a
+  no-op success rather than an error.
+- Integration (`TrailBlaze.Repository.Test`): the new `users` columns round-trip through the
+  `DbContext` with no database — `PreferredTheme`/`PreferredLanguage` default rather than persist
+  as null, and `Description` normalises whitespace to null ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Api.Test`) — **hot spot (security)**: with a test authentication scheme
   standing in for Entra, no token → 401; a valid token → 200 and exactly one `users` row; the same
   token a second time → still one row. The 401 is asserted to occur with no `users` insert, which
   is what proves rejection precedes the write.
+- Integration (`TrailBlaze.Api.Test`): `GET /user/me` returns the profile fields; `PUT /user/me`
+  persists a display-name and bio change that is visible on the next read; an anonymous request to
+  every profile route returns 401.
+- Storage integration (`TrailBlaze.Service.Test`, tagged `Category=StorageIntegration`): an avatar
+  written to the real `avatars` container is retrievable by a **credential-free** HTTP GET. That is
+  the assertion that the container is genuinely public-read, which is the whole design intent for
+  avatars and cannot be shown with the fake.
 
 ## Notes / non-goals
 
@@ -100,7 +163,10 @@ attributed for what I write without registering, inviting, or waiting for an adm
 - **No authorization rules.** Any authenticated caller can reach every non-anonymous route.
   Ownership and admin rules are feature 09.
 - No token acquisition, refresh, or sign-out — MSAL runs in the browser and is wired at feature 10.
-- No user profile editing, invitations, deactivation, or a users API; a `users` row exists only
-  because someone signed in.
+- **Invitations and deactivation remain out of scope.** A `users` row still exists only because
+  someone signed in, and there is no way to create, invite, or deactivate a user from the app.
+  Profile *editing* and a users API did belong on this list and no longer do (Decision #28): what
+  exists is strictly **self-service editing of the caller's own row**, never administration of
+  another's.
 - The token is used for identity only. It is never the source of privilege — the database decides
   that, which is why 03 stores the role in a column (PRD "Authentication & authorization").
