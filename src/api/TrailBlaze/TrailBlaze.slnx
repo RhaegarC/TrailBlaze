@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="TrailBlaze.Api/TrailBlaze.Api.csproj" />
+  <Project Path="TrailBlaze.Interface/TrailBlaze.Interface.csproj" />
+  <Project Path="TrailBlaze.Model/TrailBlaze.Model.csproj" />
+  <Project Path="TrailBlaze.Repository/TrailBlaze.Repository.csproj" />
+  <Project Path="TrailBlaze.Service/TrailBlaze.Service.csproj" />
+  <Project Path="TrailBlaze.Tests/TrailBlaze.Tests.csproj" />
+</Solution>
