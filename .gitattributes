@@ -1,0 +1,26 @@
+# Normalize to LF in the repository; Git converts on checkout per platform.
+# Prevents CRLF churn on Windows and keeps diffs honest across machines.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary — never touch
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.mp4 binary
+*.mov binary
+*.pdf binary
+
+# Generated / lockfiles: collapse in diffs, but still reviewable
+*.lock text eol=lf -diff
+pnpm-lock.yaml text eol=lf -diff
+
+# Linguist: docs are the product here
+docs/** linguist-documentation

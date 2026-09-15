@@ -1,0 +1,47 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+*.dll
+*.pdb
+*.user
+*.suo
+
+# .NET / IDE
+.vs/
+.idea/
+*.userprefs
+*.DotSettings.user
+
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# Secrets — Azure Blob connection strings and Entra client secrets must never land in git.
+# Locally these come from `dotnet user-secrets`, not from a committed file, so
+# appsettings.Development.json stays tracked and holds only non-secret settings.
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+*.pfx
+*.snk
+
+# Local agent/tooling state
+.claude/settings.local.json
+.claude/worktrees/
+
+# OS
+.DS_Store
+Thumbs.db
