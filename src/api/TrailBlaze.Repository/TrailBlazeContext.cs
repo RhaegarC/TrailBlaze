@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Model.DatabaseEntity;
+using TrailBlaze.Model.DatabaseEntity;
 using System.Linq.Expressions;
 
 namespace TrailBlaze.Repository
