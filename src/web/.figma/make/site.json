@@ -1,0 +1,10 @@
+{
+  "description": "Transform product design files into responsive, user-friendly front-end interfaces, streamlining the development process for designers and developers.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
