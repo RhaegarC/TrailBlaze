@@ -2,8 +2,6 @@ namespace TrailBlaze.Api.Test
 {
     using Microsoft.AspNetCore.Hosting;
     using Microsoft.AspNetCore.Mvc.Testing;
-    using Microsoft.AspNetCore.TestHost;
-    using Microsoft.Extensions.DependencyInjection;
 
     /// <summary>
     /// Boots the real application pipeline for tests.
@@ -12,6 +10,11 @@ namespace TrailBlaze.Api.Test
     /// The application refuses to start without its required settings, so the factory supplies
     /// them. The connection strings point at a port nothing listens on: this tier asserts how
     /// the host behaves, not what the database holds, and no test here should reach a server.
+    /// <para>
+    /// Nothing has to be removed from the service collection to keep this tier offline. Migrations
+    /// are applied by the deployment pipeline rather than at startup, so booting the host touches
+    /// no database at all — the context is resolved lazily and not until a request needs it.
+    /// </para>
     /// </remarks>
     internal sealed class TrailBlazeApiFactory : WebApplicationFactory<Program>
     {
@@ -45,24 +48,6 @@ namespace TrailBlaze.Api.Test
             {
                 builder.UseSetting(key, value);
             }
-
-            builder.ConfigureTestServices(services =>
-            {
-                // Migrations run as a hosted service so they can be removed — there is no
-                // database here to migrate. This is the seam described on
-                // DatabaseMigrationService: production keeps the unconditional startup path.
-                //
-                // Removed by implementation type, not by `RemoveAll<IHostedService>()`: that
-                // would also drop every hosted service added later, and this tier would go on
-                // passing while never starting them.
-                ServiceDescriptor? migrations = services.FirstOrDefault(
-                    descriptor => descriptor.ImplementationType == typeof(DatabaseMigrationService));
-
-                if (migrations is not null)
-                {
-                    services.Remove(migrations);
-                }
-            });
         }
     }
 }

@@ -50,9 +50,11 @@ specified in [src/api/STANDARD.md](../src/api/STANDARD.md) §3 and §10, and enf
 `EntityBase` plus the save interceptor. This PRD states *what* the data holds; STANDARD.md states
 *how* it is shaped.
 
-Deployment (stage 1): **local Docker**. `docker-compose` runs the backend container; the web app
-joins at frontend integration. Azure SQL Database, Azure Blob and Entra ID are **real cloud
-resources** in every environment, including development — nothing is emulated locally.
+Deployment: the API runs on **Azure Container Apps** from the image `src/api/Dockerfile` builds;
+the web app runs on **Azure Static Web Apps**, deployed by GitHub workflow. There is no
+`docker-compose.yml` — neither target consumes a multi-service local stack, so there is none.
+Azure SQL Database, Azure Blob and Entra ID are **real cloud resources** in every environment,
+including development and tests — nothing is emulated locally.
 
 ### Current state vs. target
 
@@ -75,7 +77,8 @@ some work the ladder attributes to features 01–02 already exists:
 | Area | Target (this document) | Code today | Closes in |
 |---|---|---|---|
 | Database engine | **Azure SQL Server** | **done** — `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated on SQL Server | feature 01 |
-| Local orchestration | `docker-compose` running the API | **done** — `docker-compose.yml` builds and runs the API container; it has no database service, because development points at a real Azure SQL Database. No CI workflow, which stage 1 does not ask for | feature 01 |
+| API hosting | ACA from a container image | **done** — `src/api/Dockerfile` builds the image, `.dockerignore` keeps local build output out of the context. No `docker-compose.yml`: neither target needs a local multi-service stack | feature 01 |
+| Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
 | Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 31 tests | feature 01 |
 | Blob abstraction | `IStorageService` with an in-memory fake, three containers | **done** — `IStorageService` in `TrailBlaze.Interface`, an Azure adapter in `TrailBlaze.Repository`, and the fake in `TrailBlaze.Service.Test` | feature 01 |
 | Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
@@ -376,13 +379,22 @@ uses the ASP.NET `[controller]` token, which yields `/User/me`. That casing dive
 known inconsistency tracked in [src/api/STANDARD.md](../src/api/STANDARD.md) §12, not a second
 route.
 
-## Deployment (stage 1)
+## Deployment
 
-**Local Docker**, no reverse proxy — `docker-compose` brings up the API. There is no database
-container: Azure SQL Database is managed and cannot be one, and development runs against a real
-Azure SQL Database, so the API reaches it over the network and the server's firewall must allow
-the caller. Azure Blob and Entra ID are real cloud resources reached by configuration, so secrets
-live in user secrets locally and in CI variables for the pipeline. EF migrations run at startup.
+**No reverse proxy, no local multi-service stack.** The API is an image on **Azure Container
+Apps**, built from `src/api/Dockerfile`; the web app is a static build on **Azure Static Web
+Apps**, deployed by GitHub workflow. There is no `docker-compose.yml` — neither target consumes
+one, and local development is `dotnet run` against the real cloud resources.
+
+Everything the API talks to is a real cloud resource reached by configuration: **Azure SQL
+Database** (which has no container image to run locally), **Azure Blob** and **Entra ID**. Secrets
+therefore live in user-secrets locally and in pipeline variables for deployment.
+
+**Migrations are applied by the deployment pipeline, not at API startup.** Azure Container Apps runs
+several replicas, and replicas migrating concurrently on startup race each other over the same DDL.
+The workflow runs `dotnet ef database update` before the new revision takes traffic, so exactly one
+writer touches the schema. Until those workflows exist, applying a migration is a manual step —
+`DbConnection="…" dotnet ef database update` — because nothing else performs it.
 
 ## Out of scope / deferred
 

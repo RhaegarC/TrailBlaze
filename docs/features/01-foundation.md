@@ -1,16 +1,17 @@
 # 01 — Foundation
 
 Status: **Implemented** — awaiting PR review · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #5/#6/#16/#22 + "System overview" and "Deployment (stage 1)".
+Source: [PRD](../PRD.md) — Decisions #5/#6/#16/#22 + "System overview" and "Deployment".
 
 ## Summary
 
 The one-time scaffold every later feature starts from: the layered `TrailBlaze.*` solution with a
-sibling xUnit project per layer, EF Core against **Azure SQL Database** with migrations applied at
-startup, a `docker-compose` that brings up the API, the `IStorageService` abstraction with an
-in-memory fake, OpenAPI, a `/health` endpoint, and configuration binding for the Azure Blob
-connection string. It ships no product behaviour — its exit condition is a green `dotnet test`
-**that actually runs tests**.
+sibling xUnit project per layer, EF Core against **Azure SQL Database** with migrations the
+deployment pipeline applies, a `Dockerfile` that builds the API into the image Azure Container
+Apps deploys, the
+`IStorageService` abstraction with an in-memory fake, OpenAPI, a `/health` endpoint, and
+configuration binding for the Azure Blob connection string. It ships no product behaviour — its
+exit condition is a green `dotnet test` **that actually runs tests**.
 
 ### Current state (2026-09-15)
 
@@ -21,7 +22,7 @@ already existed and part did not. Both gating items are now closed:
 |---|---|
 | The five layers under `src/api/`, flat, with `TrailBlaze.slnx` at that level | The three `*.Test` projects now reference the layer each exercises; `dotnet test` discovers 31 tests |
 | EF Core registered through `AddRepositoryPersistence`; the connection string read from configuration | Provider swapped to `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated |
-| `GET /health` and the OpenAPI document (development only) | `docker-compose.yml` bringing the API up against Azure SQL Database |
+| `GET /health` and the OpenAPI document (development only) | `src/api/Dockerfile` plus `.dockerignore` — the image ACA deploys |
 | `EntityBase`, `AuditSaveChangesInterceptor` and the soft-delete query filter | `IStorageService` with the three containers, plus the in-memory fake |
 | Entra bearer validation and caller auto-provisioning — that is feature 02's subject; see [02-entra-auth.md](02-entra-auth.md) | `BlobConnection` configuration key, and startup validation for the required settings |
 
@@ -65,12 +66,16 @@ that every later feature begins from a failing test rather than from project set
       connection string comes from configuration, not from a literal (PRD Decision #16) — the
       inherited `Npgsql` provider is replaced and the existing migrations and model snapshot are
       regenerated for the new provider
-- [x] EF Core migrations are applied automatically at API startup against the configured database
-- [x] `docker-compose` brings up the API container, configured from the environment rather than
-      from committed values, and it reaches its database over the network. There is **no database
-      container**: Azure SQL Database is a managed service with no image, and development runs
-      against a real Azure SQL Database rather than a local stand-in, so the local stack is the
-      API alone
+- [x] EF Core migrations are **applicable to the deployed database without booting the API**: the
+      design-time factory resolves `DbConnection` from the environment and refuses to guess, so
+      `dotnet ef database update` in the deployment pipeline targets exactly the database it was
+      pointed at. Migrations are deliberately **not** applied at API startup — see the note below
+- [x] `src/api/Dockerfile` builds the API into the container image **Azure Container Apps**
+      deploys, with `.dockerignore` keeping local `bin/`/`obj/` output out of the build context.
+      There is deliberately **no `docker-compose.yml`**: the web app is deployed to Azure Static
+      Web Apps by its own GitHub workflow and never joins a local stack, so there is no
+      multi-service stack for compose to orchestrate. Local development is `dotnet run` with
+      user-secrets, and the database is a real Azure SQL Database in every environment
 - [x] `IStorageService` is declared in `TrailBlaze.Interface` with the operations the media
       features need (upload, delete, mint a read URL, and **move** — copy to a second container plus
       delete the source, which feature 08's visibility change requires); no call site names a
@@ -111,6 +116,26 @@ that every later feature begins from a failing test rather than from project set
 
 ## Notes / non-goals
 
+### Migrations are applied by the pipeline, not at startup
+
+The obvious design — an `IHostedService` that calls `MigrateAsync` before the host serves traffic —
+was built and then removed, because it does not survive the target platform. **Azure Container Apps
+runs several replicas**, and a deploy or scale-out starts more than one at once; every replica
+would run `MigrateAsync` against the same database. Both read `__EFMigrationsHistory`, both decide
+the migration is pending, both apply the DDL — and one fails with "there is already an object named
+…", or the history insert collides, or the DDL deadlocks. It is intermittent, it only happens at
+deploy time, and it presents as a flaky release rather than as a schema bug.
+
+So schema application moves out of the application and into the deployment pipeline: the workflow
+runs `dotnet ef database update` against Azure SQL **before** the new revision takes traffic, and
+exactly one writer ever touches the schema. The consequence to be honest about is that until those
+workflows exist, applying a migration is a **manual** step — `DbConnection="…" dotnet ef database
+update` — because nothing else does it.
+
+The hazard this creates and the reason the design-time factory throws rather than defaulting: with
+`dotnet ef` now the only thing that migrates, a factory that fell back to a local connection string
+would migrate the *wrong database* and report success.
+
 - No roles, no activity or media tables, and no route beyond `/health` and `/user/me` — those
   arrive in 02 onward. Entra bearer validation and caller auto-provisioning already exist in the
   scaffold, so 02's remaining work is narrower than its own file implies; see
@@ -118,8 +143,9 @@ that every later feature begins from a failing test rather than from project set
 - Azure Blob and Entra ID are **real cloud resources in every environment**, development and tests
   included (PRD Decision #5). The in-memory fake is a unit-test seam, not a way to run the app
   without Azure.
-- No CI pipeline definition, no reverse proxy, no production hosting: deployment stage 1 is local
-  Docker only (PRD "Deployment (stage 1)").
+- No CI pipeline definition, and no deployment pipeline. The `Dockerfile` builds the image Azure
+  Container Apps runs, but nothing builds or ships it yet; the GitHub workflows that deploy the
+  API and the web app are not written (PRD "Deployment", STANDARD §11).
 - No frontend scaffold. The React app is a Figma Make export consumed at feature 10 (PRD
   Decisions #17/#22); nothing under `src/web/` is authored here.
 - No shared-kernel libraries, no CQRS/mediator pipeline, no repository-of-repository abstractions

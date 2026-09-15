@@ -345,11 +345,12 @@ then user-secrets, then environment variables, then command line. Later sources 
   dotnet user-secrets set "DbConnection" "Server=tcp:<server>.database.windows.net,1433;Initial Catalog=TrailBlaze;User ID=<user>;Password=<password>;Encrypt=True;TrustServerCertificate=False"
   ```
 
-- **Development uses the real Azure SQL Database, not a local stand-in.** There is no database
-  service in `docker-compose.yml`, because Azure SQL Database is managed and has no image to run.
-  Two things follow: the API reaches its database over the network rather than by service name, so
-  the SQL Server's firewall must allow the caller; and the connection string carries `Encrypt=True`
-  without `TrustServerCertificate=True`, since there is no self-signed certificate to accept.
+- **Every environment uses the real Azure SQL Database, not a local stand-in.** Azure SQL Database
+  is managed and has no image to run, so there is no `docker-compose.yml` and no database
+  container: local development is `dotnet run` against the real server, and the API is deployed to
+  Azure Container Apps from `src/api/Dockerfile`. Two things follow — the SQL Server's firewall
+  must allow the caller, and the connection string carries `Encrypt=True` without
+  `TrustServerCertificate=True`, since there is no self-signed certificate to accept.
 
 - **A missing required setting fails at startup with a message naming the setting** — not with
   a null reference when the first request arrives, and not with an exception naming a local
@@ -555,7 +556,12 @@ Listed so you are not surprised by them, and so fixing one is an obvious pull re
    (feature 01) replaced `Npgsql` with `Microsoft.EntityFrameworkCore.SqlServer` and regenerated
    the migration set, so `TrailBlaze.Repository/Migrations` is SQL Server-shaped, as is the
    `nvarchar(max)` mapping on the audit snapshots. The strategy question this item used to raise
-   is settled and implemented: migrations are applied at startup, by `DatabaseMigrationService`.
+   is settled: migrations are applied by the **deployment pipeline** with
+   `dotnet ef database update`, before the new revision takes traffic. An `IHostedService` that
+   migrated at startup was built and then removed — Azure Container Apps runs several replicas and
+   concurrent startup migrations race over the same DDL. `TrailBlazeContextFactory` therefore
+   resolves `DbConnection` from the environment and throws when it is absent, rather than
+   defaulting to a local string that would migrate the wrong database.
 4. **`UserController` diverges from section 2's route convention.** It inherits `Controller` rather
    than `ControllerBase`, routes on `[controller]` rather than `api/[controller]`, and its `index`
    action is a placeholder returning a bare string. `UserService` is no longer empty —
@@ -581,9 +587,11 @@ Listed so you are not surprised by them, and so fixing one is an obvious pull re
     the divergence is now wider, not narrower. It is mechanical and worth its own PR — see the
     note in §1.
 11. **§11 describes a CI workflow that feature 01 deliberately did not build.** The foundation
-    feature lists "no CI pipeline definition" among its non-goals — deployment stage 1 is local
-    Docker only — so §11 remains a description of the target rather than of anything wired up.
-    Saying it is "part of the foundation work" was wrong; it is not claimed by any feature yet.
+    feature lists "no CI pipeline definition" among its non-goals, so §11 remains a description of
+    the target rather than of anything wired up. Saying it is "part of the foundation work" was
+    wrong; it is not claimed by any feature yet. It has grown more urgent since: the API is
+    deployed to Azure Container Apps and the web app to Azure Static Web Apps by GitHub workflow,
+    so a pipeline is now the only path either has to production — it is still not written.
 
 ---
 

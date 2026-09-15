@@ -21,7 +21,10 @@ tagged `Category=StorageIntegration` skips without credentials, leaving 30 passi
 `TestSupport/AuditHarness.cs` and `TestSupport/FakeUserContext.cs` live in
 `TrailBlaze.Repository.Test`; `TestSupport/FakeStorageService.cs` lives in
 `TrailBlaze.Service.Test`. The API tier boots the real pipeline through `WebApplicationFactory`
-and removes the migration hosted service, so it needs no database either.
+and supplies unreachable connection strings, so it needs no database either — nothing has to be
+removed from the service collection to achieve that, because migrations are applied by the
+deployment pipeline rather than at startup, and the context is not resolved until a request asks
+for it.
 
 ## Test tiers
 

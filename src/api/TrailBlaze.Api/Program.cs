@@ -33,9 +33,11 @@ builder.Services.AddEntraAuthentication(builder.Configuration);
 builder.Services.AllowCORS(builder.Configuration);
 builder.Services.AddHealthChecks();
 
-// Applies migrations once the host starts, so an environment never serves traffic against a
-// schema it has not caught up with.
-builder.Services.AddHostedService<DatabaseMigrationService>();
+// Migrations are deliberately NOT applied here. Azure Container Apps runs several replicas, and
+// replicas migrating concurrently on startup race each other over the same DDL -- one wins, the
+// other gets "there is already an object named ..." or deadlocks, intermittently and only at
+// deploy time. The deployment pipeline applies them with `dotnet ef database update` before the
+// new revision takes traffic, so exactly one writer ever touches the schema.
 
 var app = builder.Build();
 

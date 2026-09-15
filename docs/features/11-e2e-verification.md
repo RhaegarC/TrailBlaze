@@ -1,13 +1,13 @@
 # 11 — E2E Verification
 
 Status: **Not started** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #5/#8/#19/#26–#30 + "Deployment (stage 1)" + "Definition of Done" in [00-mission-1-sprint.md](00-mission-1-sprint.md).
+Source: [PRD](../PRD.md) — Decisions #5/#8/#19/#26–#30 + "Deployment" + "Definition of Done" in [00-mission-1-sprint.md](00-mission-1-sprint.md).
 
 ## Summary
 
 The closing verification feature. It adds no new functionality: it is a full-stack pass of the
-whole product against a **running** stack — `docker-compose` (the API), the **real** Azure SQL
-Database, the **real** Azure Blob account, and the **real** Entra ID tenant — with the
+whole product against a **running** stack — the API from `src/api/Dockerfile`, the **real** Azure
+SQL Database, the **real** Azure Blob account, and the **real** Entra ID tenant — with the
 Figma-integrated app in
 front of it. Its job is to prove the pieces work *together* in the environment they will
 actually run in, which no single feature's tests can show, and to walk the end-to-end journey
@@ -32,13 +32,13 @@ unless they all pass. It is last in the ladder by design.
 
 ## Acceptance criteria
 
-Each is performed against a running stack: `docker-compose up` bringing up the API, configured
+Each is performed against a running stack: the API running from its container image, configured
 against the real Azure SQL Database, the real Azure Blob account and real Entra ID, with the
 `src/web/` app served alongside. No fake `IStorageService`, no emulator, no `InMemory` provider.
 
-- [ ] `docker-compose up` brings the API up against the real Azure SQL Database; `GET /health`
-      returns 200, and EF migrations have been applied at startup with the schema the PRD data
-      model describes
+- [ ] The API runs against the real Azure SQL Database; `GET /health` returns 200, and the schema
+      matches the PRD data model — the migration set having been applied by the pipeline, not by
+      the API
 - [ ] The running API reaches the **real** `covers` and `avatars` (public) and `media` (private)
       containers, and the **real** Entra tenant, by configuration; the fake used in unit tests is
       nowhere in this path
@@ -144,8 +144,8 @@ What it runs is everything that already exists, plus the tiers that only this pa
 - **What it cannot prove.** The pass does not establish performance, load behaviour, or
   concurrent-writer correctness; it is one scripted journey, not a soak test. It does not test a
   browser matrix — it is run in the browser(s) the team has, and a defect only visible elsewhere
-  would escape it. It does not exercise the pipeline or any deployment beyond local Docker
-  (Decision #19's `develop`/`master` flow is verified by the pipeline itself).
+  would escape it. It does not exercise the pipeline or the deployed ACA and Static Web Apps
+  environments (Decision #19's `develop`/`master` flow is verified by the pipeline itself).
 - **The HEVC/`.mov` gap is an accepted limitation, not a failure.** An iPhone's HEVC `.mov` is
   stored faithfully but will not play in Chrome or Firefox, because video is stored as-is with no
   transcoding and no thumbnails (Decision #15), and per-item visibility is out of scope too —
