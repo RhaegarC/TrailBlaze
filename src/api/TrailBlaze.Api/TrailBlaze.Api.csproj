@@ -23,8 +23,10 @@
     <ProjectReference Include="..\TrailBlaze.Service\TrailBlaze.Service.csproj" />
   </ItemGroup>
 	
+  <!-- ServiceExt is internal: it is the composition root's own wiring, not part of the
+       hosted app's surface. The API tests boot the real pipeline, so they need to reach it. -->
   <ItemGroup>
-    <InternalsVisibleTo Include="TrailBlaze.Tests" />
+    <InternalsVisibleTo Include="TrailBlaze.Api.Test" />
   </ItemGroup>
 
 </Project>

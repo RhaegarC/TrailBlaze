@@ -20,11 +20,11 @@ decides who may *edit* an entry rather than who may read it.
 | Layer | Choice |
 |---|---|
 | Backend | ASP.NET Core 10, layered `Api / Interface / Model / Repository / Service`, each with a sibling xUnit project |
-| Database | **Azure SQL Server** via EF Core (provider swap from the inherited PostgreSQL still pending) |
+| Database | **Azure SQL Server** via EF Core (`Microsoft.EntityFrameworkCore.SqlServer`; migrations applied at startup) |
 | Media | Azure Blob Storage — a **public** container for cover images, a **private** one for activity media, reached via short-lived SAS URLs |
 | Identity | Entra ID (bearer tokens; users auto-provisioned; one admin seeded) |
 | Frontend | React 19 + Vite + TypeScript + Tailwind, exported from **Figma Make** |
-| Local run | Docker Compose (API + Azure SQL Server) |
+| Local run | Docker Compose (the API; the database is a real Azure SQL Database) |
 
 ## Working on it
 
@@ -41,12 +41,49 @@ The workflow lives in `.claude/` and runs on slash commands:
 
 Backend tests run from `src/api/` with `dotnet test`.
 
+## Running it locally
+
+The API refuses to start without its required settings (`DbConnection`, `BlobConnection`,
+`AllowedOrigins`), so there is no zero-configuration boot. Docker Compose supplies all three:
+
+```bash
+cp .env.example .env    # then fill it in
+docker compose up --build
+```
+
+Compose brings up the API and nothing else. There is **no database container**: Azure SQL Database
+is managed and has no image, so `DbConnection` points at a real Azure SQL Database and the API
+reaches it over the network. Two consequences worth knowing before the first run —
+
+- the database must already exist (the API migrates the schema at startup, it does not create the
+  database), and
+- the SQL Server's firewall must allow the address you are connecting from.
+
+Migrations are applied at startup, so a fresh database is brought up to schema by simply starting
+the API.
+
+One thing Compose does **not** do is create the `covers`, `avatars` and `media` containers in your
+Azure Storage account. The API reads and writes blobs but never provisions containers — that is a
+deployment concern, out of band from the app. Create them once, or the first upload fails with
+`ContainerNotFound`.
+
+To run the API outside Docker instead, put the same values in user-secrets — never in
+`appsettings.json` or `launchSettings.json`, which are version-controlled:
+
+```bash
+cd src/api/TrailBlaze.Api
+dotnet user-secrets set "DbConnection" "Server=tcp:<server>.database.windows.net,1433;Initial Catalog=TrailBlaze;User ID=<user>;Password=<password>;Encrypt=True;TrustServerCertificate=False"
+dotnet user-secrets set "BlobConnection" "<azure storage connection string>"
+```
+
 ## Three things to know before you start
 
-1. **The test projects are scaffolding, not a suite yet.** They exist and are in
-   `src/api/TrailBlaze.slnx`, but they are **empty and reference no project under test** —
-   `dotnet test` builds green and discovers zero tests. Standing up the harness is
-   acceptance-criteria work in feature 01, so "the suite passes" is not yet a meaningful claim.
+1. **The suite is real but shallow.** `dotnet test` from `src/api/` runs 31 tests across the three
+   tiers, 30 of them by default — the storage-integration test skips without
+   `TRAILBLAZE_STORAGE_CONNECTION`, and only it exercises the real Azure implementation. What is
+   covered today is the foundation: the audit interceptor, the soft-delete filter, the model's
+   agreement with its migration snapshot, storage routing at unit level, and the host's startup
+   rules. No product behaviour is covered, because none exists yet.
 2. **`develop` is not deployable until feature 09 merges.** Features 04–08 build the CRUD and
    media mechanics while every signed-in user can still write anything; 09 imposes the ownership
    and admin rules. See the sequencing note in the sprint file.

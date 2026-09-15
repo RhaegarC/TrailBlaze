@@ -12,10 +12,17 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.85" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TrailBlaze.Interface\TrailBlaze.Interface.csproj" />
+    <ProjectReference Include="..\TrailBlaze.Model\TrailBlaze.Model.csproj" />
+    <ProjectReference Include="..\TrailBlaze.Repository\TrailBlaze.Repository.csproj" />
   </ItemGroup>
 
 </Project>

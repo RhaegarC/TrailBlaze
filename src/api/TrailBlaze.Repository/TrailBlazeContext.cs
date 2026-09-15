@@ -22,12 +22,11 @@ namespace TrailBlaze.Repository
                 entity.HasIndex(log => new { log.TableName, log.EntityId });
                 entity.HasIndex(log => log.Timestamp);
 
-                // Npgsql maps string to text by default, which makes the snapshots
-                // write-only. jsonb validates the JSON on the way in and stays queryable
-                // afterwards -- the difference between a searchable history and a pile of
-                // opaque blobs. Both columns hold JSON or null.
-                entity.Property(log => log.OldValues).HasColumnType("jsonb");
-                entity.Property(log => log.NewValues).HasColumnType("jsonb");
+                // SQL Server has no native JSON column type; the snapshots are JSON held in
+                // nvarchar(max), which is what OPENJSON and JSON_VALUE read. That is the
+                // provider's own convention for an unbounded string, so it is left to the
+                // convention rather than restated here -- a `HasColumnType("nvarchar(max)")` would be
+                // a no-op, and STANDARD §10 forbids a test that cannot go red guarding it.
             });
 
             ApplySoftDeleteFilter(modelBuilder);

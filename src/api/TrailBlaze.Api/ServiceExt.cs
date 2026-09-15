@@ -15,11 +15,18 @@ namespace TrailBlaze.Api
         /// <see cref="PersistenceExtensions.AddRepositoryPersistence"/>, so it must run before
         /// the services that consume them.</summary>
         /// <param name="services">The service collection to register into.</param>
-        /// <param name="connectionString">Resolved by the composition root from configuration.</param>
-        public static IServiceCollection RegistService(this IServiceCollection services, string? connectionString)
+        /// <param name="dbConnection">Resolved by the composition root from configuration.</param>
+        /// <param name="blobConnection">Resolved by the composition root from configuration.</param>
+        public static IServiceCollection RegistService(
+            this IServiceCollection services,
+            string dbConnection,
+            string blobConnection)
         {
             // Register persistence (DbContext + repositories)
-            services.AddRepositoryPersistence(connectionString);
+            services.AddRepositoryPersistence(dbConnection);
+
+            // Register storage
+            services.AddBlobStorage(blobConnection);
 
             // Register service
             services.AddScoped<IUserService, UserService>();
@@ -28,6 +35,30 @@ namespace TrailBlaze.Api
             services.AddHttpContextAccessor();
 
             return services;
+        }
+
+        /// <summary>Reads a configuration value that the application cannot run without, and
+        /// names it in the failure.</summary>
+        /// <remarks>
+        /// The alternative — accepting an empty value and discovering it on the first request
+        /// that needs it — turns a misconfiguration into a runtime error far from its cause.
+        /// A missing setting is a deployment mistake, and a deployment mistake should surface at
+        /// startup or not at all.
+        /// </remarks>
+        /// <param name="configuration">Configuration to read from.</param>
+        /// <param name="key">The flat key to require, from <see cref="Constant.ConfigKey"/>.</param>
+        /// <param name="message">The message to fail with; it names the key.</param>
+        /// <returns>The configured value, never blank.</returns>
+        /// <exception cref="InvalidOperationException">The value is missing or blank.</exception>
+        public static string RequireSetting(this IConfiguration configuration, string key, string message)
+        {
+            string? value = configuration[key];
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException(message);
+            }
+
+            return value;
         }
 
         /// <summary>Registers Entra ID bearer-token authentication. The scheme is wired only
@@ -76,11 +107,8 @@ namespace TrailBlaze.Api
 
         public static IServiceCollection AllowCORS(this IServiceCollection services, IConfiguration configuration)
         {
-            string? originsStr = configuration[Constant.ConfigKey.AllowedOrigins];
-            if (string.IsNullOrWhiteSpace(originsStr))
-            {
-                throw new InvalidOperationException(Constant.Message.NoAllowedOrigins);
-            }
+            string originsStr = configuration.RequireSetting(
+                Constant.ConfigKey.AllowedOrigins, Constant.Message.NoAllowedOrigins);
 
             string[] origins = originsStr.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             services.AddCors(options =>

@@ -6,8 +6,9 @@ Source: [PRD](../PRD.md) — Decisions #5/#8/#19/#26–#30 + "Deployment (stage 
 ## Summary
 
 The closing verification feature. It adds no new functionality: it is a full-stack pass of the
-whole product against a **running** stack — `docker-compose` (API + Azure SQL Server), the
-**real** Azure Blob account, and the **real** Entra ID tenant — with the Figma-integrated app in
+whole product against a **running** stack — `docker-compose` (the API), the **real** Azure SQL
+Database, the **real** Azure Blob account, and the **real** Entra ID tenant — with the
+Figma-integrated app in
 front of it. Its job is to prove the pieces work *together* in the environment they will
 actually run in, which no single feature's tests can show, and to walk the end-to-end journey
 from anonymous browsing through admin override. The journey now includes the parts of the model
@@ -31,12 +32,13 @@ unless they all pass. It is last in the ladder by design.
 
 ## Acceptance criteria
 
-Each is performed against a running stack: `docker-compose up` bringing up the API and Azure SQL
-Server, configured against the real Azure Blob account and real Entra ID, with the `src/web/` app
-served alongside. No fake `IStorageService`, no emulator, no `InMemory` provider.
+Each is performed against a running stack: `docker-compose up` bringing up the API, configured
+against the real Azure SQL Database, the real Azure Blob account and real Entra ID, with the
+`src/web/` app served alongside. No fake `IStorageService`, no emulator, no `InMemory` provider.
 
-- [ ] `docker-compose up` brings the API and Azure SQL Server up together; `GET /health` returns
-      200, and EF migrations have been applied at startup with the schema the PRD data model describes
+- [ ] `docker-compose up` brings the API up against the real Azure SQL Database; `GET /health`
+      returns 200, and EF migrations have been applied at startup with the schema the PRD data
+      model describes
 - [ ] The running API reaches the **real** `covers` and `avatars` (public) and `media` (private)
       containers, and the **real** Entra tenant, by configuration; the fake used in unit tests is
       nowhere in this path
@@ -156,6 +158,7 @@ What it runs is everything that already exists, plus the tiers that only this pa
   here.
 - Not a release gate for the pipeline, and not a substitute for the per-feature tests that produced
   the green suite it starts from.
-- **Database target vs. current code.** The target database is **Azure SQL Server** (PRD Decision #16),
-  but the code today runs on PostgreSQL/Npgsql and that provider swap is still pending — so the pass
-  records which provider it actually ran against rather than assuming the target one.
+- **Database target.** The database is **Azure SQL Database** (PRD Decision #16); the provider swap
+  landed in feature 01 and development runs against a real Azure SQL Database rather than a local
+  stand-in, so a local pass is aimed at the target engine. It still records which server and
+  database it actually ran against rather than assuming the target one.

@@ -42,11 +42,14 @@ is unwelcome, move 09 to run immediately after 04.
 The repository was initialised from a generic layered .NET scaffold, which landed parts of 01 and
 02 early. Read the `Status` column above with that in mind:
 
-- **01 — in progress.** The five layers, the solution file, `EntityBase`, the audit interceptor, the
-  soft-delete filter, `/health` and the OpenAPI document all exist. What is missing is the
-  substance: the three `*.Test` projects are **empty and reference no project under test**, so
-  `dotnet test` builds green and discovers nothing; the provider is still PostgreSQL (`Npgsql`);
-  there is no `IStorageService`, no `docker-compose`, and no CI.
+- **01 — implemented, awaiting PR review.** Both gating items are closed: the three `*.Test`
+  projects reference the layer each exercises and `dotnet test` discovers 31 tests (30 passing, the
+  tagged storage-integration one skipping without credentials), and the provider is now
+  **SQL Server** with the migrations and snapshot regenerated. `IStorageService` with its
+  in-memory fake, a `docker-compose.yml` that runs the API, and startup validation of the required
+  settings are in place too. The compose stack has **no database service**: development runs
+  against a real Azure SQL Database, so the API reaches it over the network instead. Still absent:
+  **no CI pipeline** — that is not claimed by 01 (PRD "Deployment (stage 1)" is local Docker only).
 - **02 — in progress.** Entra bearer validation, the caller abstraction, and auto-provisioning
   behind `GET /user/me` are implemented. Remaining: the key-shape decision in Open items,
   concurrency safety on first-sight provisioning, claim truncation, and the email question. The
@@ -69,7 +72,7 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 
 | # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
 |---|---|---|---|---|
-| 01 | [foundation](01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Server via EF Core with migrations at startup; `docker-compose` (api + Azure SQL Server); `IStorageService` abstraction with a fake; config for Azure Blob | in progress |
+| 01 | [foundation](01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations at startup; `docker-compose` for the API; `IStorageService` abstraction with a fake; config for Azure Blob | awaiting PR review |
 | 02 | [entra-auth](02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | in progress |
 | 03 | [admin-seeding](03-admin-seeding.md) | 02 | `Role` stored on `users`; exactly one admin seeded from configuration at startup; role readable by the authorization path | not started |
 | 04 | [activity-crud](04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. **`Type` is stored here, enforced in 05/09** | not started |

@@ -7,8 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.29.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,7 +26,7 @@
        testing a reimplementation of the redaction rules would prove nothing about these
        ones, so the test assembly is granted access instead. -->
   <ItemGroup>
-    <InternalsVisibleTo Include="TrailBlaze.Tests" />
+    <InternalsVisibleTo Include="TrailBlaze.Repository.Test" />
   </ItemGroup>
 
 </Project>

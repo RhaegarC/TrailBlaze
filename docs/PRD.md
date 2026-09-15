@@ -50,9 +50,9 @@ specified in [src/api/STANDARD.md](../src/api/STANDARD.md) §3 and §10, and enf
 `EntityBase` plus the save interceptor. This PRD states *what* the data holds; STANDARD.md states
 *how* it is shaped.
 
-Deployment (stage 1): **local Docker**. `docker-compose` runs the backend and an Azure SQL
-Server container; the web app joins at frontend integration. Azure Blob and Entra ID are **real
-cloud resources** in every environment, including development.
+Deployment (stage 1): **local Docker**. `docker-compose` runs the backend container; the web app
+joins at frontend integration. Azure SQL Database, Azure Blob and Entra ID are **real cloud
+resources** in every environment, including development — nothing is emulated locally.
 
 ### Current state vs. target
 
@@ -74,10 +74,10 @@ some work the ladder attributes to features 01–02 already exists:
 
 | Area | Target (this document) | Code today | Closes in |
 |---|---|---|---|
-| Database engine | **Azure SQL Server** | PostgreSQL via `Npgsql`; migrations exist but are Npgsql-shaped | feature 01 |
-| Local orchestration | `docker-compose` (API + Azure SQL Server) | no compose file, and no CI workflow either | feature 01 |
-| Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | the three `*.Test` projects exist but are empty and reference no project under test | feature 01 |
-| Blob abstraction | `IStorageService` with an in-memory fake, three containers | does not exist | feature 01 |
+| Database engine | **Azure SQL Server** | **done** — `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated on SQL Server | feature 01 |
+| Local orchestration | `docker-compose` running the API | **done** — `docker-compose.yml` builds and runs the API container; it has no database service, because development points at a real Azure SQL Database. No CI workflow, which stage 1 does not ask for | feature 01 |
+| Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 31 tests | feature 01 |
+| Blob abstraction | `IStorageService` with an in-memory fake, three containers | **done** — `IStorageService` in `TrailBlaze.Interface`, an Azure adapter in `TrailBlaze.Repository`, and the fake in `TrailBlaze.Service.Test` | feature 01 |
 | Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
 | Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | `users` carries only `DisplayName`, `Role`, `Description` | feature 02 |
 | Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | `UserController` exposes `GET me` only | feature 02 |
@@ -128,7 +128,7 @@ Every requirement decision from the grilling session, in order:
 | 13 | Cover image audience | **Follows the activity's visibility** — public for a Public activity, SAS-only for Shared and Private ones (see #29). Supersedes the earlier "always public", which held only while every activity was public |
 | 14 | Where the cover comes from | **Its own upload** into a container chosen by the activity's visibility; never picked from, derived from, or re-pointed at private media (see #29) |
 | 15 | Video handling | **Store as-is**; validate content type and size; no transcoding, no thumbnails |
-| 16 | Backend & data stack | **.NET 10 layered + Azure SQL Server** (swapped from the inherited PostgreSQL; the provider swap is pending — see Current state vs. target) |
+| 16 | Backend & data stack | **.NET 10 layered + Azure SQL Server** (swapped from the inherited PostgreSQL in feature 01; the swap is done) |
 | 17 | Where the UI comes from | **Figma Make export**, as in the source project; frontend not test-first |
 | 18 | Feature ladder | **Written fresh for TrailBlaze** — the inherited ladder described a dynamic-form platform |
 | 19 | Repository | **New GitHub repository** (`github.com/RhaegarC`), `develop` integration / `master` production |
@@ -378,8 +378,10 @@ route.
 
 ## Deployment (stage 1)
 
-**Local Docker**, no reverse proxy — `docker-compose` brings up the API and an Azure SQL Server
-container. Azure Blob and Entra ID are real cloud resources reached by configuration, so secrets
+**Local Docker**, no reverse proxy — `docker-compose` brings up the API. There is no database
+container: Azure SQL Database is managed and cannot be one, and development runs against a real
+Azure SQL Database, so the API reaches it over the network and the server's firewall must allow
+the caller. Azure Blob and Entra ID are real cloud resources reached by configuration, so secrets
 live in user secrets locally and in CI variables for the pipeline. EF migrations run at startup.
 
 ## Out of scope / deferred

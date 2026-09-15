@@ -14,10 +14,14 @@ The API is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBla
 xUnit test project (`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`,
 `TrailBlaze.Service.Test`). New tests go in the project matching the layer they exercise.
 
-**Current state (2026-09-15).** The three test projects exist and are listed in
-`src/api/TrailBlaze.slnx`, but they are **empty and reference no project under test** — `dotnet
-test` builds green and discovers zero tests. Standing the harness up is acceptance-criteria work
-in [feature 01](features/01-foundation.md), not something already in place.
+**Current state (2026-09-15).** The harness is in place. Each `*.Test` project references the
+layer it exercises and `dotnet test` discovers tests in all three: 31 runnable, of which the one
+tagged `Category=StorageIntegration` skips without credentials, leaving 30 passing by default.
+
+`TestSupport/AuditHarness.cs` and `TestSupport/FakeUserContext.cs` live in
+`TrailBlaze.Repository.Test`; `TestSupport/FakeStorageService.cs` lives in
+`TrailBlaze.Service.Test`. The API tier boots the real pipeline through `WebApplicationFactory`
+and removes the migration hosted service, so it needs no database either.
 
 ## Test tiers
 
@@ -79,4 +83,13 @@ serving private media to the wrong person.
 ## Commands
 
 - Backend (from `src/api/`): `dotnet test`
-- Storage integration tier only: `dotnet test --filter Category=StorageIntegration`
+- Storage integration tier only, with credentials in the environment:
+
+  ```bash
+  TRAILBLAZE_STORAGE_CONNECTION="<azure storage connection string>" \
+    dotnet test --filter Category=StorageIntegration
+  ```
+
+  Without `TRAILBLAZE_STORAGE_CONNECTION` the test **skips** rather than fails, so `dotnet test`
+  is green on a machine with no Azure account. A skip is reported in the run summary — it is a
+  skip, not a silent exclusion, so the tier cannot be forgotten by vanishing from the output.
