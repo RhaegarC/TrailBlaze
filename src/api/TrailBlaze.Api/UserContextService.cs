@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using TrailBlaze.Interface.Infrastructure;
+using TrailBlaze.Model;
 
 namespace TrailBlaze.Api
 {
@@ -12,26 +13,6 @@ namespace TrailBlaze.Api
     /// </summary>
     public class UserContextService(IHttpContextAccessor httpContextAccessor) : IUserContextService
     {
-        /// <summary>Entra ID's short claim for the object id.</summary>
-        private const string ObjectIdClaim = "oid";
-
-        /// <summary>
-        /// The long-form claim older tokens carry for the same value. Both are read, so
-        /// whichever the token happens to use is picked up.
-        /// </summary>
-        private const string ObjectIdSchemaClaim =
-            "http://schemas.microsoft.com/identity/claims/objectidentifier";
-
-        /// <summary>Entra ID's short claim for the email address.</summary>
-        private const string EmailClaim = "email";
-
-        /// <summary>
-        /// The WS-Federation claim older tokens carry for the same value, read for the same
-        /// reason as the object id's long form.
-        /// </summary>
-        private const string EmailSchemaClaim =
-            "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
-
         private const string CorrelationIdHeader = "X-Correlation-Id";
 
         private HttpContext? Context => httpContextAccessor.HttpContext;
@@ -41,13 +22,13 @@ namespace TrailBlaze.Api
 
         /// <inheritdoc/>
         public string? EntraObjectId =>
-            AuthenticatedUser?.FindFirst(ObjectIdClaim)?.Value
-            ?? AuthenticatedUser?.FindFirst(ObjectIdSchemaClaim)?.Value;
+            AuthenticatedUser?.FindFirst(Constant.Claim.ObjectId)?.Value
+            ?? AuthenticatedUser?.FindFirst(Constant.Claim.ObjectIdSchema)?.Value;
 
         /// <inheritdoc/>
         public string? ActorName =>
-            AuthenticatedUser?.FindFirst("name")?.Value
-            ?? AuthenticatedUser?.FindFirst("preferred_username")?.Value;
+            AuthenticatedUser?.FindFirst(Constant.Claim.Name)?.Value
+            ?? AuthenticatedUser?.FindFirst(Constant.Claim.PreferredUsername)?.Value;
 
         /// <inheritdoc/>
         /// <remarks>
@@ -59,8 +40,8 @@ namespace TrailBlaze.Api
         /// not.
         /// </remarks>
         public string? Email =>
-            AuthenticatedUser?.FindFirst(EmailClaim)?.Value
-            ?? AuthenticatedUser?.FindFirst(EmailSchemaClaim)?.Value;
+            AuthenticatedUser?.FindFirst(Constant.Claim.Email)?.Value
+            ?? AuthenticatedUser?.FindFirst(Constant.Claim.EmailSchema)?.Value;
 
         /// <inheritdoc/>
         public string? IpAddress => Context?.Connection.RemoteIpAddress?.ToString();

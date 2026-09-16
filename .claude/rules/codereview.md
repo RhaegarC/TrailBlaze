@@ -47,7 +47,7 @@ only rules. Both make the layout lie about the dependency direction the solution
 The contract mirrors its implementation: a repository contract lives in
 `TrailBlaze.Interface/Repository/`, a service contract in `TrailBlaze.Interface/Service/`. The
 folder follows the kind of the contract, not the suffix someone happened to give it — an
-`IStorageRepository` beside `IDbRepository` and `IUserRepository` is where a reader looks, and
+`IStorageRepository` beside `IDbRepository` is where a reader looks, and
 nothing about "storage" makes it an environment detail.
 
 `TrailBlaze.Interface/Infrastructure/` is the one legitimate third folder, and it is narrow: it

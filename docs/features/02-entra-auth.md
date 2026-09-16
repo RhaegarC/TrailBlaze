@@ -42,10 +42,14 @@ The scaffold already implements the core of this feature. What exists:
 - **Token claims are shortened to their column lengths.** The lengths live in
   `Constant.UserProfile` and are read by both the mapping and the service, so the bound and the
   truncation cannot drift.
-- **Concurrent provisioning converges.** `IUserRepository.AddIfAbsentAsync` inserts and treats a
-  duplicate-key violation (SQL Server 2601/2627) as "already there"; the service then re-reads the
-  winner's row. Recognising the error code is data-access knowledge, so the catch is in the
-  repository rather than the service.
+- **Concurrent provisioning is knowingly unguarded.** `AddIfAbsentAsync` — which caught a
+  duplicate-key violation (SQL Server 2601/2627) and let the service re-read the winner's row — was
+  removed in review, along with `IUserRepository` and `UserRepository`, on the grounds that the
+  generic `DatabaseRepository.CreateAsync<T>` already does the creation. The primary key still
+  admits only one row per `oid`, so nothing is corrupted, but the losing request of a concurrent
+  first sign-in now fails its insert and returns a 500 rather than converging.
+  `UserService.GetOrCreateAsync` records this at the point of the write. A retry-on-duplicate is the
+  fix if the 500 is ever seen in practice — feature 11 is where it would be observed.
 - **The abstraction exposes the Entra `oid`, and `users.Id` **is** that `oid`.** The PRD's
   proposed surrogate key plus `EntraObjectId` column was rejected in favour of the code's shape;
   the PRD's data model and its divergence note now describe the code. See [PRD](../../PRD.md)
@@ -89,9 +93,11 @@ attributed for what I write without registering, inviting, or waiting for an adm
       the PRD's proposed surrogate `Id` + `EntraObjectId` was rejected, and the primary key is what
       enforces one row per `oid`
 - [x] A second request with the same object id neither inserts a second row nor fails
-- [x] Concurrent first requests for the same object id converge on exactly one row, and a
-      duplicate-key race surfaces as a normal authenticated request rather than a 500 —
-      `UserRepository.AddIfAbsentAsync`
+- [ ] **Not met.** Concurrent first requests for the same object id reach exactly one row — the
+      primary key guarantees that — but the losing request fails its insert rather than converging,
+      and surfaces as a 500. `UserRepository.AddIfAbsentAsync` met this until it was removed in
+      review; see "Closed in this pass" for what replaced it and what the fix would be. Tracked
+      under [11-e2e-verification](11-e2e-verification.md)
 - [x] Values are truncated to the column lengths before insert so an over-long claim cannot fail
       the insert (`DisplayName` 200, `Email` 320, `Role` 16)
 - [x] An email claim is captured from `email`, with the WS-Federation `emailaddress` fallback
@@ -168,10 +174,10 @@ to be untested, because the second gets written.
 
 ### Three things no offline test can prove, whichever pass writes them
 
-1. **The duplicate-key race.** With no database, the `SqlException` catch in `AddIfAbsentAsync` is
-   never entered. A unit test can stub `AddIfAbsentAsync` returning `false` and assert the service
-   re-reads — that proves the service's branch, not that the catch recognises what SQL Server
-   actually throws. The catch is verified by inspection and belongs to feature 11.
+1. **The concurrent-insert failure.** Offline there is no second writer, so the losing branch of a
+   concurrent first sign-in cannot be produced at all. That branch is no longer guarded — see
+   "Closed in this pass" — so what feature 11 owes here is the opposite of the usual: confirming the
+   500 actually appears under load *before* anything is built to prevent it.
 2. **The narrowing `ALTER COLUMN` against a populated table.** `AddUserProfileColumns` narrows
    `Role`, `DisplayName` and `Description` from `nvarchar(max)`. Offline we can assert the model's
    lengths; whether SQL Server accepts the change on existing rows depends on the data it finds, and

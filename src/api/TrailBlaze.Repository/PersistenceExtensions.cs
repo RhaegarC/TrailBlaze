@@ -8,7 +8,7 @@ namespace TrailBlaze.Repository
     {
         /// <summary>Registers <see cref="TrailBlazeContext"/> against SQL Server (the engine
         /// Azure SQL Server speaks) when a connection string is present, the audit interceptor
-        /// that stamps audit-log entries on save, and the repositories as scoped services by
+        /// that stamps audit-log entries on save, and the repository as a scoped service by its
         /// interface.</summary>
         /// <param name="services">The service collection to register into.</param>
         /// <param name="connectionString">Resolved by the composition root from configuration,
@@ -27,7 +27,7 @@ namespace TrailBlaze.Repository
                     .AddInterceptors(serviceProvider.GetRequiredService<AuditSaveChangesInterceptor>());
             });
 
-            services.AddScoped<IUserRepository, UserRepository>();
+            services.AddScoped<IDbRepository, DatabaseRepository>();
 
             return services;
         }

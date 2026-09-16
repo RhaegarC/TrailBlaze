@@ -14,9 +14,9 @@ The API is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBla
 xUnit test project (`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`,
 `TrailBlaze.Service.Test`). New tests go in the project matching the layer they exercise.
 
-**Current state (2026-09-15).** The harness is in place. Each `*.Test` project references the
-layer it exercises and `dotnet test` discovers tests in all three: 31 runnable, of which the one
-tagged `Category=StorageIntegration` skips without credentials, leaving 30 passing by default.
+**Current state (2026-09-16).** The harness is in place. Each `*.Test` project references the
+layer it exercises and `dotnet test` discovers tests in all three: 42 runnable, of which the one
+tagged `Category=StorageIntegration` skips without credentials, leaving 41 passing by default.
 
 `TestSupport/AuditHarness.cs` and `TestSupport/FakeUserContext.cs` live in
 `TrailBlaze.Repository.Test`; `TestSupport/FakeStorageRepository.cs` lives in

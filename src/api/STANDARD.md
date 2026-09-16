@@ -53,8 +53,15 @@ only project that knows how the parts fit together.
   `Service/` because it describes the runtime environment rather than a business capability.
   `IStorageRepository` is in `Repository/` because it is the opposite case: it performs data
   operations against a store — upload, delete, move, mint a read URL — so its kind is data
-  access, and it sits beside `IDbRepository` and `IUserRepository`. The folder follows the kind
-  of the contract, not the suffix on its name.
+  access, and it sits beside `IDbRepository`. The folder follows the kind of the contract, not
+  the suffix on its name. `IUploadValidationService` is in `Service/` for the same reason in the
+  other direction: it applies the app's upload rules and touches no store.
+- **A service is depended on through its interface.** Every type in `TrailBlaze.Service` declares
+  one in `TrailBlaze.Interface/Service/` and is registered by it in the composition root —
+  `AddScoped<IUserService, UserService>()`, `AddSingleton<IUploadValidationService,
+  UploadValidationService>()`. A caller naming the concrete class would be reaching into a layer it
+  is supposed to depend on only by contract, which is the same boundary the
+  `Service` → `Repository` rule above draws.
 - **An adapter for a system outside the process belongs in `TrailBlaze.Repository`.** EF Core is
   there, and so is `AzureBlobStorageRepository`. It is the layer that already owns reaching
   something external, and a sixth project would introduce a boundary this solution has not

@@ -68,6 +68,47 @@
         }
 
         /// <summary>
+        /// The claim names this app reads off a validated Entra ID token.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Collected here so every name is read in one place rather than spelled out at the point
+        /// of use. A claim name is a string the tenant defines, not this app — a typo in one is not
+        /// a compile error but a silently null claim, which is a sign-in that succeeds with no
+        /// identity attached. Naming them together is what makes that set reviewable.
+        /// </para>
+        /// <para>
+        /// The pairs are deliberate. Entra ID issues short names (<c>oid</c>, <c>email</c>) on
+        /// v2.0 tokens and WS-Federation URIs on v1.0 ones, and which arrives depends on the
+        /// tenant's configuration rather than on this app, so both are read for a value that is
+        /// the same either way.
+        /// </para>
+        /// </remarks>
+        public static class Claim
+        {
+            /// <summary>Entra ID's short claim for the object id — the <c>users</c> key.</summary>
+            public const string ObjectId = "oid";
+
+            /// <summary>The long-form claim older tokens carry for the same value.</summary>
+            public const string ObjectIdSchema =
+                "http://schemas.microsoft.com/identity/claims/objectidentifier";
+
+            /// <summary>Entra ID's short claim for the email address.</summary>
+            public const string Email = "email";
+
+            /// <summary>The WS-Federation claim older tokens carry for the same value.</summary>
+            public const string EmailSchema =
+                "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
+
+            /// <summary>The user's display name, as the directory holds it.</summary>
+            public const string Name = "name";
+
+            /// <summary>The sign-in address. Not an email column's source — see
+            /// <c>UserContextService.Email</c> — but a usable display name.</summary>
+            public const string PreferredUsername = "preferred_username";
+        }
+
+        /// <summary>
         /// The containers the storage abstraction addresses. This set is closed: the container
         /// name is the whole of the public/private answer, so adding one is a deliberate act
         /// rather than something a call site decides by passing a string. Public means the blob

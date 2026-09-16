@@ -43,7 +43,7 @@ The repository was initialised from a generic layered .NET scaffold, which lande
 02 early. Read the `Status` column above with that in mind:
 
 - **01 — implemented and archived (merged to `develop` in PR #3).** Both gating items are closed: the three `*.Test`
-  projects reference the layer each exercises and `dotnet test` discovers 41 tests (40 passing, the
+  projects reference the layer each exercises and `dotnet test` discovers 42 tests (41 passing, the
   tagged storage-integration one skipping without credentials), and the provider is now
   **SQL Server** with the migrations and snapshot regenerated. `IStorageRepository` with its
   in-memory fake, a `Dockerfile` building the image ACA deploys, and startup validation of the
@@ -53,7 +53,7 @@ The repository was initialised from a generic layered .NET scaffold, which lande
   and which is now the only path either component has to production.
 - **02 — implemented, but its tests are deferred, so it is not finished.** All the work is in
   place: the key shape is settled as `users.Id = oid` (the PRD's surrogate proposal was rejected
-  and the PRD now matches the code), provisioning converges under a duplicate-key race, token
+  and the PRD now matches the code), provisioning writes one row per object id, token
   claims are shortened to their column lengths, the email claim is captured, and the profile slice
   (Decision #28) is implemented — four profile routes returning DTOs, the five new `users` columns
   behind a migration, a shared upload validator, and avatar storage in the public container.

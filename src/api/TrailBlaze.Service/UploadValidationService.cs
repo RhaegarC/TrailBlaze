@@ -1,10 +1,11 @@
+using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
 
 namespace TrailBlaze.Service
 {
     /// <summary>
-    /// Decides whether an uploaded file is one this app will store, against the allowlist and the
-    /// size caps in <see cref="Constant.Upload"/>.
+    /// The shared upload rules, read from the allowlists and size caps in
+    /// <see cref="Constant.Upload"/>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -14,23 +15,15 @@ namespace TrailBlaze.Service
     /// and the size cap is the same 10 MB.
     /// </para>
     /// <para>
-    /// This decides only what may be <em>stored</em>. It says nothing about whether the caller is
-    /// allowed to store it, how many they may store, or where it goes; the first two are route
-    /// rules and belong to the feature that owns each route, and the third is the container the
-    /// caller picked.
-    /// </para>
-    /// <para>
-    /// Every method returns <c>null</c> when the upload is acceptable and the message to show the
-    /// user when it is not — a rejected upload is an ordinary answer, not a fault, and returning
-    /// the text rather than a code keeps the wording in the layer that owns the rule.
+    /// Stateless, so it is registered as a singleton. It is injected rather than kept static so
+    /// the routes depend on <see cref="IUploadValidationService"/>: if a cap ever needs to come
+    /// from configuration rather than <see cref="Constant"/>, that changes here and no caller
+    /// changes at all.
     /// </para>
     /// </remarks>
-    public sealed class UploadValidationService
+    public sealed class UploadValidationService : IUploadValidationService
     {
-        /// <summary>Validates an image against the shared image allowlist and 10 MB cap.</summary>
-        /// <param name="contentType">The declared content type, as sent by the client.</param>
-        /// <param name="sizeBytes">The number of bytes the upload carries.</param>
-        /// <returns>Null when acceptable, otherwise the reason to return to the client.</returns>
+        /// <inheritdoc/>
         public string? ValidateImage(string? contentType, long sizeBytes) =>
             Validate(
                 contentType,
@@ -40,11 +33,7 @@ namespace TrailBlaze.Service
                 Constant.Message.ImageTypeNotAllowed,
                 Constant.Message.ImageTooLarge);
 
-        /// <summary>Validates a video against the video allowlist and 200 MB cap. Unused until
-        /// feature 06, which is the point of the allowlist living in one place.</summary>
-        /// <param name="contentType">The declared content type, as sent by the client.</param>
-        /// <param name="sizeBytes">The number of bytes the upload carries.</param>
-        /// <returns>Null when acceptable, otherwise the reason to return to the client.</returns>
+        /// <inheritdoc/>
         public string? ValidateVideo(string? contentType, long sizeBytes) =>
             Validate(
                 contentType,
@@ -65,7 +54,7 @@ namespace TrailBlaze.Service
         /// threat, and failing the request over a suffix would be the tail wagging the dog.
         /// </remarks>
         /// <param name="contentType">A validated content type.</param>
-        public static string FileExtensionFor(string contentType) =>
+        public string FileExtensionFor(string contentType) =>
             contentType?.ToLowerInvariant() switch
             {
                 "image/jpeg" => ".jpg",

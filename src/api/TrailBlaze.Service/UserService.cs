@@ -8,10 +8,10 @@ using TrailBlaze.Model.Profile;
 namespace TrailBlaze.Service
 {
     public sealed class UserService(
-        IUserRepository userRepository,
+        IDbRepository dbRepository,
         IStorageRepository storageRepository,
         IUserContextService userContext,
-        UploadValidationService uploadValidation) : IUserService
+        IUploadValidationService uploadValidation) : IUserService
     {
         /// <summary>
         /// The key a rejected avatar upload reports its error under. It matches the form field
@@ -32,7 +32,7 @@ namespace TrailBlaze.Service
                 return null;
             }
 
-            User? user = await userRepository.GetAsync<User>(existing => existing.Id == entraObjectId);
+            User? user = await dbRepository.GetAsync<User>(existing => existing.Id == entraObjectId);
 
             if (user is not null)
             {
@@ -49,22 +49,15 @@ namespace TrailBlaze.Service
                 Email = ToColumn(userContext.Email, Constant.UserProfile.EmailLength),
             };
 
-            // The read above and this write cannot be one atomic step: the API runs several
-            // replicas, and two of them can serve the same person's first sign-in at once, both
-            // find nothing, and both insert. The primary key decides which one wins, and the
-            // loser is told so rather than failed.
-            bool inserted = await userRepository.AddIfAbsentAsync(user);
+            // The read above and this write are two statements, not one transaction, so they are
+            // not atomic: two requests for the same unseen object id can both find nothing and
+            // both insert. The primary key still admits only one row, so the loser fails its
+            // insert rather than corrupting anything -- it surfaces as a 500 on that one request
+            // instead of converging. Accepted knowingly; a retry-on-duplicate would be the fix if
+            // it is ever seen in practice.
+            await dbRepository.CreateAsync(user);
 
-            if (inserted)
-            {
-                return user;
-            }
-
-            // This call lost the race, so `user` was never stored and the row that exists is the
-            // other writer's. It is also the authoritative one -- the winner may have run with a
-            // token carrying a different display name -- so the caller is handed what is stored
-            // rather than what this call meant to store.
-            return await userRepository.GetAsync<User>(existing => existing.Id == entraObjectId);
+            return user;
         }
 
         /// <inheritdoc/>
@@ -144,7 +137,7 @@ namespace TrailBlaze.Service
             user.PreferredTheme = theme;
             user.PreferredLanguage = language;
 
-            await userRepository.UpdateAsync(user);
+            await dbRepository.UpdateAsync(user);
 
             return ProfileOutcome.Completed(ToResponse(user));
         }
@@ -177,7 +170,7 @@ namespace TrailBlaze.Service
                 Constant.StorageContainer.Avatars, path, content, contentType!);
 
             user.AvatarBlobPath = path;
-            await userRepository.UpdateAsync(user);
+            await dbRepository.UpdateAsync(user);
 
             // Deleting the old blob comes after the row points at the new one, never before. The
             // reverse order can leave the row naming a blob that is already gone -- a broken avatar
@@ -213,7 +206,7 @@ namespace TrailBlaze.Service
             }
 
             user.AvatarBlobPath = null;
-            await userRepository.UpdateAsync(user);
+            await dbRepository.UpdateAsync(user);
 
             // Row first, then blob, for the same reason as on replacement: this order never leaves
             // the row naming a blob that is missing.
@@ -254,8 +247,8 @@ namespace TrailBlaze.Service
         /// row had already moved on, with nothing to invalidate it.
         /// </para>
         /// </remarks>
-        private static string AvatarPathFor(string userId, string contentType) =>
-            $"{userId}/{Guid.NewGuid():N}{UploadValidationService.FileExtensionFor(contentType)}";
+        private string AvatarPathFor(string userId, string contentType) =>
+            $"{userId}/{Guid.NewGuid():N}{uploadValidation.FileExtensionFor(contentType)}";
 
         /// <summary>
         /// A bio as it is stored: trimmed, with whitespace-only collapsed to null.

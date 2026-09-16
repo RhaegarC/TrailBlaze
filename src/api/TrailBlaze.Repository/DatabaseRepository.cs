@@ -5,7 +5,16 @@ using TrailBlaze.Model.DatabaseEntity;
 
 namespace TrailBlaze.Repository
 {
-    public abstract class DatabaseRepository(TrailBlazeContext context) : IDbRepository
+    /// <summary>
+    /// The generic CRUD every repository shares, over <see cref="TrailBlazeContext"/>.
+    /// </summary>
+    /// <remarks>
+    /// Concrete rather than abstract: it is the whole of the data access this app performs
+    /// through EF, so it is registered as <see cref="IDbRepository"/> directly rather than
+    /// through a per-entity subclass that would add no behaviour. A type that genuinely needs
+    /// entity-specific access still derives from this and keeps the base's operations available.
+    /// </remarks>
+    public class DatabaseRepository(TrailBlazeContext context) : IDbRepository
     {
         /// <summary>
         /// The context every operation here runs against, exposed to derived repositories rather

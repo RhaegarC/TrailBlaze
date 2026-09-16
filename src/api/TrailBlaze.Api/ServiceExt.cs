@@ -47,7 +47,7 @@ namespace TrailBlaze.Api
             // Stateless, but registered rather than static so the upload rules have one home the
             // routes depend on through injection: if a cap ever needs to come from configuration
             // rather than Constant, that changes here and no caller changes at all.
-            services.AddSingleton<UploadValidationService>();
+            services.AddSingleton<IUploadValidationService, UploadValidationService>();
 
             // Register the caller abstraction. Scoped, because it reads the current request's
             // claims; nothing outside a request should resolve it.
