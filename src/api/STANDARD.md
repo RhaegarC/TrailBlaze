@@ -85,11 +85,16 @@ second style in the same solution.
   { }
   ```
 
-  > **State as of 2026-09-15:** no file in this solution actually does this — every one uses the
-  > block-scoped form, with `using` directives above the namespace. New code follows the codebase
-  > rather than this paragraph, because a rule that half the files break is worse than a rule that
-  > is wrong: the point is not having two styles. Reconciling them is a mechanical PR of its own,
-  > and until it lands, **match the file you are editing**. See §12.
+  > **Reconciled 2026-09-16.** Every file in the solution now does this. Until this PR, none
+  > did: all 36 were block-scoped, split between `using` above the namespace and `using` inside
+  > it, so the solution had two styles and this paragraph matched neither. The exception is
+  > `Program.cs`, which has no namespace at all — top-level statements must precede one, and
+  > `using` directives must precede the statements, so the file cannot take this form.
+
+- **Generated code keeps the generator's style.** `Migrations/` is emitted by `dotnet ef` with a
+  block-scoped namespace, and `TrailBlazeContextModelSnapshot` is rewritten in full on every
+  `migrations add`. Reformatting them buys nothing the next regeneration does not undo, so they
+  are left as generated. Read the rule above as applying to code this solution authors.
 
 - **Primary constructors** for dependency injection; assign to a `private readonly` field only
   when the parameter is used outside the constructor:
@@ -592,10 +597,14 @@ Listed so you are not surprised by them, and so fixing one is an obvious pull re
    `AllowedOrigins`, failing startup with a message naming the key that is missing. The two cases
    §9 previously left open — "runs for `/health` without a database" — no longer hold; see the
    corrected note there.
-10. **Namespaces are block-scoped, not file-scoped.** §1 prescribes file-scoped namespaces; every
-    file in the solution uses the block-scoped form. Feature 01's new files followed the code, so
-    the divergence is now wider, not narrower. It is mechanical and worth its own PR — see the
-    note in §1.
+10. **Namespaces are block-scoped, not file-scoped — resolved 2026-09-16.** §1 prescribed
+    file-scoped namespaces and every file used the block-scoped form, so feature 01's new files
+    followed the code and widened the divergence rather than narrowing it. The mechanical PR this
+    item asked for has since been made: all 36 authored files are file-scoped with `using`
+    directives beneath the namespace, and §1 records the two files that cannot be — `Program.cs`,
+    which has no namespace, and `Migrations/`, which `dotnet ef` regenerates. Kept here rather
+    than deleted because it is the clearest example in this list of a divergence that stayed open
+    because it was deferred as mechanical.
 11. **§11 describes a CI workflow that feature 01 deliberately did not build.** The foundation
     feature lists "no CI pipeline definition" among its non-goals, so §11 remains a description of
     the target rather than of anything wired up. Saying it is "part of the foundation work" was
