@@ -72,6 +72,33 @@
             CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// The URL an object in a public container is read by, unsigned.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This sits beside <see cref="CreateReadUrlAsync"/> because the two are not
+        /// interchangeable and choosing wrongly is silent. A SAS attached to a blob in a public
+        /// container grants nothing the container had not already granted, and turns a link that
+        /// was always public into one that dies — which is why feature 07 forbids exactly that.
+        /// The container is the whole of the public/private answer, so a caller addressing a
+        /// public one (<c>covers</c>, <c>avatars</c>) wants this, and a caller reaching a private
+        /// one (<c>media</c>) wants the SAS.
+        /// </para>
+        /// <para>
+        /// Being unsigned, the result does not expire and stays valid for as long as the
+        /// container stays public, so it is safe to store. The cost is that it carries no
+        /// authorization: handed a private container it returns a well-formed URL that fails on
+        /// fetch. That is a caller error this cannot detect — the container is the caller's
+        /// choice, and this abstraction is deliberately not told which containers are public.
+        /// </para>
+        /// </remarks>
+        /// <param name="container">A public container: <c>Constant.StorageContainer.Covers</c> or
+        /// <c>Avatars</c>.</param>
+        /// <param name="path">Path within the container.</param>
+        /// <returns>A URL readable without authorization.</returns>
+        Uri CreatePublicUrl(string container, string path);
+
+        /// <summary>
         /// Moves an object to another container, returning its new path.
         /// </summary>
         /// <remarks>

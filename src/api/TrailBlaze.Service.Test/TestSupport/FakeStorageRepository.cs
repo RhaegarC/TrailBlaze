@@ -8,6 +8,7 @@ namespace TrailBlaze.Service.Test.TestSupport
         Upload,
         Delete,
         CreateReadUrl,
+        CreatePublicUrl,
         Move,
     }
 
@@ -128,6 +129,16 @@ namespace TrailBlaze.Service.Test.TestSupport
             // Deliberately not a real URL and deliberately not reachable: a unit test that
             // followed this would be making a network call, which this tier must never do.
             return Task.FromResult(new Uri($"fake://{container}/{path}"));
+        }
+
+        /// <inheritdoc/>
+        public Uri CreatePublicUrl(string container, string path)
+        {
+            _calls.Add(new StorageCall(StorageOperation.CreatePublicUrl, container, path));
+
+            // No lifetime to carry and nothing signed, which is the difference this call exists
+            // to record: a test can assert the public path was taken rather than the SAS one.
+            return new Uri($"fake-public://{container}/{path}");
         }
 
         /// <inheritdoc/>

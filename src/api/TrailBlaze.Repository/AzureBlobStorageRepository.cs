@@ -100,6 +100,15 @@
         }
 
         /// <inheritdoc/>
+        /// <remarks>
+        /// The blob's own URI with nothing appended. No SAS is built and no key is touched, so
+        /// this is the one operation here that still works on a connection string carrying only
+        /// a SAS token, or on none at all under a managed identity.
+        /// </remarks>
+        public Uri CreatePublicUrl(string container, string path) =>
+            GetBlobClient(container, path).Uri;
+
+        /// <inheritdoc/>
         public async Task<string> MoveAsync(
             string sourceContainer,
             string sourcePath,
