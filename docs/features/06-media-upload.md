@@ -27,7 +27,7 @@ the day actually looked like — including on an activity someone else logged, w
 
 - [04-activity-crud](04-activity-crud.md) (an activity exists to attach media to, and its FK gives the cascade delete)
 - [05-public-activity-list](05-public-activity-list.md) (the visibility predicate this feature consults to decide whether the caller may contribute)
-- [01-foundation](01-foundation.md) (`IStorageRepository` abstraction + the in-memory fake used by unit tests)
+- [01-foundation](archive/01-foundation.md) (`IStorageRepository` abstraction + the in-memory fake used by unit tests)
 - [02-entra-auth](02-entra-auth.md) (the caller is authenticated; the endpoints are not anonymous)
 
 ## Acceptance criteria

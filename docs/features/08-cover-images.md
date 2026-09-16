@@ -29,7 +29,7 @@ visitors see a picture beside it without any of the activity's private media bec
 
 - [04-activity-crud](04-activity-crud.md) (the activity that owns `CoverImageBlobPath`)
 - [05-public-activity-list](05-public-activity-list.md) (the list and detail responses that surface the cover URL to anonymous callers)
-- [01-foundation](01-foundation.md) (`IStorageRepository` abstraction + the in-memory fake; the tagged storage tier)
+- [01-foundation](archive/01-foundation.md) (`IStorageRepository` abstraction + the in-memory fake; the tagged storage tier)
 
 ## Acceptance criteria
 

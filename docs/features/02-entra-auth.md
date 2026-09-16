@@ -49,7 +49,7 @@ attributed for what I write without registering, inviting, or waiting for an adm
 
 ## Dependencies
 
-- [01-foundation](01-foundation.md) (layered solution, Azure SQL Server via EF Core, configuration
+- [01-foundation](archive/01-foundation.md) (layered solution, Azure SQL Server via EF Core, configuration
   binding for the Entra tenant id and audience, `/health`)
 
 ## Acceptance criteria

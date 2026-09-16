@@ -17,7 +17,7 @@ idea becomes `docs/features/NN-name.md`; a reported bug becomes `docs/bugs/NN-na
 2. **Branch** off `develop`: `docs/feature-[nn]-[name]` or `docs/bug-[nn]-[name]`.
 3. **Write the file** using the established template:
    - **Feature** → `docs/features/NN-name.md` following the structure of the existing feature files
-     (see [docs/features/01-foundation.md](../../docs/features/01-foundation.md) for the shape: status,
+     (see [docs/features/archive/01-foundation.md](../../docs/features/archive/01-foundation.md) for the shape: status,
      summary, story, dependencies, acceptance criteria, tests, non-goals). The number claims the priority
      slot — only spec features in implementation order; vague ideas stay in `backlog.md`.
    - **Bug** → follow the bug file template (triage, reproduction, fix plan, close checklist); also add a

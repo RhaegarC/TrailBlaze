@@ -20,7 +20,7 @@ image or video that is otherwise private.
 
 - [06-media-upload](06-media-upload.md) (the `media` rows and the private blobs being addressed)
 - [02-entra-auth](02-entra-auth.md) (caller identity — the endpoint is not anonymous)
-- [01-foundation](01-foundation.md) (`IStorageRepository` abstraction + the fake; the tagged storage tier)
+- [01-foundation](archive/01-foundation.md) (`IStorageRepository` abstraction + the fake; the tagged storage tier)
 
 ## Acceptance criteria
 
