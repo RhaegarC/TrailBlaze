@@ -1,6 +1,9 @@
 # 02 — Entra Auth
 
-Status: **In progress** — validation and provisioning exist; hardening outstanding · [00-mission-1-sprint.md](00-mission-1-sprint.md)
+Status: **Implemented — tests deferred** — every acceptance criterion below is met by code, but the
+test coverage described in [Testing status](#testing-status) was deliberately not written in this
+pass, so the feature is **not** finished by [STANDARD.md](../../src/api/STANDARD.md) §10 ·
+[00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../PRD.md) — Decisions #8/#28 + "Authentication & authorization" and the `users` data-model row.
 
 ## Summary
@@ -29,18 +32,30 @@ The scaffold already implements the core of this feature. What exists:
 | Auto-provisioning on first sight, keyed on the object id, returning null rather than inserting when the token carries none | `UserService.GetOrCreateAsync` |
 | `GET /user/me` as the authenticated route that triggers provisioning | `UserController` |
 
-Three things the code does **not** yet do, and one it does differently:
+### Closed in this pass (2026-09-16)
 
-- **No email claim is read or stored.** The `users` table carries `DisplayName`, `Role` and
-  `Description`; the profile screen displays an email, so this is now a visible gap in the UI's
-  data rather than only a missing column.
-- **No truncation to column lengths**, so an over-long claim is not defended against.
-- **No concurrency handling.** Provisioning is get-then-insert with no unique constraint behind it,
-  so a duplicate-key race between two first requests surfaces as a 500 rather than converging.
-- **The abstraction is `IUserContextService`, not `ICurrentUser`, and it exposes the Entra `oid`
-  rather than an internal `users.Id`** — because the code uses the object id *as* the primary key.
-  That key-shape difference is flagged as an open decision in the PRD's "Current state vs. target";
-  settle it before treating the acceptance criteria below as final.
+- **The email claim is read and stored.** `IUserContextService` gained `Email`, read from the
+  `email` claim with the WS-Federation `emailaddress` fallback. `preferred_username` is
+  deliberately *not* an email fallback, even though it often holds an address: it already serves as
+  the display-name fallback and a tenant may configure it to a phone number, so copying it into an
+  `Email` column would store a value the column's name asserts to be something it may not be.
+- **Token claims are shortened to their column lengths.** The lengths live in
+  `Constant.UserProfile` and are read by both the mapping and the service, so the bound and the
+  truncation cannot drift.
+- **Concurrent provisioning is knowingly unguarded.** `AddIfAbsentAsync` — which caught a
+  duplicate-key violation (SQL Server 2601/2627) and let the service re-read the winner's row — was
+  removed in review, along with `IUserRepository` and `UserRepository`, on the grounds that the
+  generic `DatabaseRepository.CreateAsync<T>` already does the creation. The primary key still
+  admits only one row per `oid`, so nothing is corrupted, but the losing request of a concurrent
+  first sign-in now fails its insert and returns a 500 rather than converging.
+  `UserService.GetOrCreateAsync` records this at the point of the write. A retry-on-duplicate is the
+  fix if the 500 is ever seen in practice — feature 11 is where it would be observed.
+- **The abstraction exposes the Entra `oid`, and `users.Id` **is** that `oid`.** The PRD's
+  proposed surrogate key plus `EntraObjectId` column was rejected in favour of the code's shape;
+  the PRD's data model and its divergence note now describe the code. See [PRD](../../PRD.md)
+  "Current state vs. target".
+- **The profile slice (Decision #28) is implemented**: four profile routes, request/response DTOs,
+  a shared upload validator, and avatar storage in the public container.
 
 ## Story
 
@@ -71,58 +86,113 @@ attributed for what I write without registering, inviting, or waiting for an adm
       — `[Authorize]` short-circuits ahead of the service call
 - [x] Provisioning writes only the `users` table; it creates no activities or media rows
 
-### Outstanding
+### Provisioning and hardening (completed 2026-09-16)
 
-- [ ] On the first authenticated request carrying an unseen `oid`, a `users` row is inserted and
-      the row's identity is the object id. **Pending the PRD's open key-shape decision**, either
-      keep the current `users.Id = oid` or add a surrogate `Id` plus a unique `EntraObjectId`
-      column; the criterion is whichever shape wins, enforced so that one `oid` maps to exactly
-      one row
-- [ ] A second request with the same object id neither inserts a second row nor fails
-- [ ] Concurrent first requests for the same object id converge on exactly one row, and a
-      duplicate-key race surfaces as a normal authenticated request rather than a 500
-- [ ] Values are truncated to the column lengths before insert so an over-long claim cannot fail
-      the insert (`DisplayName` 200, and `Role` 16 if a column length is set on it)
-- [ ] An email claim is captured, or the decision not to store one is recorded — the PRD's
-      `users` row lists `Email` and the code currently reads no email claim at all
+- [x] On the first authenticated request carrying an unseen `oid`, a `users` row is inserted and
+      the row's identity is the object id. **The key-shape decision is settled**: `users.Id = oid`,
+      the PRD's proposed surrogate `Id` + `EntraObjectId` was rejected, and the primary key is what
+      enforces one row per `oid`
+- [x] A second request with the same object id neither inserts a second row nor fails
+- [ ] **Not met.** Concurrent first requests for the same object id reach exactly one row — the
+      primary key guarantees that — but the losing request fails its insert rather than converging,
+      and surfaces as a 500. `UserRepository.AddIfAbsentAsync` met this until it was removed in
+      review; see "Closed in this pass" for what replaced it and what the fix would be. Tracked
+      under [11-e2e-verification](11-e2e-verification.md)
+- [x] Values are truncated to the column lengths before insert so an over-long claim cannot fail
+      the insert (`DisplayName` 200, `Email` 320, `Role` 16)
+- [x] An email claim is captured from `email`, with the WS-Federation `emailaddress` fallback
 
 ### Profile and preferences
 
 Added 2026-09-15 from the Figma export's profile screen (Decision #28). The screen's fields are the
 source of these criteria; the avatar is the only one with a storage story.
 
-- [ ] `GET /user/me` returns the whole row — `Id`, `Email`, `DisplayName`, `Role`, `Description`,
-      the avatar (path, or the resolved public URL) and both preferences — so the profile screen
-      populates from one request rather than several
-- [ ] `PUT /user/me` updates `DisplayName`, `Description`, `PreferredTheme` and
+- [x] `GET /user/me` returns the whole row — `Id`, `Email`, `DisplayName`, `Role`, `Description`,
+      the avatar as the **resolved public URL**, and both preferences — so the profile screen
+      populates from one request rather than several. The response is `UserProfileResponse`, not
+      the entity: the stored blob path is an internal detail and is never handed out
+- [x] `PUT /user/me` updates `DisplayName`, `Description`, `PreferredTheme` and
       `PreferredLanguage` on the **caller's own row only**. The route carries no user id, so there
       is no parameter through which one caller could reach another's profile
 - [ ] `PUT /user/me` never writes `Role`, `Email` or `Id`. Those fields are absent from the request
-      model, and a test asserts that shape rather than trusting it — **`Role` must not be
-      self-assignable**, because a caller who could set it would grant themselves admin and defeat
-      feature 03's seeding entirely (Decision #9)
-- [ ] `DisplayName` is required and non-blank, max 200 characters; `Description` is optional,
+      model — **the guard is the absence**, and `Role` in particular must not be self-assignable,
+      because a caller who could set it would grant themselves admin and defeat feature 03's
+      seeding entirely (Decision #9). **The reflection test that asserts this shape does not exist
+      yet** (see [Testing status](#testing-status)); the property is true of the code but unproven
+- [x] `DisplayName` is required and non-blank, max 200 characters; `Description` is optional,
       accepts long text, and normalises a whitespace-only value to null — the same rule an
       activity's `Description` follows, so the two do not diverge
-- [ ] `PreferredTheme` accepts only `Dark` and `Light`; `PreferredLanguage` only `en` and `zh`.
+- [x] `PreferredTheme` accepts only `Dark` and `Light`; `PreferredLanguage` only `en` and `zh`.
       Anything else is rejected with 400, and both columns are **non-nullable with a default**
       (`Dark`, `en`) so no client ever has to decide what an absent preference means. These are
-      presentation preferences only and carry no authorization meaning
-- [ ] `POST /user/me/avatar` accepts an image on the same allowlist and size cap as a cover, writes
+      presentation preferences only and carry no authorization meaning. An omitted preference
+      resolves to its default rather than to "leave unchanged" — this replaces the editable fields
+- [x] `POST /user/me/avatar` accepts an image on the same allowlist and size cap as a cover, writes
       it to the **public `avatars`** container through `IStorageRepository`, stores the path on the
-      caller's row, and returns the public URL
-- [ ] An avatar upload replaces any previous one and **deletes the old blob**, so exactly one avatar
-      blob exists per user and none are orphaned
-- [ ] `DELETE /user/me/avatar` clears the field and deletes the blob; a caller who has no avatar
-      gets a no-op success rather than a 404 or an error
+      caller's row, and answers with the profile carrying the public URL
+- [x] An avatar upload replaces any previous one and **deletes the old blob**, so exactly one avatar
+      blob exists per user and none are orphaned. The delete runs *after* the row points at the new
+      blob: the reverse order can leave the row naming a blob that is already gone, while this
+      order can at worst leave one unreferenced blob
+- [x] `DELETE /user/me/avatar` clears the field and deletes the blob; a caller who has no avatar
+      gets a no-op success rather than a 404 or an error. "No-op" means **zero storage calls**, not
+      merely a 200 — nothing is deleted that was never there
 - [ ] **An avatar is public by design** (Decision #28) and is the one user-owned image that is: a
       plain unauthenticated HTTP GET against the returned URL returns the image, asserted in the
-      tagged storage tier. This is exactly the opposite of an activity's media, and the contrast is
-      deliberate — an avatar is an identity, not a record of a private day
-- [ ] The profile routes are reachable only when authenticated: **401** anonymously, and there is
-      no route by which one caller reads or writes another's profile
+      tagged storage tier. **Not proven.** The code resolves the URL through
+      `CreatePublicUrl` — unsigned, with no SAS — so the design is implemented, but nothing has
+      fetched an avatar from the real container. This is exactly the opposite of an activity's
+      media, and the contrast is deliberate — an avatar is an identity, not a record of a private
+      day
+- [x] The profile routes are reachable only when authenticated: **401** anonymously, and there is
+      no route by which one caller reads or writes another's profile. `[Authorize]` sits on
+      `UserController` rather than on each action, so a future profile route inherits it. This is
+      the only controller in the application, so `GET /health` (and the OpenAPI document, which is
+      development-only) is now the whole of what is reachable without a token — `GET /user/index`
+      included, which took no such decision but inherits the type's rule
+
+## Testing status
+
+**The tests for this feature were not written.** Every acceptance criterion above is satisfied by
+code, and the code compiles and the existing 41 tests still pass — but the coverage this feature
+asks for was deliberately skipped in this pass, so what exists is *unproven* rather than *verified*.
+Two acceptance criteria are checked above as unmet for exactly this reason, and they are the two
+that matter most:
+
+- **The privilege-escalation guard has no test.** `UpdateProfileRequest` has no `Role`, `Email` or
+  `Id` property, and that absence is the entire control. It is true of the code today and nothing
+  would fail if a later field were added to the DTO. The planned reflection test is what makes the
+  guard durable, and it does not exist.
+- **The avatar's public-read behaviour has no test**, so the design intent behind Decision #28 is
+  implemented but unfetched.
+
+This departs from [STANDARD.md](../../src/api/STANDARD.md) §10 — *a behaviour change without a test
+is not finished*. **By that rule this feature is not finished**, whatever its status line says, and
+it should not be treated as the baseline that 03 builds on until the tests below exist. Recording
+this here is the point: an untested guard that everyone believes is tested is worse than one known
+to be untested, because the second gets written.
+
+### Three things no offline test can prove, whichever pass writes them
+
+1. **The concurrent-insert failure.** Offline there is no second writer, so the losing branch of a
+   concurrent first sign-in cannot be produced at all. That branch is no longer guarded — see
+   "Closed in this pass" — so what feature 11 owes here is the opposite of the usual: confirming the
+   500 actually appears under load *before* anything is built to prevent it.
+2. **The narrowing `ALTER COLUMN` against a populated table.** `AddUserProfileColumns` narrows
+   `Role`, `DisplayName` and `Description` from `nvarchar(max)`. Offline we can assert the model's
+   lengths; whether SQL Server accepts the change on existing rows depends on the data it finds, and
+   no environment is deployed yet. A populated database that predates this migration would need
+   over-long values shortened first.
+3. **The public-read container.** The storage tier skips without `TRAILBLAZE_STORAGE_CONNECTION`,
+   so a default `dotnet test` does not exercise it, and no test asserts the container is
+   genuinely public-read.
+
+These route to feature 11 rather than being ticked here.
 
 ## Tests (TDD)
+
+None of the following are written yet — they are the plan, kept as a specification for the pass
+that writes them.
 
 - Unit (`TrailBlaze.Service.Test`) — **hot spot (identity)**: provisioning is idempotent (same
   `oid` twice → one row); a missing optional claim falls back per the documented order; an

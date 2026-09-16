@@ -53,8 +53,15 @@ only project that knows how the parts fit together.
   `Service/` because it describes the runtime environment rather than a business capability.
   `IStorageRepository` is in `Repository/` because it is the opposite case: it performs data
   operations against a store — upload, delete, move, mint a read URL — so its kind is data
-  access, and it sits beside `IDbRepository` and `IUserRepository`. The folder follows the kind
-  of the contract, not the suffix on its name.
+  access, and it sits beside `IDbRepository`. The folder follows the kind of the contract, not
+  the suffix on its name. `IUploadValidationService` is in `Service/` for the same reason in the
+  other direction: it applies the app's upload rules and touches no store.
+- **A service is depended on through its interface.** Every type in `TrailBlaze.Service` declares
+  one in `TrailBlaze.Interface/Service/` and is registered by it in the composition root —
+  `AddScoped<IUserService, UserService>()`, `AddSingleton<IUploadValidationService,
+  UploadValidationService>()`. A caller naming the concrete class would be reaching into a layer it
+  is supposed to depend on only by contract, which is the same boundary the
+  `Service` → `Repository` rule above draws.
 - **An adapter for a system outside the process belongs in `TrailBlaze.Repository`.** EF Core is
   there, and so is `AzureBlobStorageRepository`. It is the layer that already owns reaching
   something external, and a sixth project would introduce a boundary this solution has not
@@ -78,11 +85,16 @@ second style in the same solution.
   { }
   ```
 
-  > **State as of 2026-09-15:** no file in this solution actually does this — every one uses the
-  > block-scoped form, with `using` directives above the namespace. New code follows the codebase
-  > rather than this paragraph, because a rule that half the files break is worse than a rule that
-  > is wrong: the point is not having two styles. Reconciling them is a mechanical PR of its own,
-  > and until it lands, **match the file you are editing**. See §12.
+  > **Reconciled 2026-09-16.** Every file in the solution now does this. Until this PR, none
+  > did: all 36 were block-scoped, split between `using` above the namespace and `using` inside
+  > it, so the solution had two styles and this paragraph matched neither. The exception is
+  > `Program.cs`, which has no namespace at all — top-level statements must precede one, and
+  > `using` directives must precede the statements, so the file cannot take this form.
+
+- **Generated code keeps the generator's style.** `Migrations/` is emitted by `dotnet ef` with a
+  block-scoped namespace, and `TrailBlazeContextModelSnapshot` is rewritten in full on every
+  `migrations add`. Reformatting them buys nothing the next regeneration does not undo, so they
+  are left as generated. Read the rule above as applying to code this solution authors.
 
 - **Primary constructors** for dependency injection; assign to a `private readonly` field only
   when the parameter is used outside the constructor:
@@ -585,16 +597,30 @@ Listed so you are not surprised by them, and so fixing one is an obvious pull re
    `AllowedOrigins`, failing startup with a message naming the key that is missing. The two cases
    §9 previously left open — "runs for `/health` without a database" — no longer hold; see the
    corrected note there.
-10. **Namespaces are block-scoped, not file-scoped.** §1 prescribes file-scoped namespaces; every
-    file in the solution uses the block-scoped form. Feature 01's new files followed the code, so
-    the divergence is now wider, not narrower. It is mechanical and worth its own PR — see the
-    note in §1.
+10. **Namespaces are block-scoped, not file-scoped — resolved 2026-09-16.** §1 prescribed
+    file-scoped namespaces and every file used the block-scoped form, so feature 01's new files
+    followed the code and widened the divergence rather than narrowing it. The mechanical PR this
+    item asked for has since been made: all 36 authored files are file-scoped with `using`
+    directives beneath the namespace, and §1 records the two files that cannot be — `Program.cs`,
+    which has no namespace, and `Migrations/`, which `dotnet ef` regenerates. Kept here rather
+    than deleted because it is the clearest example in this list of a divergence that stayed open
+    because it was deferred as mechanical.
 11. **§11 describes a CI workflow that feature 01 deliberately did not build.** The foundation
     feature lists "no CI pipeline definition" among its non-goals, so §11 remains a description of
     the target rather than of anything wired up. Saying it is "part of the foundation work" was
     wrong; it is not claimed by any feature yet. It has grown more urgent since: the API is
     deployed to Azure Container Apps and the web app to Azure Static Web Apps by GitHub workflow,
     so a pipeline is now the only path either has to production — it is still not written.
+12. **Feature 02's profile behaviour shipped without the tests §10 requires.** The provisioning
+    hardening, the profile read/update routes, the avatar upload and removal, and the upload
+    validator are all implemented and the existing 41 tests pass — but the tests the feature
+    specifies were deliberately deferred, including the reflection test that guards `Role` from
+    being self-assignable and the storage-tier assertion that an avatar is genuinely public-read.
+    By §10 this work is **not finished**, and the checklist item "tests cover the behaviour" is
+    unmet for this branch. Recorded at
+    [02-entra-auth.md](../../docs/features/02-entra-auth.md#testing-status). Anyone picking this up
+    should write those tests before treating the profile slice as a baseline — the privileged
+    `Role` field and the "no caller" path are both silent when wrong.
 
 ---
 

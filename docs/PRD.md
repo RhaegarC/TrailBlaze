@@ -79,28 +79,29 @@ some work the ladder attributes to features 01–02 already exists:
 | Database engine | **Azure SQL Server** | **done** — `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated on SQL Server | feature 01 |
 | API hosting | ACA from a container image | **done** — `src/api/Dockerfile` builds the image, `.dockerignore` keeps local build output out of the context. No `docker-compose.yml`: neither target needs a local multi-service stack | feature 01 |
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
-| Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 31 tests | feature 01 |
+| Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 41 tests | feature 01 |
 | Blob abstraction | `IStorageRepository` with an in-memory fake, three containers | **done** — `IStorageRepository` in `TrailBlaze.Interface`, an Azure adapter in `TrailBlaze.Repository`, and the fake in `TrailBlaze.Service.Test` | feature 01 |
 | Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
-| Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | `users` carries only `DisplayName`, `Role`, `Description` | feature 02 |
-| Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | `UserController` exposes `GET me` only | feature 02 |
+| Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | **done** — all five exist, bounded to the lengths in the data model. The migration that narrows `Role`/`DisplayName`/`Description` has not been applied to any database yet | feature 02 |
+| Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | **done** — all four profile routes exist and return DTOs; the behaviour behind them is implemented but **not yet covered by tests** (see [02-entra-auth.md](features/02-entra-auth.md#testing-status)) | feature 02 |
 | Frontend integration | the Figma export wired to the API (feature 10) | the export is committed but is **entirely mock data** — no API call, no MSAL, the role hard-coded to `user` and upload controls inert. It is design intent, not a working client | feature 10 |
 
-**One divergence needs a decision, not a fix.** The data model below gives `users` a surrogate
-`Id` plus a separate unique `EntraObjectId`. The code instead uses the Entra object id **as** the
-primary key (`User.Id = entraObjectId`) and has no `EntraObjectId` column. Both are defensible:
-the code's version is simpler and the `oid` is immutable in Entra, while this document's version
-keeps the key opaque and leaves room for a user row that exists before its owner ever signs in.
-Pick one and make the other side match it — until then, read the data model below as a proposal
-rather than a description. This is the one row here that a doc edit cannot close.
+**The key shape is settled: `users.Id` is the Entra object id.** This document originally proposed
+a surrogate `Id` plus a separate unique `EntraObjectId`, while the code used the object id **as**
+the primary key. That divergence is closed in the code's favour (2026-09-16), and the data model
+below now describes the code rather than proposing an alternative. The `oid` is immutable in Entra
+and unique within a tenant, so it needs no second column and no separate unique index to be one
+row per person. What the surrogate shape would have bought is room for a `users` row that exists
+before its owner ever signs in — and there is no invitation, import, or admin-created row in this
+product, so that room has nothing to hold. Adding one later is the moment to reopen this.
 
-That decision now has a security consequence it did not have before. Under the code's shape the
-`users` primary key **is** the Entra object id, so any response carrying a user id hands the
-recipient a durable Entra identifier. Decision #30 therefore forbids the anonymous payload from
-carrying one: anonymous responses name the creator by display name only, and the id travels only
-on authenticated responses. If the surrogate-key shape wins, this stops being load-bearing — but
-it should stay in place either way, because the anonymity of the payload should not depend on
-which shape the primary key happens to take.
+That shape has a security consequence worth stating where the keys are. The `users` primary key
+**is** the Entra object id, so any response carrying a user id hands the recipient a durable Entra
+identifier. Decision #30 therefore forbids the anonymous payload from carrying one: anonymous
+responses name the creator by display name only, and the id travels only on authenticated
+responses. That rule is not a consequence of this key shape to be relaxed if the shape ever
+changes — the anonymity of a payload should not depend on which shape the primary key happens to
+take.
 
 ## Frontend build
 
@@ -205,8 +206,7 @@ erDiagram
 
 | Table | Column | Type | Notes |
 |---|---|---|---|
-| `users` | `Id` | string (GUID) | PK, app-assigned |
-| | `EntraObjectId` | nvarchar(64) | unique — the Entra `oid` claim |
+| `users` | `Id` | string | PK; **the Entra `oid` claim** — see "Current state vs. target" |
 | | `Email` | nvarchar(320) | from the token |
 | | `DisplayName` | nvarchar(200) | from the token, then edited on the profile screen |
 | | `Role` | nvarchar(16) | `User` \| `Admin` |
