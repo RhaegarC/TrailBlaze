@@ -24,7 +24,7 @@ already existed and part did not. Both gating items are now closed:
 | EF Core registered through `AddRepositoryPersistence`; the connection string read from configuration | Provider swapped to `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated |
 | `GET /health` and the OpenAPI document (development only) | `src/api/Dockerfile` plus `.dockerignore` — the image ACA deploys |
 | `EntityBase`, `AuditSaveChangesInterceptor` and the soft-delete query filter | `IStorageRepository` with the three containers, plus the in-memory fake |
-| Entra bearer validation and caller auto-provisioning — that is feature 02's subject; see [02-entra-auth.md](../02-entra-auth.md) | `BlobConnection` configuration key, and startup validation for the required settings |
+| Entra bearer validation and caller auto-provisioning — that is feature 02's subject; see [02-entra-auth.md](02-entra-auth.md) | `BlobConnection` configuration key, and startup validation for the required settings |
 
 Two items gated every other feature: **the test harness** and **the provider swap**. Until the
 harness ran a real assertion, no later feature had a RED step to begin from; until the provider
@@ -93,7 +93,7 @@ that every later feature begins from a failing test rather than from project set
       "the right container" at unit level
 - [x] Configuration binds an Azure Blob connection string alongside the existing Entra `TenantId`
       and `Audience`; note that **no client secret is needed** — validating inbound tokens uses
-      only the public signing keys the authority serves (see [02-entra-auth.md](../02-entra-auth.md))
+      only the public signing keys the authority serves (see [02-entra-auth.md](02-entra-auth.md))
 - [x] A missing required setting fails startup with a message naming the setting, rather than
       booting half-configured. `AllowCORS` already does this for `AllowedOrigins`; `DbConnection`
       is currently accepted empty, which must not survive this feature
@@ -141,7 +141,7 @@ would migrate the *wrong database* and report success.
 - No roles, no activity or media tables, and no route beyond `/health` and `/user/me` — those
   arrive in 02 onward. Entra bearer validation and caller auto-provisioning already exist in the
   scaffold, so 02's remaining work is narrower than its own file implies; see
-  [02-entra-auth.md](../02-entra-auth.md).
+  [02-entra-auth.md](02-entra-auth.md).
 - Azure Blob and Entra ID are **real cloud resources in every environment**, development and tests
   included (PRD Decision #5). The in-memory fake is a unit-test seam, not a way to run the app
   without Azure.

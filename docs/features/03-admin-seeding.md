@@ -23,11 +23,11 @@ edit.
 
 ## Dependencies
 
-- [02-entra-auth](02-entra-auth.md) (`users` table and provisioning, caller identity abstraction).
+- [02-entra-auth](archive/02-entra-auth.md) (`users` table and provisioning, caller identity abstraction).
   **The `users` key shape is settled** — `users.Id` *is* the Entra object id, and there is no
   `EntraObjectId` column — so seeding a row means choosing the `oid` it will answer to, and the
   seeded admin is reached by whoever signs in with that object id. Note that 02's profile tests
-  were deferred ([02-entra-auth.md](02-entra-auth.md#testing-status)); the schema 03 builds on is
+  were deferred ([02-entra-auth.md](archive/02-entra-auth.md#testing-status)); the schema 03 builds on is
   migrated but its behaviour is not yet proven by tests.
 
 ## Acceptance criteria
