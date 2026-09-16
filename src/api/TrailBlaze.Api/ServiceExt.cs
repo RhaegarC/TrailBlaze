@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using TrailBlaze.Interface.Infrastructure;
+using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
 using TrailBlaze.Repository;
@@ -25,8 +26,11 @@ namespace TrailBlaze.Api
             // Register persistence (DbContext + repositories)
             services.AddRepositoryPersistence(dbConnection);
 
-            // Register storage
-            services.AddBlobStorage(blobConnection);
+            // Register storage. A singleton, deliberately: the underlying client is thread-safe
+            // and holds a connection pool, so building one per request would throw that away and
+            // add a client construction to every media call.
+            services.AddSingleton<IStorageRepository>(
+                _ => new AzureBlobStorageRepository(blobConnection));
 
             // Register service
             services.AddScoped<IUserService, UserService>();
