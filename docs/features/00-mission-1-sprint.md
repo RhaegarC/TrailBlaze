@@ -43,7 +43,7 @@ The repository was initialised from a generic layered .NET scaffold, which lande
 02 early. Read the `Status` column above with that in mind:
 
 - **01 — implemented and archived (merged to `develop` in PR #3).** Both gating items are closed: the three `*.Test`
-  projects reference the layer each exercises and `dotnet test` discovers 31 tests (30 passing, the
+  projects reference the layer each exercises and `dotnet test` discovers 41 tests (40 passing, the
   tagged storage-integration one skipping without credentials), and the provider is now
   **SQL Server** with the migrations and snapshot regenerated. `IStorageRepository` with its
   in-memory fake, a `Dockerfile` building the image ACA deploys, and startup validation of the
@@ -51,12 +51,18 @@ The repository was initialised from a generic layered .NET scaffold, which lande
   to Azure Container Apps and the web app to Azure Static Web Apps by GitHub workflow, so neither
   consumes a local multi-service stack. Still absent: **no CI pipeline**, which 01 does not claim
   and which is now the only path either component has to production.
-- **02 — in progress.** Entra bearer validation, the caller abstraction, and auto-provisioning
-  behind `GET /user/me` are implemented. Remaining: the key-shape decision in Open items,
-  concurrency safety on first-sight provisioning, claim truncation, and the email question. The
-  profile slice (Decision #28) is **not** implemented — the `users` table has no
-  `AvatarBlobPath`, `PreferredTheme` or `PreferredLanguage` column, and `Description` is stored but
-  never read or written by any route.
+- **02 — implemented, but its tests are deferred, so it is not finished.** All the work is in
+  place: the key shape is settled as `users.Id = oid` (the PRD's surrogate proposal was rejected
+  and the PRD now matches the code), provisioning converges under a duplicate-key race, token
+  claims are shortened to their column lengths, the email claim is captured, and the profile slice
+  (Decision #28) is implemented — four profile routes returning DTOs, the five new `users` columns
+  behind a migration, a shared upload validator, and avatar storage in the public container.
+  **What is missing is proof.** The tests the feature specifies were deliberately not written in
+  this pass, including the reflection test that guards `Role` from being self-assignable and the
+  storage-tier assertion that an avatar is genuinely public-read. [STANDARD.md](../../src/api/STANDARD.md)
+  §10 makes a behaviour change without a test unfinished, so **02 is unfinished and 03 should not
+  be treated as safe to build on until those tests exist** —
+  [02-entra-auth.md](02-entra-auth.md#testing-status) records the gap criterion by criterion.
 - **03–11 — not started.**
 - **The frontend export is a mock, and this matters for reading the rows above.** `src/web/` renders
   from hard-coded `MOCK_ACTIVITIES` / `MOCK_MEDIA`, holds `authRole` in `useState`, and issues no
@@ -74,7 +80,7 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 | # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
 |---|---|---|---|---|
 | 01 | [foundation](archive/01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations applied by the pipeline; `Dockerfile` for the ACA image; `IStorageRepository` abstraction with a fake; config for Azure Blob | archived |
-| 02 | [entra-auth](02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | in progress |
+| 02 | [entra-auth](02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | implemented — tests deferred |
 | 03 | [admin-seeding](03-admin-seeding.md) | 02 | `Role` stored on `users`; exactly one admin seeded from configuration at startup; role readable by the authorization path | not started |
 | 04 | [activity-crud](04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. **`Type` is stored here, enforced in 05/09** | not started |
 | 05 | [public-activity-list](05-public-activity-list.md) | 04 | The read surface — paged, date descending, `pageSize` clamped. **Visibility-scoped**: anonymous sees `Public` only; a signed-in caller adds `Shared` and their own `Private`; an unreadable entry is a 404 | not started |

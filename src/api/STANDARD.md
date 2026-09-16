@@ -595,6 +595,16 @@ Listed so you are not surprised by them, and so fixing one is an obvious pull re
     wrong; it is not claimed by any feature yet. It has grown more urgent since: the API is
     deployed to Azure Container Apps and the web app to Azure Static Web Apps by GitHub workflow,
     so a pipeline is now the only path either has to production — it is still not written.
+12. **Feature 02's profile behaviour shipped without the tests §10 requires.** The provisioning
+    hardening, the profile read/update routes, the avatar upload and removal, and the upload
+    validator are all implemented and the existing 41 tests pass — but the tests the feature
+    specifies were deliberately deferred, including the reflection test that guards `Role` from
+    being self-assignable and the storage-tier assertion that an avatar is genuinely public-read.
+    By §10 this work is **not finished**, and the checklist item "tests cover the behaviour" is
+    unmet for this branch. Recorded at
+    [02-entra-auth.md](../../docs/features/02-entra-auth.md#testing-status). Anyone picking this up
+    should write those tests before treating the profile slice as a baseline — the privileged
+    `Role` field and the "no caller" path are both silent when wrong.
 
 ---
 
