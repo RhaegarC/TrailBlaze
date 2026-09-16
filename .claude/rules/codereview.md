@@ -57,10 +57,34 @@ layer performs it. Treat that folder as a closed set: a new contract belongs in 
 contract is genuinely about the ambient environment, and "it does some I/O" or "it is a technical
 concern" is not that. `IStorageRepository` was in it on exactly that reasoning and did not belong.
 
+**Registration belongs in the composition root, not in an extension method of the layer being
+registered.** A bare `services.AddSingleton<...>()` parked in `TrailBlaze.Repository` hides the
+composition from the only place that composes anything, so register it inline in
+`TrailBlaze.Api/ServiceExt.cs` and delete the helper — `StorageExtensions.AddBlobStorage` was one
+such helper and is gone.
+
+The test is **whether the composition root calls it**, not whether a helper exists somewhere.
+`PersistenceExtensions.AddRepositoryPersistence` is the one documented exception and stays in
+`TrailBlaze.Repository`, for four reasons that do not apply to a registration one-liner: it does
+configuration work rather than registration (`UseSqlServer`, resolving the interceptor through the
+service provider, setting the `DbContext` lifetime); it needs the `internal`
+`AuditSaveChangesInterceptor`, which only `TrailBlaze.Repository.Test` is granted access to;
+that test tier calls it to build the no-database harness
+([STANDARD.md](../../src/api/STANDARD.md) §10), and `TrailBlaze.Repository.Test` does not reference
+`TrailBlaze.Api`, so a move would leave the harness unable to reach it and force the context to be
+hand-built — the exact thing that pattern exists to prevent; and inlining it would put the EF
+provider into the Api layer.
+
+So the rule is: inline a bare registration; leave a helper that configures the layer, is called
+from more than one tier, or depends on a type its caller cannot see.
+
 **How to apply:** for every type the change adds or renames, name the layer it belongs to, check
 the file and type name carry that layer's suffix, and check the contract sits in the matching
-`TrailBlaze.Interface` folder. Do this while reading the diff, not afterwards — the wrong suffix
-is cheap to fix in review and expensive once later features have copied it. `AzureBlobStorageService`
-sat in `TrailBlaze.Repository` with its interface in `TrailBlaze.Interface/Infrastructure/`; both
-were found by reading the operations the type exposes (upload, delete, move, mint a read URL) and
-seeing that every one of them was data access.
+`TrailBlaze.Interface` folder. Then ask where it is registered, and whether that place is the
+composition root or a helper the layer kept for itself — before assuming the helper is the same
+kind of thing as the last one removed. Do this while reading the diff, not afterwards: the wrong
+suffix is cheap to fix in review and expensive once later features have copied it.
+`AzureBlobStorageService` sat in `TrailBlaze.Repository` with its interface in
+`TrailBlaze.Interface/Infrastructure/`; both were found by reading the operations the type exposes
+(upload, delete, move, mint a read URL) and seeing that every one of them was data access. Its
+`AddBlobStorage` neighbour looked like the same case as `AddRepositoryPersistence` and was not.
