@@ -25,6 +25,9 @@ namespace TrailBlaze.Repository.Test.TestSupport
         public string? ActorName { get; set; }
 
         /// <inheritdoc/>
+        public string? Email { get; set; }
+
+        /// <inheritdoc/>
         public string? IpAddress { get; set; }
 
         /// <inheritdoc/>

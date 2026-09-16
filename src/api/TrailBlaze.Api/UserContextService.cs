@@ -22,6 +22,16 @@ namespace TrailBlaze.Api
         private const string ObjectIdSchemaClaim =
             "http://schemas.microsoft.com/identity/claims/objectidentifier";
 
+        /// <summary>Entra ID's short claim for the email address.</summary>
+        private const string EmailClaim = "email";
+
+        /// <summary>
+        /// The WS-Federation claim older tokens carry for the same value, read for the same
+        /// reason as the object id's long form.
+        /// </summary>
+        private const string EmailSchemaClaim =
+            "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
+
         private const string CorrelationIdHeader = "X-Correlation-Id";
 
         private HttpContext? Context => httpContextAccessor.HttpContext;
@@ -38,6 +48,19 @@ namespace TrailBlaze.Api
         public string? ActorName =>
             AuthenticatedUser?.FindFirst("name")?.Value
             ?? AuthenticatedUser?.FindFirst("preferred_username")?.Value;
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Deliberately no fallback to <c>preferred_username</c>, even though it often holds the
+        /// same address: it is already <see cref="ActorName"/>'s fallback, and it is not required
+        /// to be an address at all — a tenant can configure it to a phone number or an opaque
+        /// identifier. Copying it into an email column would store a value the column's name
+        /// asserts to be something it may not be. A null here is honest; the wrong address is
+        /// not.
+        /// </remarks>
+        public string? Email =>
+            AuthenticatedUser?.FindFirst(EmailClaim)?.Value
+            ?? AuthenticatedUser?.FindFirst(EmailSchemaClaim)?.Value;
 
         /// <inheritdoc/>
         public string? IpAddress => Context?.Connection.RemoteIpAddress?.ToString();
