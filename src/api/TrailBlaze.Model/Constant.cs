@@ -51,5 +51,29 @@
             /// <summary>Private. Activity media, reached only through a short-lived SAS URL.</summary>
             public const string Media = "media";
         }
+
+        /// <summary>
+        /// The two presentation preferences a profile carries, and the values each accepts. A
+        /// closed set rather than free text: both columns are non-nullable with a default, so a
+        /// value outside this list is not a variation to tolerate but a caller to reject.
+        /// </summary>
+        /// <remarks>
+        /// Neither carries authorization meaning. The role is its own column and the token is
+        /// never consulted for privilege, so a caller who sets a theme has changed a preference
+        /// and nothing else.
+        /// </remarks>
+        public static class UserPreference
+        {
+            public const string DarkTheme = "Dark";
+            public const string LightTheme = "Light";
+            public const string English = "en";
+            public const string Chinese = "zh";
+
+            /// <summary>The values <c>User.PreferredTheme</c> accepts.</summary>
+            public static readonly string[] Themes = [DarkTheme, LightTheme];
+
+            /// <summary>The values <c>User.PreferredLanguage</c> accepts.</summary>
+            public static readonly string[] Languages = [English, Chinese];
+        }
     }
 }
