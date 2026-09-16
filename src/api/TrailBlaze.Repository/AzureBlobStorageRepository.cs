@@ -3,12 +3,12 @@
     using Azure.Storage.Blobs;
     using Azure.Storage.Blobs.Models;
     using Azure.Storage.Sas;
-    using TrailBlaze.Interface.Infrastructure;
+    using TrailBlaze.Interface.Repository;
 
     /// <summary>
-    /// The real <see cref="IStorageService"/>, over Azure Blob Storage. This is the only type in
+    /// The real <see cref="IStorageRepository"/>, over Azure Blob Storage. This is the only type in
     /// the solution that names an Azure storage type: every caller reaches storage through
-    /// <see cref="IStorageService"/> and the container constants, so the vendor is confined to
+    /// <see cref="IStorageRepository"/> and the container constants, so the vendor is confined to
     /// this file.
     /// </summary>
     /// <remarks>
@@ -22,13 +22,13 @@
     /// is a real constraint of this implementation, not an oversight.
     /// </para>
     /// </remarks>
-    public sealed class AzureBlobStorageService : IStorageService
+    public sealed class AzureBlobStorageRepository : IStorageRepository
     {
         private readonly BlobServiceClient _serviceClient;
 
         /// <param name="connectionString">Resolved by the composition root from configuration and
         /// passed down, so this layer stays configuration-agnostic (STANDARD §6).</param>
-        public AzureBlobStorageService(string connectionString)
+        public AzureBlobStorageRepository(string connectionString)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
             _serviceClient = new BlobServiceClient(connectionString);

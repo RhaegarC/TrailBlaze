@@ -1,11 +1,11 @@
 ﻿namespace TrailBlaze.Repository
 {
     using Microsoft.Extensions.DependencyInjection;
-    using TrailBlaze.Interface.Infrastructure;
+    using TrailBlaze.Interface.Repository;
 
     public static class StorageExtensions
     {
-        /// <summary>Registers the Azure Blob implementation of <see cref="IStorageService"/>.</summary>
+        /// <summary>Registers the Azure Blob implementation of <see cref="IStorageRepository"/>.</summary>
         /// <remarks>
         /// A singleton, deliberately: the underlying client is thread-safe and holds a
         /// connection pool, so building one per request would throw that away and add a client
@@ -18,7 +18,7 @@
             this IServiceCollection services,
             string connectionString)
         {
-            services.AddSingleton<IStorageService>(_ => new AzureBlobStorageService(connectionString));
+            services.AddSingleton<IStorageRepository>(_ => new AzureBlobStorageRepository(connectionString));
 
             return services;
         }

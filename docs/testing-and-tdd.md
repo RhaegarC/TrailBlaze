@@ -19,7 +19,7 @@ layer it exercises and `dotnet test` discovers tests in all three: 31 runnable, 
 tagged `Category=StorageIntegration` skips without credentials, leaving 30 passing by default.
 
 `TestSupport/AuditHarness.cs` and `TestSupport/FakeUserContext.cs` live in
-`TrailBlaze.Repository.Test`; `TestSupport/FakeStorageService.cs` lives in
+`TrailBlaze.Repository.Test`; `TestSupport/FakeStorageRepository.cs` lives in
 `TrailBlaze.Service.Test`. The API tier boots the real pipeline through `WebApplicationFactory`
 and supplies unreachable connection strings, so it needs no database either — nothing has to be
 removed from the service collection to achieve that, because migrations are applied by the
@@ -32,7 +32,7 @@ for it.
 |---|---|---|---|
 | Backend unit | Services, **ownership/permission evaluation**, upload validation, SAS policy construction, pagination clamping | xUnit | Always — fast, offline |
 | Backend integration | EF Core **with no database at all** — persistence, repositories, queries, cascade deletes | xUnit + EF Core | Always — offline |
-| Storage integration | The real Azure Blob implementation of `IStorageService` — upload, delete, SAS round-trip | xUnit + Azure SDK | **Explicitly tagged**; requires credentials |
+| Storage integration | The real Azure Blob implementation of `IStorageRepository` — upload, delete, SAS round-trip | xUnit + Azure SDK | **Explicitly tagged**; requires credentials |
 
 ## Testing without a database
 
@@ -56,7 +56,7 @@ a stand-in, so anything that depends on the real token pipeline still needs the 
 Azure Blob is a **real cloud resource in every environment** (PRD Decision #5), which would
 normally make the test suite slow, credentialed, and non-hermetic. The design contains this:
 
-- All blob access goes through **`IStorageService`**.
+- All blob access goes through **`IStorageRepository`**.
 - **Unit tests inject an in-memory fake.** They never touch the network. This is where the
   RED → GREEN loop lives, and it stays instant and offline.
 - A small **storage integration tier** exercises the real account and is tagged so it can be

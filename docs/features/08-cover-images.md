@@ -29,12 +29,12 @@ visitors see a picture beside it without any of the activity's private media bec
 
 - [04-activity-crud](04-activity-crud.md) (the activity that owns `CoverImageBlobPath`)
 - [05-public-activity-list](05-public-activity-list.md) (the list and detail responses that surface the cover URL to anonymous callers)
-- [01-foundation](01-foundation.md) (`IStorageService` abstraction + the in-memory fake; the tagged storage tier)
+- [01-foundation](01-foundation.md) (`IStorageRepository` abstraction + the in-memory fake; the tagged storage tier)
 
 ## Acceptance criteria
 
 - [ ] `POST /api/activities/{id}/cover` accepts a multipart image upload and returns the resulting cover URL
-- [ ] The bytes go to the container the activity's **current `Type`** requires (Decision #29): the **public `covers`** container for a `Public` activity, the **private `media`** container for a `Shared` or `Private` one. The `IStorageService` fake records the container asked for, so the wrong container is a test failure — asserted **per type**, not once
+- [ ] The bytes go to the container the activity's **current `Type`** requires (Decision #29): the **public `covers`** container for a `Public` activity, the **private `media`** container for a `Shared` or `Private` one. The `IStorageRepository` fake records the container asked for, so the wrong container is a test failure — asserted **per type**, not once
 - [ ] The response carries a **plain public URL** for a `Public` activity and a **short-lived SAS URL** for a `Shared`/`Private` one, so the client receives one field either way and never has to know which container holds the bytes
 - [ ] There is **no** way to nominate an existing private media item as the cover: the request model carries no media id, no blob path, and no reference to a `media` row, and a test asserts that shape
 - [ ] The content type must be an image on the allowlist (`image/jpeg`, `image/png`, `image/webp`, `image/gif`); a video or unknown type returns 400 with **no blob written**
@@ -53,7 +53,7 @@ visitors see a picture beside it without any of the activity's private media bec
 
 ## Tests (TDD)
 
-- Unit (`TrailBlaze.Service.Test`) **hot spot (container routing — test-first):** the destination container as a table over `Type` — `covers` for `Public`, `media` for `Shared` and `Private` — with the fake `IStorageService` recording which container it was asked for, so any mix-up is a failure. Asserted per type rather than once, because a single happy-path check passes even when the routing is inverted for the other two.
+- Unit (`TrailBlaze.Service.Test`) **hot spot (container routing — test-first):** the destination container as a table over `Type` — `covers` for `Public`, `media` for `Shared` and `Private` — with the fake `IStorageRepository` recording which container it was asked for, so any mix-up is a failure. Asserted per type rather than once, because a single happy-path check passes even when the routing is inverted for the other two.
 - Unit (`TrailBlaze.Service.Test`) **hot spot (the move — test-first):** `Public` → `Private` copies into the private container **and deletes the public blob**, asserted as two calls on the fake with the delete asserted explicitly; the reverse direction likewise. Also that `Shared` ↔ `Private` moves nothing, and that a `Type` change with no cover does no storage work at all.
 - Unit (`TrailBlaze.Service.Test`): the image allowlist accept/reject table including a video type; the size boundary at exactly 10 MB and 10 MB + 1 byte; replacement deletes the previous cover blob and stores the new path; a rejected upload leaves the existing cover and its blob intact.
 - Unit (`TrailBlaze.Service.Test`): the URL shape per type — a plain public URL for `Public`, a SAS for `Shared`/`Private` — asserted against the fake so the branching is covered without a network call.

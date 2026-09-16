@@ -9,7 +9,7 @@ The one-time scaffold every later feature starts from: the layered `TrailBlaze.*
 sibling xUnit project per layer, EF Core against **Azure SQL Database** with migrations the
 deployment pipeline applies, a `Dockerfile` that builds the API into the image Azure Container
 Apps deploys, the
-`IStorageService` abstraction with an in-memory fake, OpenAPI, a `/health` endpoint, and
+`IStorageRepository` abstraction with an in-memory fake, OpenAPI, a `/health` endpoint, and
 configuration binding for the Azure Blob connection string. It ships no product behaviour — its
 exit condition is a green `dotnet test` **that actually runs tests**.
 
@@ -23,7 +23,7 @@ already existed and part did not. Both gating items are now closed:
 | The five layers under `src/api/`, flat, with `TrailBlaze.slnx` at that level | The three `*.Test` projects now reference the layer each exercises; `dotnet test` discovers 31 tests |
 | EF Core registered through `AddRepositoryPersistence`; the connection string read from configuration | Provider swapped to `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated |
 | `GET /health` and the OpenAPI document (development only) | `src/api/Dockerfile` plus `.dockerignore` — the image ACA deploys |
-| `EntityBase`, `AuditSaveChangesInterceptor` and the soft-delete query filter | `IStorageService` with the three containers, plus the in-memory fake |
+| `EntityBase`, `AuditSaveChangesInterceptor` and the soft-delete query filter | `IStorageRepository` with the three containers, plus the in-memory fake |
 | Entra bearer validation and caller auto-provisioning — that is feature 02's subject; see [02-entra-auth.md](02-entra-auth.md) | `BlobConnection` configuration key, and startup validation for the required settings |
 
 Two items gated every other feature: **the test harness** and **the provider swap**. Until the
@@ -76,7 +76,9 @@ that every later feature begins from a failing test rather than from project set
       Web Apps by its own GitHub workflow and never joins a local stack, so there is no
       multi-service stack for compose to orchestrate. Local development is `dotnet run` with
       user-secrets, and the database is a real Azure SQL Database in every environment
-- [x] `IStorageService` is declared in `TrailBlaze.Interface` with the operations the media
+- [x] `IStorageRepository` is declared in `TrailBlaze.Interface/Repository/` — beside
+      `IDbRepository` and `IUserRepository`, because its kind is data access (the folder follows the
+      kind of the contract, not the suffix on its name) — with the operations the media
       features need (upload, delete, mint a read URL, and **move** — copy to a second container plus
       delete the source, which feature 08's visibility change requires); no call site names a
       concrete Azure type
@@ -85,7 +87,7 @@ that every later feature begins from a failing test rather than from project set
       parameter of the operation, because the destination is a *decision* — feature 08 routes a
       cover by the activity's `Type`, and feature 02 writes avatars to their own container. The
       container name is the whole of the public/private answer, so the set closes here
-- [x] An in-memory `IStorageService` fake exists in test support and is what
+- [x] An in-memory `IStorageRepository` fake exists in test support and is what
       `TrailBlaze.Service.Test` injects; unit tests make no network call (PRD Decisions #5/#6). The
       fake **records the container** each call asked for, which is what lets 02, 06 and 08 assert
       "the right container" at unit level
@@ -98,8 +100,8 @@ that every later feature begins from a failing test rather than from project set
 
 ## Tests (TDD)
 
-- Unit (`TrailBlaze.Service.Test`): fake `IStorageService` round-trip — upload returns a path, the
-  fake holds the bytes, delete removes them; a service depending on `IStorageService` resolves
+- Unit (`TrailBlaze.Service.Test`): fake `IStorageRepository` round-trip — upload returns a path, the
+  fake holds the bytes, delete removes them; a service depending on `IStorageRepository` resolves
   against the fake and completes with the network unavailable. The load-bearing assertion here is
   that unit tests bind the fake, not Azure (PRD Decision #6).
 - Integration (`TrailBlaze.Repository.Test`): the context is constructed with no database at all —
@@ -111,7 +113,7 @@ that every later feature begins from a failing test rather than from project set
   `GET /health` as 200 with no `Authorization` header present, and startup fails loudly when a
   required setting is absent.
 - Storage integration (tagged `Category=StorageIntegration`) — **requires credentials, excluded
-  when absent**: the real Azure implementation of `IStorageService` reaches the account and
+  when absent**: the real Azure implementation of `IStorageRepository` reaches the account and
   round-trips an upload. Only this tier proves the blob implementation; the fake proves callers.
 
 ## Notes / non-goals

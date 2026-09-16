@@ -1,6 +1,6 @@
 namespace TrailBlaze.Service.Test.TestSupport
 {
-    using TrailBlaze.Interface.Infrastructure;
+    using TrailBlaze.Interface.Repository;
 
     /// <summary>Which operation a recorded call was.</summary>
     public enum StorageOperation
@@ -30,7 +30,7 @@ namespace TrailBlaze.Service.Test.TestSupport
         TimeSpan? Lifetime = null);
 
     /// <summary>
-    /// An in-memory <see cref="IStorageService"/> for unit tests, so the RED → GREEN loop stays
+    /// An in-memory <see cref="IStorageRepository"/> for unit tests, so the RED → GREEN loop stays
     /// instant and offline (PRD Decision #6).
     /// </summary>
     /// <remarks>
@@ -47,7 +47,7 @@ namespace TrailBlaze.Service.Test.TestSupport
     /// tagged storage integration tier — a test that never leaves this fake cannot speak to them.
     /// </para>
     /// </remarks>
-    public sealed class FakeStorageService : IStorageService
+    public sealed class FakeStorageRepository : IStorageRepository
     {
         private readonly Dictionary<(string Container, string Path), byte[]> _objects = [];
         private readonly List<StorageCall> _calls = [];

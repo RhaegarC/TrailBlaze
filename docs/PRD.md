@@ -80,7 +80,7 @@ some work the ladder attributes to features 01–02 already exists:
 | API hosting | ACA from a container image | **done** — `src/api/Dockerfile` builds the image, `.dockerignore` keeps local build output out of the context. No `docker-compose.yml`: neither target needs a local multi-service stack | feature 01 |
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
 | Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 31 tests | feature 01 |
-| Blob abstraction | `IStorageService` with an in-memory fake, three containers | **done** — `IStorageService` in `TrailBlaze.Interface`, an Azure adapter in `TrailBlaze.Repository`, and the fake in `TrailBlaze.Service.Test` | feature 01 |
+| Blob abstraction | `IStorageRepository` with an in-memory fake, three containers | **done** — `IStorageRepository` in `TrailBlaze.Interface`, an Azure adapter in `TrailBlaze.Repository`, and the fake in `TrailBlaze.Service.Test` | feature 01 |
 | Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
 | Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | `users` carries only `DisplayName`, `Role`, `Description` | feature 02 |
 | Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | `UserController` exposes `GET me` only | feature 02 |
@@ -121,7 +121,7 @@ Every requirement decision from the grilling session, in order:
 | 3 | Is it one journal or many | **One shared journal** — everyone posts to one feed; visibility governs who may read an entry, ownership governs who may edit it. Private entries are an escape hatch within the shared feed, not private journals (see #26) |
 | 4 | Media storage | **Azure Blob Storage** (not local disk, not the database) |
 | 5 | Blob endpoint per environment | **Real Azure Storage account for everything**, dev and tests included |
-| 6 | Tests vs. the live Azure dependency | **Fake `IStorageService` in unit tests**; a separate integration tier exercises real Azure |
+| 6 | Tests vs. the live Azure dependency | **Fake `IStorageRepository` in unit tests**; a separate integration tier exercises real Azure |
 | 7 | How media reaches the browser | **Short-lived SAS URLs** issued by an authenticated endpoint; container stays private |
 | 8 | Authentication | **Entra ID** |
 | 9 | Roles | **User + Admin**; admin can edit/delete any activity |
@@ -371,7 +371,7 @@ short-lived SAS minted on the same terms as any other private blob (Decisions #1
 sees one field either way and never has to know which container holds the bytes. This makes the
 list endpoint a **second SAS producer**, alongside `GET /api/media/{id}/url`, which is a deliberate
 widening recorded in Decision #29's consequences: it means the list mints up to one SAS per
-non-`Public` row per page. Both producers go through the same service method, so the TTL cap and
+non-`Public` row per page. Both producers go through the same repository method, so the TTL cap and
 the read-only scope stay single-sourced (feature 07).
 
 The `/user/...` routes are stated here in lowercase for readability; the implemented controller

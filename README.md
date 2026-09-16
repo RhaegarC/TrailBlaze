@@ -93,5 +93,5 @@ pointed somewhere else would migrate the wrong database and report success.
    media mechanics while every signed-in user can still write anything; 09 imposes the ownership
    and admin rules. See the sequencing note in the sprint file.
 3. **Azure Blob is real in every environment**, tests included. Unit tests inject an in-memory
-   `IStorageService` fake so the RED → GREEN loop stays offline; a tagged
+   `IStorageRepository` fake so the RED → GREEN loop stays offline; a tagged
    `Category=StorageIntegration` tier exercises the real account and needs credentials.

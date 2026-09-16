@@ -51,9 +51,12 @@ only project that knows how the parts fit together.
 - Place a contract in `TrailBlaze.Interface` under the folder matching its kind — `Repository/`,
   `Service/`, `Infrastructure/`. `IUserContextService` is in `Infrastructure/` and not
   `Service/` because it describes the runtime environment rather than a business capability.
-  `IStorageService` is there for the same reason.
+  `IStorageRepository` is in `Repository/` because it is the opposite case: it performs data
+  operations against a store — upload, delete, move, mint a read URL — so its kind is data
+  access, and it sits beside `IDbRepository` and `IUserRepository`. The folder follows the kind
+  of the contract, not the suffix on its name.
 - **An adapter for a system outside the process belongs in `TrailBlaze.Repository`.** EF Core is
-  there, and so is `AzureBlobStorageService`. It is the layer that already owns reaching
+  there, and so is `AzureBlobStorageRepository`. It is the layer that already owns reaching
   something external, and a sixth project would introduce a boundary this solution has not
   needed. The contract stays in `TrailBlaze.Interface`, so the vendor type never leaves this
   layer.
@@ -469,7 +472,7 @@ each one catches a specific regression that had already happened once.
 
 > **State as of 2026-09-15:** the harness exists. The three test projects reference the layer they
 > exercise and `dotnet test` discovers tests in each. `TestSupport/AuditHarness.cs` and
-> `FakeUserContext` are in `TrailBlaze.Repository.Test`; `TestSupport/FakeStorageService.cs` is in
+> `FakeUserContext` are in `TrailBlaze.Repository.Test`; `TestSupport/FakeStorageRepository.cs` is in
 > `TrailBlaze.Service.Test`. The pattern below is what they implement.
 
 ### The pattern: no database required

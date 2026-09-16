@@ -34,7 +34,7 @@ unless they all pass. It is last in the ladder by design.
 
 Each is performed against a running stack: the API running from its container image, configured
 against the real Azure SQL Database, the real Azure Blob account and real Entra ID, with the
-`src/web/` app served alongside. No fake `IStorageService`, no emulator, no `InMemory` provider.
+`src/web/` app served alongside. No fake `IStorageRepository`, no emulator, no `InMemory` provider.
 
 - [ ] The API runs against the real Azure SQL Database; `GET /health` returns 200, and the schema
       matches the PRD data model — the migration set having been applied by the pipeline, not by

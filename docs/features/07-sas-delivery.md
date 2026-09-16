@@ -20,12 +20,12 @@ image or video that is otherwise private.
 
 - [06-media-upload](06-media-upload.md) (the `media` rows and the private blobs being addressed)
 - [02-entra-auth](02-entra-auth.md) (caller identity — the endpoint is not anonymous)
-- [01-foundation](01-foundation.md) (`IStorageService` abstraction + the fake; the tagged storage tier)
+- [01-foundation](01-foundation.md) (`IStorageRepository` abstraction + the fake; the tagged storage tier)
 
 ## Acceptance criteria
 
 - [ ] `GET /api/media/{id}/url` requires a valid Entra bearer token; a request with no token returns **401** (PRD permission table)
-- [ ] The 401 is produced by the authorization layer **before any `IStorageService` call** — asserted with a fake that records or throws on invocation, so "rejected first" is a tested property, not a code-reading claim
+- [ ] The 401 is produced by the authorization layer **before any `IStorageRepository` call** — asserted with a fake that records or throws on invocation, so "rejected first" is a tested property, not a code-reading claim
 - [ ] A request with a valid token but an unknown media id returns 404, and that check also precedes any minting
 - [ ] The response carries the SAS URL and its expiry as a UTC instant, so the client can refresh before it lapses
 - [ ] The TTL comes from configuration with a hard maximum: a configured value above the cap is **clamped, not honoured**
@@ -39,16 +39,16 @@ image or video that is otherwise private.
       "covers" — a `covers` blob is world-readable by design (Decision #13, amended by #29) and a
       SAS there would add a credential to content that needs none
 - [ ] Minting for a cover in the private container is the **same** operation as for a media blob,
-      reached through the same service method — feature 05 and feature 08 must not construct SAS
+      reached through the same repository method — feature 05 and feature 08 must not construct SAS
       URLs by a second path, or the TTL cap and the read-only scope stop being single-sourced
 - [ ] A URL for a blob whose bytes are no longer present is the client's problem, not a minting failure — the failure mode is documented and does not 500
-- [ ] Minting goes through `IStorageService`, so unit tests run against the in-memory fake and the Azure-specific construction is covered by the tagged tier
+- [ ] Minting goes through `IStorageRepository`, so unit tests run against the in-memory fake and the Azure-specific construction is covered by the tagged tier
 - [ ] The generated URL is not written to logs (it is a credential)
 
 ## Tests (TDD)
 
 - Unit (`TrailBlaze.Service.Test`) **hot spot (security — must be test-first, RED first):**
-  - an unauthenticated caller is rejected and the fake `IStorageService` records **zero** interactions — the "before any blob operation" claim is the assertion;
+  - an unauthenticated caller is rejected and the fake `IStorageRepository` records **zero** interactions — the "before any blob operation" claim is the assertion;
   - a successful mint produces a URL whose expiry is in the future and within the cap;
   - the requested permission set is read-only and the target is a single blob in the private container;
   - an over-long configured TTL is clamped to the maximum.

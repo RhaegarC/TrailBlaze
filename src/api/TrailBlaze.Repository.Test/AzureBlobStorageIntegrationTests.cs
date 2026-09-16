@@ -4,7 +4,7 @@ namespace TrailBlaze.Repository.Test
     using TrailBlaze.Model;
 
     /// <summary>
-    /// The only tier that can speak about the real <c>IStorageService</c> implementation:
+    /// The only tier that can speak about the real <c>IStorageRepository</c> implementation:
     /// upload, read back through a minted URL, and delete, against a live Azure Storage account.
     /// </summary>
     /// <remarks>
@@ -39,7 +39,7 @@ namespace TrailBlaze.Repository.Test
                 !string.IsNullOrWhiteSpace(ConnectionString),
                 $"Set {ConnectionStringVariable} to run the storage integration tier.");
 
-            var storage = new AzureBlobStorageService(ConnectionString!);
+            var storage = new AzureBlobStorageRepository(ConnectionString!);
             string container = Constant.StorageContainer.Media;
             await EnsureContainerExistsAsync(ConnectionString!, container);
 

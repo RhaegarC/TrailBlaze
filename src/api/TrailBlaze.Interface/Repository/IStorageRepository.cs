@@ -1,4 +1,4 @@
-﻿namespace TrailBlaze.Interface.Infrastructure
+﻿namespace TrailBlaze.Interface.Repository
 {
     /// <summary>
     /// Content-addressed storage for the media the app serves: cover images, avatars, and
@@ -7,7 +7,7 @@
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>The container is a parameter of every operation</b>, not a property of the service.
+    /// <b>The container is a parameter of every operation</b>, not a property of the repository.
     /// The destination is a decision the caller makes — feature 08 routes a cover by the
     /// activity's <c>Type</c>, and avatars go to their own container — and the container name is
     /// the whole of the public/private answer. The closed set lives in
@@ -20,7 +20,7 @@
     /// integration tier. Azure is a real dependency in every environment, including tests.
     /// </para>
     /// </remarks>
-    public interface IStorageService
+    public interface IStorageRepository
     {
         /// <summary>
         /// Stores <paramref name="content"/> and returns the path it can be read back by.

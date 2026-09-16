@@ -1,7 +1,7 @@
 namespace TrailBlaze.Service.Test
 {
     using Microsoft.Extensions.DependencyInjection;
-    using TrailBlaze.Interface.Infrastructure;
+    using TrailBlaze.Interface.Repository;
     using TrailBlaze.Model;
     using TrailBlaze.Service.Test.TestSupport;
 
@@ -16,7 +16,7 @@ namespace TrailBlaze.Service.Test
         /// the wiring is exercised now rather than being assumed until the first real consumer
         /// arrives.
         /// </summary>
-        private sealed class AvatarWriter(IStorageService storage)
+        private sealed class AvatarWriter(IStorageRepository storage)
         {
             public Task<string> WriteAsync(string name, byte[] bytes, CancellationToken ct = default) =>
                 storage.UploadAsync(
@@ -36,9 +36,9 @@ namespace TrailBlaze.Service.Test
         [Fact]
         public async Task A_service_depending_on_storage_resolves_against_the_fake_and_needs_no_network()
         {
-            var fake = new FakeStorageService();
+            var fake = new FakeStorageRepository();
             var services = new ServiceCollection();
-            services.AddSingleton<IStorageService>(fake);
+            services.AddSingleton<IStorageRepository>(fake);
             services.AddSingleton<AvatarWriter>();
 
             await using ServiceProvider provider = services.BuildServiceProvider();
@@ -56,7 +56,7 @@ namespace TrailBlaze.Service.Test
         [Fact]
         public async Task An_upload_returns_a_path_and_the_fake_holds_the_bytes()
         {
-            var fake = new FakeStorageService();
+            var fake = new FakeStorageRepository();
 
             string path = await fake.UploadAsync(
                 Constant.StorageContainer.Covers,
@@ -71,7 +71,7 @@ namespace TrailBlaze.Service.Test
         [Fact]
         public async Task A_delete_removes_the_bytes()
         {
-            var fake = new FakeStorageService();
+            var fake = new FakeStorageRepository();
             await fake.UploadAsync(
                 Constant.StorageContainer.Media,
                 "hike/clip.mp4",
@@ -88,7 +88,7 @@ namespace TrailBlaze.Service.Test
         [Fact]
         public async Task A_delete_of_something_absent_is_not_an_error()
         {
-            var fake = new FakeStorageService();
+            var fake = new FakeStorageRepository();
 
             await fake.DeleteAsync(Constant.StorageContainer.Media, "never-existed.mp4");
 
@@ -103,7 +103,7 @@ namespace TrailBlaze.Service.Test
         [Fact]
         public async Task A_move_records_both_containers_and_relocates_the_bytes()
         {
-            var fake = new FakeStorageService();
+            var fake = new FakeStorageRepository();
             await fake.UploadAsync(
                 Constant.StorageContainer.Media,
                 "hike/clip.mp4",
@@ -128,7 +128,7 @@ namespace TrailBlaze.Service.Test
         [Fact]
         public async Task A_move_is_found_under_both_the_source_and_the_destination_container()
         {
-            var fake = new FakeStorageService();
+            var fake = new FakeStorageRepository();
 
             await fake.MoveAsync(
                 Constant.StorageContainer.Media, "hike/clip.mp4",
@@ -149,7 +149,7 @@ namespace TrailBlaze.Service.Test
         [InlineData(-1)]
         public async Task A_read_url_needs_a_positive_lifetime(int seconds)
         {
-            var fake = new FakeStorageService();
+            var fake = new FakeStorageRepository();
 
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
                 () => fake.CreateReadUrlAsync(
@@ -161,7 +161,7 @@ namespace TrailBlaze.Service.Test
         [Fact]
         public async Task A_read_url_records_the_container_and_lifetime()
         {
-            var fake = new FakeStorageService();
+            var fake = new FakeStorageRepository();
 
             await fake.CreateReadUrlAsync(
                 Constant.StorageContainer.Media,
