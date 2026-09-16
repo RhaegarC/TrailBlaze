@@ -111,7 +111,7 @@ against the real Azure SQL Database, the real Azure Blob account and real Entra 
       result of this pass — this is the exit condition for Mission 1
 - [ ] **Concurrent first sign-in**: two simultaneous authenticated requests carrying the same,
       previously unseen `oid` are served without a 500. Provisioning is an unguarded
-      read-then-insert ([02-entra-auth](02-entra-auth.md#closed-in-this-pass-2026-09-16)), so the
+      read-then-insert ([02-entra-auth](archive/02-entra-auth.md#closed-in-this-pass-2026-09-16)), so the
       losing request fails its insert unless a retry is added — this is the criterion that decides
       whether one is needed, and it needs a real database and more than one replica, which is why
       it can only be settled here

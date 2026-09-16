@@ -79,11 +79,11 @@ some work the ladder attributes to features 01–02 already exists:
 | Database engine | **Azure SQL Server** | **done** — `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated on SQL Server | feature 01 |
 | API hosting | ACA from a container image | **done** — `src/api/Dockerfile` builds the image, `.dockerignore` keeps local build output out of the context. No `docker-compose.yml`: neither target needs a local multi-service stack | feature 01 |
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
-| Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 41 tests | feature 01 |
+| Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 42 tests, 41 passing | feature 01 |
 | Blob abstraction | `IStorageRepository` with an in-memory fake, three containers | **done** — `IStorageRepository` in `TrailBlaze.Interface`, an Azure adapter in `TrailBlaze.Repository`, and the fake in `TrailBlaze.Service.Test` | feature 01 |
 | Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
 | Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | **done** — all five exist, bounded to the lengths in the data model. The migration that narrows `Role`/`DisplayName`/`Description` has not been applied to any database yet | feature 02 |
-| Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | **done** — all four profile routes exist and return DTOs; the behaviour behind them is implemented but **not yet covered by tests** (see [02-entra-auth.md](features/02-entra-auth.md#testing-status)) | feature 02 |
+| Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | **done** — all four profile routes exist and return DTOs; the behaviour behind them is implemented but **not yet covered by tests** (see [02-entra-auth.md](features/archive/02-entra-auth.md#testing-status)) | feature 02 |
 | Frontend integration | the Figma export wired to the API (feature 10) | the export is committed but is **entirely mock data** — no API call, no MSAL, the role hard-coded to `user` and upload controls inert. It is design intent, not a working client | feature 10 |
 
 **The key shape is settled: `users.Id` is the Entra object id.** This document originally proposed

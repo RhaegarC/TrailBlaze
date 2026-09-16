@@ -23,7 +23,7 @@ where I went and when.
 
 ## Dependencies
 
-- [02-entra-auth](02-entra-auth.md) (caller identity, for `CreatedByUserId` attribution)
+- [02-entra-auth](archive/02-entra-auth.md) (caller identity, for `CreatedByUserId` attribution)
 
 ## Acceptance criteria
 

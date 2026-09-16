@@ -618,7 +618,7 @@ Listed so you are not surprised by them, and so fixing one is an obvious pull re
     being self-assignable and the storage-tier assertion that an avatar is genuinely public-read.
     By §10 this work is **not finished**, and the checklist item "tests cover the behaviour" is
     unmet for this branch. Recorded at
-    [02-entra-auth.md](../../docs/features/02-entra-auth.md#testing-status). Anyone picking this up
+    [02-entra-auth.md](../../docs/features/archive/02-entra-auth.md#testing-status). Anyone picking this up
     should write those tests before treating the profile slice as a baseline — the privileged
     `Role` field and the "no caller" path are both silent when wrong.
 

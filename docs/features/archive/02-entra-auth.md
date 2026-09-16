@@ -1,10 +1,11 @@
 # 02 — Entra Auth
 
-Status: **Implemented — tests deferred** — every acceptance criterion below is met by code, but the
-test coverage described in [Testing status](#testing-status) was deliberately not written in this
-pass, so the feature is **not** finished by [STANDARD.md](../../src/api/STANDARD.md) §10 ·
-[00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #8/#28 + "Authentication & authorization" and the `users` data-model row.
+Status: **Archived** — merged to `develop` in PR #4 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Archiving records the end of this document's lifecycle, **not a finished feature**: every acceptance
+criterion below is met by code, but the tests described in [Testing status](#testing-status) were
+deliberately not written in the pass that built it, so by
+[STANDARD.md](../../../src/api/STANDARD.md) §10 this is still unfinished.
+Source: [PRD](../../PRD.md) — Decisions #8/#28 + "Authentication & authorization" and the `users` data-model row.
 
 ## Summary
 
@@ -64,7 +65,7 @@ attributed for what I write without registering, inviting, or waiting for an adm
 
 ## Dependencies
 
-- [01-foundation](archive/01-foundation.md) (layered solution, Azure SQL Server via EF Core, configuration
+- [01-foundation](01-foundation.md) (layered solution, Azure SQL Server via EF Core, configuration
   binding for the Entra tenant id and audience, `/health`)
 
 ## Acceptance criteria
@@ -97,7 +98,7 @@ attributed for what I write without registering, inviting, or waiting for an adm
       primary key guarantees that — but the losing request fails its insert rather than converging,
       and surfaces as a 500. `UserRepository.AddIfAbsentAsync` met this until it was removed in
       review; see "Closed in this pass" for what replaced it and what the fix would be. Tracked
-      under [11-e2e-verification](11-e2e-verification.md)
+      under [11-e2e-verification](../11-e2e-verification.md)
 - [x] Values are truncated to the column lengths before insert so an over-long claim cannot fail
       the insert (`DisplayName` 200, `Email` 320, `Role` 16)
 - [x] An email claim is captured from `email`, with the WS-Federation `emailaddress` fallback
@@ -166,7 +167,7 @@ that matter most:
 - **The avatar's public-read behaviour has no test**, so the design intent behind Decision #28 is
   implemented but unfetched.
 
-This departs from [STANDARD.md](../../src/api/STANDARD.md) §10 — *a behaviour change without a test
+This departs from [STANDARD.md](../../../src/api/STANDARD.md) §10 — *a behaviour change without a test
 is not finished*. **By that rule this feature is not finished**, whatever its status line says, and
 it should not be treated as the baseline that 03 builds on until the tests below exist. Recording
 this here is the point: an untested guard that everyone believes is tested is worse than one known
@@ -201,7 +202,7 @@ that writes them.
 - Integration (`TrailBlaze.Repository.Test`): the uniqueness constraint behind the object id holds
   — a second insert for the same id is rejected — and get-by-object-id returns the provisioned row
   while returning nothing for an unknown one. Runs with no database, per the no-database pattern
-  ([testing-and-tdd.md](../testing-and-tdd.md)).
+  ([testing-and-tdd.md](../../testing-and-tdd.md)).
 - Unit (`TrailBlaze.Service.Test`) — **hot spot (privilege escalation):** the profile update model
   carries no `Role` field, and a `PUT /user/me` body attempting to set `Role`, `Email` or `Id`
   leaves the stored `Role` unchanged. Asserted as a RED-first test because the failure it guards
@@ -213,7 +214,7 @@ that writes them.
   no-op success rather than an error.
 - Integration (`TrailBlaze.Repository.Test`): the new `users` columns round-trip through the
   `DbContext` with no database — `PreferredTheme`/`PreferredLanguage` default rather than persist
-  as null, and `Description` normalises whitespace to null ([testing-and-tdd.md](../testing-and-tdd.md)).
+  as null, and `Description` normalises whitespace to null ([testing-and-tdd.md](../../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Api.Test`) — **hot spot (security)**: with a test authentication scheme
   standing in for Entra, no token → 401; a valid token → 200 and exactly one `users` row; the same
   token a second time → still one row. The 401 is asserted to occur with no `users` insert, which
