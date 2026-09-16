@@ -6,27 +6,25 @@ namespace TrailBlaze.Repository
 {
     public static class PersistenceExtensions
     {
-        /// <summary>Registers <see cref="TrailBlazeContext"/> (UseNpgsql only when a connection
-        /// string is present — preserves no-DB startup for /health and Swagger), the audit
-        /// interceptor that stamps audit-log entries on save, and the repositories as scoped
-        /// services by interface.</summary>
+        /// <summary>Registers <see cref="TrailBlazeContext"/> against SQL Server (the engine
+        /// Azure SQL Server speaks) when a connection string is present, the audit interceptor
+        /// that stamps audit-log entries on save, and the repositories as scoped services by
+        /// interface.</summary>
         /// <param name="services">The service collection to register into.</param>
-        /// <param name="connectionString">Resolved by the composition root from configuration;
-        /// when null or blank the context is registered without a provider, so the host still
-        /// starts for /health and Swagger.</param>
+        /// <param name="connectionString">Resolved by the composition root from configuration,
+        /// which refuses to start without <c>DbConnection</c> (STANDARD §6) — so this is never
+        /// blank by the time it arrives. Tests pass an unreachable but well-formed string, which
+        /// is enough because no test opens a connection (STANDARD §10).</param>
         public static IServiceCollection AddRepositoryPersistence(
             this IServiceCollection services,
-            string? connectionString)
+            string connectionString)
         {
             services.AddScoped<AuditSaveChangesInterceptor>();
 
             services.AddDbContext<TrailBlazeContext>((serviceProvider, options) =>
             {
-                if (!string.IsNullOrWhiteSpace(connectionString))
-                {
-                    options.UseNpgsql(connectionString)
-                        .AddInterceptors(serviceProvider.GetRequiredService<AuditSaveChangesInterceptor>());
-                }
+                options.UseSqlServer(connectionString)
+                    .AddInterceptors(serviceProvider.GetRequiredService<AuditSaveChangesInterceptor>());
             });
 
             services.AddScoped<IUserRepository, UserRepository>();

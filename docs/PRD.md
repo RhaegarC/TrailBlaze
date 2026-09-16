@@ -50,9 +50,11 @@ specified in [src/api/STANDARD.md](../src/api/STANDARD.md) §3 and §10, and enf
 `EntityBase` plus the save interceptor. This PRD states *what* the data holds; STANDARD.md states
 *how* it is shaped.
 
-Deployment (stage 1): **local Docker**. `docker-compose` runs the backend and an Azure SQL
-Server container; the web app joins at frontend integration. Azure Blob and Entra ID are **real
-cloud resources** in every environment, including development.
+Deployment: the API runs on **Azure Container Apps** from the image `src/api/Dockerfile` builds;
+the web app runs on **Azure Static Web Apps**, deployed by GitHub workflow. There is no
+`docker-compose.yml` — neither target consumes a multi-service local stack, so there is none.
+Azure SQL Database, Azure Blob and Entra ID are **real cloud resources** in every environment,
+including development and tests — nothing is emulated locally.
 
 ### Current state vs. target
 
@@ -74,10 +76,11 @@ some work the ladder attributes to features 01–02 already exists:
 
 | Area | Target (this document) | Code today | Closes in |
 |---|---|---|---|
-| Database engine | **Azure SQL Server** | PostgreSQL via `Npgsql`; migrations exist but are Npgsql-shaped | feature 01 |
-| Local orchestration | `docker-compose` (API + Azure SQL Server) | no compose file, and no CI workflow either | feature 01 |
-| Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | the three `*.Test` projects exist but are empty and reference no project under test | feature 01 |
-| Blob abstraction | `IStorageService` with an in-memory fake, three containers | does not exist | feature 01 |
+| Database engine | **Azure SQL Server** | **done** — `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated on SQL Server | feature 01 |
+| API hosting | ACA from a container image | **done** — `src/api/Dockerfile` builds the image, `.dockerignore` keeps local build output out of the context. No `docker-compose.yml`: neither target needs a local multi-service stack | feature 01 |
+| Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
+| Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 31 tests | feature 01 |
+| Blob abstraction | `IStorageRepository` with an in-memory fake, three containers | **done** — `IStorageRepository` in `TrailBlaze.Interface`, an Azure adapter in `TrailBlaze.Repository`, and the fake in `TrailBlaze.Service.Test` | feature 01 |
 | Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
 | Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | `users` carries only `DisplayName`, `Role`, `Description` | feature 02 |
 | Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | `UserController` exposes `GET me` only | feature 02 |
@@ -118,7 +121,7 @@ Every requirement decision from the grilling session, in order:
 | 3 | Is it one journal or many | **One shared journal** — everyone posts to one feed; visibility governs who may read an entry, ownership governs who may edit it. Private entries are an escape hatch within the shared feed, not private journals (see #26) |
 | 4 | Media storage | **Azure Blob Storage** (not local disk, not the database) |
 | 5 | Blob endpoint per environment | **Real Azure Storage account for everything**, dev and tests included |
-| 6 | Tests vs. the live Azure dependency | **Fake `IStorageService` in unit tests**; a separate integration tier exercises real Azure |
+| 6 | Tests vs. the live Azure dependency | **Fake `IStorageRepository` in unit tests**; a separate integration tier exercises real Azure |
 | 7 | How media reaches the browser | **Short-lived SAS URLs** issued by an authenticated endpoint; container stays private |
 | 8 | Authentication | **Entra ID** |
 | 9 | Roles | **User + Admin**; admin can edit/delete any activity |
@@ -128,7 +131,7 @@ Every requirement decision from the grilling session, in order:
 | 13 | Cover image audience | **Follows the activity's visibility** — public for a Public activity, SAS-only for Shared and Private ones (see #29). Supersedes the earlier "always public", which held only while every activity was public |
 | 14 | Where the cover comes from | **Its own upload** into a container chosen by the activity's visibility; never picked from, derived from, or re-pointed at private media (see #29) |
 | 15 | Video handling | **Store as-is**; validate content type and size; no transcoding, no thumbnails |
-| 16 | Backend & data stack | **.NET 10 layered + Azure SQL Server** (swapped from the inherited PostgreSQL; the provider swap is pending — see Current state vs. target) |
+| 16 | Backend & data stack | **.NET 10 layered + Azure SQL Server** (swapped from the inherited PostgreSQL in feature 01; the swap is done) |
 | 17 | Where the UI comes from | **Figma Make export**, as in the source project; frontend not test-first |
 | 18 | Feature ladder | **Written fresh for TrailBlaze** — the inherited ladder described a dynamic-form platform |
 | 19 | Repository | **New GitHub repository** (`github.com/RhaegarC`), `develop` integration / `master` production |
@@ -368,7 +371,7 @@ short-lived SAS minted on the same terms as any other private blob (Decisions #1
 sees one field either way and never has to know which container holds the bytes. This makes the
 list endpoint a **second SAS producer**, alongside `GET /api/media/{id}/url`, which is a deliberate
 widening recorded in Decision #29's consequences: it means the list mints up to one SAS per
-non-`Public` row per page. Both producers go through the same service method, so the TTL cap and
+non-`Public` row per page. Both producers go through the same repository method, so the TTL cap and
 the read-only scope stay single-sourced (feature 07).
 
 The `/user/...` routes are stated here in lowercase for readability; the implemented controller
@@ -376,11 +379,22 @@ uses the ASP.NET `[controller]` token, which yields `/User/me`. That casing dive
 known inconsistency tracked in [src/api/STANDARD.md](../src/api/STANDARD.md) §12, not a second
 route.
 
-## Deployment (stage 1)
+## Deployment
 
-**Local Docker**, no reverse proxy — `docker-compose` brings up the API and an Azure SQL Server
-container. Azure Blob and Entra ID are real cloud resources reached by configuration, so secrets
-live in user secrets locally and in CI variables for the pipeline. EF migrations run at startup.
+**No reverse proxy, no local multi-service stack.** The API is an image on **Azure Container
+Apps**, built from `src/api/Dockerfile`; the web app is a static build on **Azure Static Web
+Apps**, deployed by GitHub workflow. There is no `docker-compose.yml` — neither target consumes
+one, and local development is `dotnet run` against the real cloud resources.
+
+Everything the API talks to is a real cloud resource reached by configuration: **Azure SQL
+Database** (which has no container image to run locally), **Azure Blob** and **Entra ID**. Secrets
+therefore live in user-secrets locally and in pipeline variables for deployment.
+
+**Migrations are applied by the deployment pipeline, not at API startup.** Azure Container Apps runs
+several replicas, and replicas migrating concurrently on startup race each other over the same DDL.
+The workflow runs `dotnet ef database update` before the new revision takes traffic, so exactly one
+writer touches the schema. Until those workflows exist, applying a migration is a manual step —
+`DbConnection="…" dotnet ef database update` — because nothing else performs it.
 
 ## Out of scope / deferred
 

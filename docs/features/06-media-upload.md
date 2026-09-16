@@ -27,7 +27,7 @@ the day actually looked like — including on an activity someone else logged, w
 
 - [04-activity-crud](04-activity-crud.md) (an activity exists to attach media to, and its FK gives the cascade delete)
 - [05-public-activity-list](05-public-activity-list.md) (the visibility predicate this feature consults to decide whether the caller may contribute)
-- [01-foundation](01-foundation.md) (`IStorageService` abstraction + the in-memory fake used by unit tests)
+- [01-foundation](01-foundation.md) (`IStorageRepository` abstraction + the in-memory fake used by unit tests)
 - [02-entra-auth](02-entra-auth.md) (the caller is authenticated; the endpoints are not anonymous)
 
 ## Acceptance criteria
@@ -49,7 +49,7 @@ the day actually looked like — including on an activity someone else logged, w
 - [ ] The count check and the insert are not racy — a concurrent pair of uploads at the boundary cannot leave 21 rows
 - [ ] On success a `media` row persists with `ActivityId`, **`UploadedByUserId`**, `Kind`, `BlobPath`, `ContentType`, `SizeBytes`, `OriginalFileName`, and `CreatedOn`; `SizeBytes` equals the bytes actually stored and `OriginalFileName` is kept for display only
 - [ ] `UploadedByUserId` is taken from the **caller**, never from the request body — a client cannot attribute an upload to someone else, exactly as `CreatedByUserId` works on the activity
-- [ ] The blob is written to the **private** container through `IStorageService`; this endpoint never writes to the public container
+- [ ] The blob is written to the **private** container through `IStorageRepository`; this endpoint never writes to the public container
 - [ ] A rejection (bad type, oversize, count exceeded) leaves no blob and no row — no partial state
 - [ ] Blob bytes are stored unmodified, including video — the stored length and content hash match the uploaded file (Decision #15)
 - [ ] `GET /api/activities/{id}/media` returns metadata only (`Id`, `Kind`, `ContentType`, `SizeBytes`, `OriginalFileName`, `CreatedOn`, **`UploadedByUserId`**, and the **uploader's display name**) for a caller who can read the activity, and exposes no value that is directly fetchable without a SAS
@@ -62,9 +62,9 @@ the day actually looked like — including on an activity someone else logged, w
 
 ## Tests (TDD)
 
-- Unit (`TrailBlaze.Service.Test`) **hot spot (upload validation — must be test-first):** the content-type allowlist as an accept/reject table including a video type sent as an image and vice versa; the size boundary at exactly the cap and cap+1 for both kinds; the count cap at 19/20/21. The fake `IStorageService` records every call, so a rejection test asserts the fake was **never invoked** for a write — proving no orphan blob.
+- Unit (`TrailBlaze.Service.Test`) **hot spot (upload validation — must be test-first):** the content-type allowlist as an accept/reject table including a video type sent as an image and vice versa; the size boundary at exactly the cap and cap+1 for both kinds; the count cap at 19/20/21. The fake `IStorageRepository` records every call, so a rejection test asserts the fake was **never invoked** for a write — proving no orphan blob.
 - Unit (`TrailBlaze.Service.Test`): `Kind` derivation; the private container name being the one requested (a covers write here is a test failure). Also that `UploadedByUserId` comes from the caller and that a payload-supplied uploader is ignored.
-- Unit (`TrailBlaze.Service.Test`) — **hot spot (access control):** the contribution gate as a table over {anonymous, non-owner who can read, non-owner who cannot read, owner, admin} × {`Public`, `Shared`, `Private`}, asserting 401 / 201 / 404 / 201 / 201 respectively, and that a refused upload invokes **no** `IStorageService` write. Deletion is a second table over the same principals against {uploader, activity owner, other signed-in user, admin, anonymous}.
+- Unit (`TrailBlaze.Service.Test`) — **hot spot (access control):** the contribution gate as a table over {anonymous, non-owner who can read, non-owner who cannot read, owner, admin} × {`Public`, `Shared`, `Private`}, asserting 401 / 201 / 404 / 201 / 201 respectively, and that a refused upload invokes **no** `IStorageRepository` write. Deletion is a second table over the same principals against {uploader, activity owner, other signed-in user, admin, anonymous}.
 - Integration (`TrailBlaze.Repository.Test`): the media listing's join to `users` resolves the uploader's display name, and the `UploadedByUserId` FK is asserted from the EF model — inspected with `ToQueryString()`, with no database ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Repository.Test`): `media` rows persist with no database behind them — the save interception assigns the string key and stamps `CreatedOn` before a connection opens, the per-activity count query is inspected with `ToQueryString()`, the activity → media cascade is asserted from the EF model, and `SizeBytes`/`ContentType`/`OriginalFileName` are carried through the mapping ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Api.Test`): a multipart request end-to-end against the fake storage, 201 plus a metadata body; an oversize and a bad-type request returning 400; the 21st upload returning 409.

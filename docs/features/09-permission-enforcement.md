@@ -76,7 +76,7 @@ feature: their endpoints ship permissive and are brought under the matrix here.
       `DELETE /user/me/avatar` are **self-only** where `User` is concerned — a caller may never
       read or write another user's profile, and an attempt gets **403**
 - [ ] A rejected mutation performs **no blob operation**: on a 403, a 401, or the visibility
-      **404**, the request reaches neither `IStorageService` nor the repository — the check runs
+      **404**, the request reaches neither `IStorageRepository` nor the repository — the check runs
       before any side effect
 - [ ] Requests to gated routes carry no `Authorization` header → **401**, not 403; a valid token
       belonging to the wrong principal → **403**
@@ -118,7 +118,7 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   authenticated-but-not-permitted, 404 absent **or invisible**, 200/201/204 allowed. Assert the
   **403/404 pair on the same route** — `PUT` on another user's `Public` activity is 403, on their
   `Private` activity is 404 — and that a denied request makes **no** call into the fake
-  `IStorageService`.
+  `IStorageRepository`.
 - Integration (`TrailBlaze.Repository.Test`) — the `CreatedByUserId` lookup the ownership decision
   reads returns the right owner, including after an update, and the visibility lookup reads the
   activity's current `Type`. This tier needs no database: the lookups are exercised through the

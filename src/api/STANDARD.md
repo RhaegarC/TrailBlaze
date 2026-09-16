@@ -51,6 +51,15 @@ only project that knows how the parts fit together.
 - Place a contract in `TrailBlaze.Interface` under the folder matching its kind — `Repository/`,
   `Service/`, `Infrastructure/`. `IUserContextService` is in `Infrastructure/` and not
   `Service/` because it describes the runtime environment rather than a business capability.
+  `IStorageRepository` is in `Repository/` because it is the opposite case: it performs data
+  operations against a store — upload, delete, move, mint a read URL — so its kind is data
+  access, and it sits beside `IDbRepository` and `IUserRepository`. The folder follows the kind
+  of the contract, not the suffix on its name.
+- **An adapter for a system outside the process belongs in `TrailBlaze.Repository`.** EF Core is
+  there, and so is `AzureBlobStorageRepository`. It is the layer that already owns reaching
+  something external, and a sixth project would introduce a boundary this solution has not
+  needed. The contract stays in `TrailBlaze.Interface`, so the vendor type never leaves this
+  layer.
 
 ### File and code conventions
 
@@ -68,6 +77,12 @@ second style in the same solution.
   public sealed class OrderService : IOrderService
   { }
   ```
+
+  > **State as of 2026-09-15:** no file in this solution actually does this — every one uses the
+  > block-scoped form, with `using` directives above the namespace. New code follows the codebase
+  > rather than this paragraph, because a rule that half the files break is worse than a rule that
+  > is wrong: the point is not having two styles. Reconciling them is a mechanical PR of its own,
+  > and until it lands, **match the file you are editing**. See §12.
 
 - **Primary constructors** for dependency injection; assign to a `private readonly` field only
   when the parameter is used outside the constructor:
@@ -317,15 +332,28 @@ then user-secrets, then environment variables, then command line. Later sources 
 - **Keys are flat and unprefixed**, so the same name works as an environment variable:
   `DbConnection=...` on the command line, `DbConnection` in `appsettings.json`.
 - **Every key is declared in `appsettings.json` with an empty default.** An empty value means
-  "not configured", which is a defined state, not an error. Add the key name to
-  `Constant.ConfigKey` so it is never spelled as a literal in two places.
+  "not configured", which is a defined state. Add the key name to `Constant.ConfigKey` so it is
+  never spelled as a literal in two places.
+- **A key the application cannot run without is enforced at the composition root**, by
+  `RequireSetting`, which fails startup with a message naming the key. Whether "not configured"
+  is a tolerable state is a per-key decision, and this is where it is made: `TenantId` and
+  `Audience` are allowed to be absent, while `DbConnection`, `BlobConnection` and
+  `AllowedOrigins` are not. Declaring a key empty and requiring it are not in conflict — the
+  file states the key exists, and the root states what a missing value means.
 - **Credentials never go in the repository.** Not in `appsettings.json`, and never in
   `Properties/launchSettings.json` — that file is version-controlled, so anything in it is
   handed to every clone. Use user-secrets:
 
   ```bash
-  dotnet user-secrets set "DbConnection" "Server=localhost;Database=TrailBlaze;User Id=<user>;Password=<password>;TrustServerCertificate=True"
+  dotnet user-secrets set "DbConnection" "Server=tcp:<server>.database.windows.net,1433;Initial Catalog=TrailBlaze;User ID=<user>;Password=<password>;Encrypt=True;TrustServerCertificate=False"
   ```
+
+- **Every environment uses the real Azure SQL Database, not a local stand-in.** Azure SQL Database
+  is managed and has no image to run, so there is no `docker-compose.yml` and no database
+  container: local development is `dotnet run` against the real server, and the API is deployed to
+  Azure Container Apps from `src/api/Dockerfile`. Two things follow — the SQL Server's firewall
+  must allow the caller, and the connection string carries `Encrypt=True` without
+  `TrustServerCertificate=True`, since there is no self-signed certificate to accept.
 
 - **A missing required setting fails at startup with a message naming the setting** — not with
   a null reference when the first request arrives, and not with an exception naming a local
@@ -398,7 +426,10 @@ Do not put stack traces or exception messages in a response body outside Develop
 
 ### Health and API description
 
-- `GET /health` — liveness. It must stay reachable with no database configured.
+- `GET /health` — liveness. It answers without a token, and it does not touch the database, so
+  it stays correct while the database is unreachable. It is **not** a way to run the app with no
+  database configured: `DbConnection` is required and the host refuses to start without it
+  (§6). Liveness answers "is this process up", not "can it serve every route".
 - `/openapi/v1.json` — the OpenAPI document, Development only.
 
 ### CORS
@@ -439,11 +470,10 @@ Tests live in the per-layer `*.Test` projects (section 1) and run with `dotnet t
 change without a test is not finished**; where tests exist in this solution, they exist because
 each one catches a specific regression that had already happened once.
 
-> **State as of 2026-09-15:** the three test projects exist but are empty and reference no project
-> under test — `dotnet test` builds green and discovers zero tests. The pattern below describes the
-> standard to write them against; standing the harness up is acceptance-criteria work in
-> feature 01, and `TestSupport/AuditHarness.cs` and `FakeUserContext` must be (re)created as part
-> of it.
+> **State as of 2026-09-15:** the harness exists. The three test projects reference the layer they
+> exercise and `dotnet test` discovers tests in each. `TestSupport/AuditHarness.cs` and
+> `FakeUserContext` are in `TrailBlaze.Repository.Test`; `TestSupport/FakeStorageRepository.cs` is in
+> `TrailBlaze.Service.Test`. The pattern below is what they implement.
 
 ### The pattern: no database required
 
@@ -525,10 +555,16 @@ Listed so you are not surprised by them, and so fixing one is an obvious pull re
    `default(DateTime)` and `LastModified*` cannot be trusted.
 2. **`DeleteAsync` issues one `FindAsync` per id** and wraps the batch in no transaction, so a
    large delete is N round trips and can partially apply.
-3. **Migrations exist but are Npgsql-shaped.** `TrailBlaze.Repository/Migrations` holds an initial
-   migration and a model snapshot, both generated for PostgreSQL. Regenerating them for Azure SQL
-   Server is part of the provider swap (feature 01). The strategy question this item used to raise
-   is settled: migrations are applied at startup.
+3. **Migrations exist but are Npgsql-shaped — resolved, and now historical.** The provider swap
+   (feature 01) replaced `Npgsql` with `Microsoft.EntityFrameworkCore.SqlServer` and regenerated
+   the migration set, so `TrailBlaze.Repository/Migrations` is SQL Server-shaped, as is the
+   `nvarchar(max)` mapping on the audit snapshots. The strategy question this item used to raise
+   is settled: migrations are applied by the **deployment pipeline** with
+   `dotnet ef database update`, before the new revision takes traffic. An `IHostedService` that
+   migrated at startup was built and then removed — Azure Container Apps runs several replicas and
+   concurrent startup migrations race over the same DDL. `TrailBlazeContextFactory` therefore
+   resolves `DbConnection` from the environment and throws when it is absent, rather than
+   defaulting to a local string that would migrate the wrong database.
 4. **`UserController` diverges from section 2's route convention.** It inherits `Controller` rather
    than `ControllerBase`, routes on `[controller]` rather than `api/[controller]`, and its `index`
    action is a placeholder returning a bare string. `UserService` is no longer empty —
@@ -544,10 +580,21 @@ Listed so you are not surprised by them, and so fixing one is an obvious pull re
    upstream template this solution was generated from, and neither it nor the template lives here
    any more. The template CI job described in section 11 referred to it; this repository has no CI
    at all.
-9. **`DbConnection` is accepted empty.** Section 6 requires a missing required setting to fail
-   startup by name, and `AllowCORS` does exactly that for `AllowedOrigins` — but an empty
-   `DbConnection` boots happily and fails later, on the first request that touches the database.
-   Closing this is part of feature 01.
+9. **`DbConnection` is accepted empty — resolved, and now historical.** Feature 01 introduced
+   `RequireSetting`, and the composition root now requires `DbConnection`, `BlobConnection` and
+   `AllowedOrigins`, failing startup with a message naming the key that is missing. The two cases
+   §9 previously left open — "runs for `/health` without a database" — no longer hold; see the
+   corrected note there.
+10. **Namespaces are block-scoped, not file-scoped.** §1 prescribes file-scoped namespaces; every
+    file in the solution uses the block-scoped form. Feature 01's new files followed the code, so
+    the divergence is now wider, not narrower. It is mechanical and worth its own PR — see the
+    note in §1.
+11. **§11 describes a CI workflow that feature 01 deliberately did not build.** The foundation
+    feature lists "no CI pipeline definition" among its non-goals, so §11 remains a description of
+    the target rather than of anything wired up. Saying it is "part of the foundation work" was
+    wrong; it is not claimed by any feature yet. It has grown more urgent since: the API is
+    deployed to Azure Container Apps and the web app to Azure Static Web Apps by GitHub workflow,
+    so a pipeline is now the only path either has to production — it is still not written.
 
 ---
 

@@ -18,4 +18,14 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TrailBlaze.Api\TrailBlaze.Api.csproj" />
+    <ProjectReference Include="..\TrailBlaze.Interface\TrailBlaze.Interface.csproj" />
+    <ProjectReference Include="..\TrailBlaze.Model\TrailBlaze.Model.csproj" />
+  </ItemGroup>
+
 </Project>

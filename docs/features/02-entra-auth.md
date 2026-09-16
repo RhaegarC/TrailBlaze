@@ -109,7 +109,7 @@ source of these criteria; the avatar is the only one with a storage story.
       (`Dark`, `en`) so no client ever has to decide what an absent preference means. These are
       presentation preferences only and carry no authorization meaning
 - [ ] `POST /user/me/avatar` accepts an image on the same allowlist and size cap as a cover, writes
-      it to the **public `avatars`** container through `IStorageService`, stores the path on the
+      it to the **public `avatars`** container through `IStorageRepository`, stores the path on the
       caller's row, and returns the public URL
 - [ ] An avatar upload replaces any previous one and **deletes the old blob**, so exactly one avatar
       blob exists per user and none are orphaned

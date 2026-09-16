@@ -14,10 +14,17 @@ The API is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBla
 xUnit test project (`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`,
 `TrailBlaze.Service.Test`). New tests go in the project matching the layer they exercise.
 
-**Current state (2026-09-15).** The three test projects exist and are listed in
-`src/api/TrailBlaze.slnx`, but they are **empty and reference no project under test** — `dotnet
-test` builds green and discovers zero tests. Standing the harness up is acceptance-criteria work
-in [feature 01](features/01-foundation.md), not something already in place.
+**Current state (2026-09-15).** The harness is in place. Each `*.Test` project references the
+layer it exercises and `dotnet test` discovers tests in all three: 31 runnable, of which the one
+tagged `Category=StorageIntegration` skips without credentials, leaving 30 passing by default.
+
+`TestSupport/AuditHarness.cs` and `TestSupport/FakeUserContext.cs` live in
+`TrailBlaze.Repository.Test`; `TestSupport/FakeStorageRepository.cs` lives in
+`TrailBlaze.Service.Test`. The API tier boots the real pipeline through `WebApplicationFactory`
+and supplies unreachable connection strings, so it needs no database either — nothing has to be
+removed from the service collection to achieve that, because migrations are applied by the
+deployment pipeline rather than at startup, and the context is not resolved until a request asks
+for it.
 
 ## Test tiers
 
@@ -25,7 +32,7 @@ in [feature 01](features/01-foundation.md), not something already in place.
 |---|---|---|---|
 | Backend unit | Services, **ownership/permission evaluation**, upload validation, SAS policy construction, pagination clamping | xUnit | Always — fast, offline |
 | Backend integration | EF Core **with no database at all** — persistence, repositories, queries, cascade deletes | xUnit + EF Core | Always — offline |
-| Storage integration | The real Azure Blob implementation of `IStorageService` — upload, delete, SAS round-trip | xUnit + Azure SDK | **Explicitly tagged**; requires credentials |
+| Storage integration | The real Azure Blob implementation of `IStorageRepository` — upload, delete, SAS round-trip | xUnit + Azure SDK | **Explicitly tagged**; requires credentials |
 
 ## Testing without a database
 
@@ -49,7 +56,7 @@ a stand-in, so anything that depends on the real token pipeline still needs the 
 Azure Blob is a **real cloud resource in every environment** (PRD Decision #5), which would
 normally make the test suite slow, credentialed, and non-hermetic. The design contains this:
 
-- All blob access goes through **`IStorageService`**.
+- All blob access goes through **`IStorageRepository`**.
 - **Unit tests inject an in-memory fake.** They never touch the network. This is where the
   RED → GREEN loop lives, and it stays instant and offline.
 - A small **storage integration tier** exercises the real account and is tagged so it can be
@@ -79,4 +86,13 @@ serving private media to the wrong person.
 ## Commands
 
 - Backend (from `src/api/`): `dotnet test`
-- Storage integration tier only: `dotnet test --filter Category=StorageIntegration`
+- Storage integration tier only, with credentials in the environment:
+
+  ```bash
+  TRAILBLAZE_STORAGE_CONNECTION="<azure storage connection string>" \
+    dotnet test --filter Category=StorageIntegration
+  ```
+
+  Without `TRAILBLAZE_STORAGE_CONNECTION` the test **skips** rather than fails, so `dotnet test`
+  is green on a machine with no Azure account. A skip is reported in the run summary — it is a
+  skip, not a silent exclusion, so the tier cannot be forgotten by vanishing from the output.

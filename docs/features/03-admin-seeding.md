@@ -30,8 +30,9 @@ edit.
 - [ ] `users.Role` is constrained as the PRD specifies: non-null, defaulting to `User`, with values
       limited to `User` and `Admin` (PRD Decision #9). The property already exists on the entity as
       a nullable `string`, so this is a constraint change rather than a new column
-- [ ] A migration backfills existing rows to `User`, tightens the column, and is applied at startup
-      like every other migration
+- [ ] A migration backfills existing rows to `User` and tightens the column — applied by the
+      deployment pipeline like every other migration, not at API startup (see
+      [01-foundation.md](01-foundation.md) for why the startup path was removed)
 - [ ] Startup seeds exactly one `users` row with `Role = Admin`, taking the Entra object id and
       `DisplayName` from configuration (plus `Email` if the PRD's open column decision adds it)
 - [ ] Seeding is idempotent: N restarts against the same database leave exactly one admin row —

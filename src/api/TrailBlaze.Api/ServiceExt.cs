@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using TrailBlaze.Interface.Infrastructure;
+using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
 using TrailBlaze.Repository;
@@ -14,20 +15,73 @@ namespace TrailBlaze.Api
         /// DbContext and the repositories are registered by
         /// <see cref="PersistenceExtensions.AddRepositoryPersistence"/>, so it must run before
         /// the services that consume them.</summary>
+        /// <remarks>
+        /// Everything the application registers is registered here, so <c>Program</c> reads
+        /// configuration and calls this, and does not compose on its own. The two connection
+        /// strings arrive resolved; Entra ID and CORS read their own values from
+        /// <paramref name="configuration"/> inside their extension methods.
+        /// </remarks>
         /// <param name="services">The service collection to register into.</param>
-        /// <param name="connectionString">Resolved by the composition root from configuration.</param>
-        public static IServiceCollection RegistService(this IServiceCollection services, string? connectionString)
+        /// <param name="configuration">The host configuration, passed to the extension methods
+        /// that resolve their own settings.</param>
+        /// <param name="dbConnection">Resolved by the composition root from configuration.</param>
+        /// <param name="blobConnection">Resolved by the composition root from configuration.</param>
+        public static IServiceCollection RegistService(
+            this IServiceCollection services,
+            IConfiguration configuration,
+            string dbConnection,
+            string blobConnection)
         {
             // Register persistence (DbContext + repositories)
-            services.AddRepositoryPersistence(connectionString);
+            services.AddRepositoryPersistence(dbConnection);
+
+            // Register storage. A singleton, deliberately: the underlying client is thread-safe
+            // and holds a connection pool, so building one per request would throw that away and
+            // add a client construction to every media call.
+            services.AddSingleton<IStorageRepository>(
+                _ => new AzureBlobStorageRepository(blobConnection));
 
             // Register service
             services.AddScoped<IUserService, UserService>();
+
+            // Register the caller abstraction. Scoped, because it reads the current request's
+            // claims; nothing outside a request should resolve it.
+            services.AddScoped<IUserContextService, UserContextService>();
+
+            // Register authentication, CORS and health checks. Each resolves its own
+            // configuration, so none of them needs a value passed in.
+            services.AddEntraAuthentication(configuration);
+            services.AllowCORS(configuration);
+            services.AddHealthChecks();
 
             // Others
             services.AddHttpContextAccessor();
 
             return services;
+        }
+
+        /// <summary>Reads a configuration value that the application cannot run without, and
+        /// names it in the failure.</summary>
+        /// <remarks>
+        /// The alternative — accepting an empty value and discovering it on the first request
+        /// that needs it — turns a misconfiguration into a runtime error far from its cause.
+        /// A missing setting is a deployment mistake, and a deployment mistake should surface at
+        /// startup or not at all.
+        /// </remarks>
+        /// <param name="configuration">Configuration to read from.</param>
+        /// <param name="key">The flat key to require, from <see cref="Constant.ConfigKey"/>.</param>
+        /// <param name="message">The message to fail with; it names the key.</param>
+        /// <returns>The configured value, never blank.</returns>
+        /// <exception cref="InvalidOperationException">The value is missing or blank.</exception>
+        public static string RequireSetting(this IConfiguration configuration, string key, string message)
+        {
+            string? value = configuration[key];
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException(message);
+            }
+
+            return value;
         }
 
         /// <summary>Registers Entra ID bearer-token authentication. The scheme is wired only
@@ -76,11 +130,8 @@ namespace TrailBlaze.Api
 
         public static IServiceCollection AllowCORS(this IServiceCollection services, IConfiguration configuration)
         {
-            string? originsStr = configuration[Constant.ConfigKey.AllowedOrigins];
-            if (string.IsNullOrWhiteSpace(originsStr))
-            {
-                throw new InvalidOperationException(Constant.Message.NoAllowedOrigins);
-            }
+            string originsStr = configuration.RequireSetting(
+                Constant.ConfigKey.AllowedOrigins, Constant.Message.NoAllowedOrigins);
 
             string[] origins = originsStr.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             services.AddCors(options =>
