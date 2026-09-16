@@ -32,30 +32,30 @@ namespace TrailBlaze.Repository
 
             modelBuilder.Entity<User>(entity =>
             {
-                // Lengths come from the PRD's data-model row. An unbounded nvarchar(max) can
-                // reject nothing, so these numbers are what UserService truncates token claims
-                // to before inserting -- a claim the caller never typed cannot be rejected, so
-                // it has to be made to fit instead.
-                entity.Property(user => user.DisplayName).HasMaxLength(200);
-                entity.Property(user => user.Email).HasMaxLength(320);
-                entity.Property(user => user.Description).HasMaxLength(500);
-                entity.Property(user => user.AvatarBlobPath).HasMaxLength(512);
+                // Lengths come from Constant.UserProfile, which is also where UserService reads
+                // the number it shortens token claims to. An unbounded nvarchar(max) can reject
+                // nothing, so this bound is what makes "shorten it to fit" a statement about
+                // something -- and one copy of the number is what stops the two drifting.
+                entity.Property(user => user.DisplayName).HasMaxLength(Constant.UserProfile.DisplayNameLength);
+                entity.Property(user => user.Email).HasMaxLength(Constant.UserProfile.EmailLength);
+                entity.Property(user => user.Description).HasMaxLength(Constant.UserProfile.DescriptionLength);
+                entity.Property(user => user.AvatarBlobPath).HasMaxLength(Constant.UserProfile.AvatarBlobPathLength);
 
                 // Role is bounded here but not yet constrained to User/Admin: the closed set and
                 // its non-nullable default are feature 03's, which is also where anything reads
                 // it. Bounding it now keeps the length out of that feature's diff.
-                entity.Property(user => user.Role).HasMaxLength(16);
+                entity.Property(user => user.Role).HasMaxLength(Constant.UserProfile.RoleLength);
 
                 // Non-nullable with a database default, so a row inserted by a path that does
                 // not know about preferences still lands on a usable value and every reader can
                 // assume one is present rather than guessing what absence means.
                 entity.Property(user => user.PreferredTheme)
-                    .HasMaxLength(16)
+                    .HasMaxLength(Constant.UserProfile.PreferenceLength)
                     .HasDefaultValue(Constant.UserPreference.DarkTheme)
                     .IsRequired();
 
                 entity.Property(user => user.PreferredLanguage)
-                    .HasMaxLength(16)
+                    .HasMaxLength(Constant.UserProfile.PreferenceLength)
                     .HasDefaultValue(Constant.UserPreference.English)
                     .IsRequired();
             });

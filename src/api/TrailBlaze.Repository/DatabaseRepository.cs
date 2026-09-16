@@ -7,19 +7,29 @@ namespace TrailBlaze.Repository
 {
     public abstract class DatabaseRepository(TrailBlazeContext context) : IDbRepository
     {
-        private readonly TrailBlazeContext _context = context;
+        /// <summary>
+        /// The context every operation here runs against, exposed to derived repositories rather
+        /// than kept private.
+        /// </summary>
+        /// <remarks>
+        /// A derived type that declares its own primary-constructor parameter for the same
+        /// context compiles but captures a second copy of it (CS9107), which is both a
+        /// duplicate field and a claim — that the two could ever differ — that is not true.
+        /// Reading the one the base already holds keeps that impossible.
+        /// </remarks>
+        protected TrailBlazeContext Context { get; } = context;
 
         /// <inheritdoc/>
         public async Task<T?> GetAsync<T>(Expression<Func<T, bool>> predicate) where T : class
         {
-            var item = await _context.Set<T>().FirstOrDefaultAsync(predicate);
+            var item = await Context.Set<T>().FirstOrDefaultAsync(predicate);
             return item;
         }
 
         /// <inheritdoc/>
         public async Task<List<T>> GetListAsync<T>(Expression<Func<T, bool>> predicate) where T : class
         {
-            var items = await _context.Set<T>().Where(predicate).ToListAsync();
+            var items = await Context.Set<T>().Where(predicate).ToListAsync();
             return items;
         }
 
@@ -27,8 +37,8 @@ namespace TrailBlaze.Repository
         public async Task<int> CreateAsync<T>(T item)
         {
             ArgumentNullException.ThrowIfNull(item, nameof(item));
-            await _context.AddAsync(item);
-            int count = await _context.SaveChangesAsync();
+            await Context.AddAsync(item);
+            int count = await Context.SaveChangesAsync();
             return count;
         }
 
@@ -43,10 +53,10 @@ namespace TrailBlaze.Repository
             foreach (T item in items)
             {
                 ArgumentNullException.ThrowIfNull(item, nameof(item));
-                await _context.AddAsync(item);
+                await Context.AddAsync(item);
             }
 
-            int count = await _context.SaveChangesAsync();
+            int count = await Context.SaveChangesAsync();
             return count;
         }
 
@@ -55,25 +65,25 @@ namespace TrailBlaze.Repository
         {
             foreach (var id in ids)
             {
-                T? item = await _context.FindAsync<T>(id);
+                T? item = await Context.FindAsync<T>(id);
                 if (item != null)
                 {
                     item.IsDeleted = true;
                     item.LastModifiedOn = DateTime.UtcNow;
                     item.LastModifiedBy = "sys";
-                    _context.Update(item);
+                    Context.Update(item);
                 }
             }
 
-            int count = await _context.SaveChangesAsync();
+            int count = await Context.SaveChangesAsync();
             return count;
         }
 
         /// <inheritdoc/>
         public async Task<int> UpdateAsync<T>(T item) where T : EntityBase
         {
-            _context.Update(item);
-            int count = await _context.SaveChangesAsync();
+            Context.Update(item);
+            int count = await Context.SaveChangesAsync();
             return count;
         }
 
@@ -82,10 +92,10 @@ namespace TrailBlaze.Repository
         {
             foreach (T item in items)
             {
-                _context.Update(item);
+                Context.Update(item);
             }
 
-            int count = await _context.SaveChangesAsync();
+            int count = await Context.SaveChangesAsync();
             return count;
         }
     }
