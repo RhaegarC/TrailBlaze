@@ -1,6 +1,4 @@
 using TrailBlaze.Api;
-using TrailBlaze.Interface.Infrastructure;
-using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,19 +17,17 @@ builder.Services.AddProblemDetails();
 // layers environment variables over appsettings.json, so the flat keys below keep their
 // existing env var names and deployments need no changes.
 //
-// The two storage settings are required rather than optional, so a missing one stops the host
+// The two connection strings are required rather than optional, so a missing one stops the host
 // at startup naming the key instead of surfacing as a null reference on the first request that
-// happens to need it. Entra and CORS resolve their own values inside the extension methods.
+// happens to need it. They are read here and passed to RegistService, which does the
+// registering -- everything else that gets registered, including Entra and CORS, is registered
+// in there too, so this file composes nothing on its own.
 string dbConnection = builder.Configuration.RequireSetting(
     Constant.ConfigKey.DBCon, Constant.Message.NoDbConnection);
 string blobConnection = builder.Configuration.RequireSetting(
     Constant.ConfigKey.BlobConnection, Constant.Message.NoBlobConnection);
 
-builder.Services.RegistService(dbConnection, blobConnection);
-builder.Services.AddScoped<IUserContextService, UserContextService>();
-builder.Services.AddEntraAuthentication(builder.Configuration);
-builder.Services.AllowCORS(builder.Configuration);
-builder.Services.AddHealthChecks();
+builder.Services.RegistService(builder.Configuration, dbConnection, blobConnection);
 
 // Migrations are deliberately NOT applied here. Azure Container Apps runs several replicas, and
 // replicas migrating concurrently on startup race each other over the same DDL -- one wins, the

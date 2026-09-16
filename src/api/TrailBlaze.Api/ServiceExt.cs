@@ -15,11 +15,20 @@ namespace TrailBlaze.Api
         /// DbContext and the repositories are registered by
         /// <see cref="PersistenceExtensions.AddRepositoryPersistence"/>, so it must run before
         /// the services that consume them.</summary>
+        /// <remarks>
+        /// Everything the application registers is registered here, so <c>Program</c> reads
+        /// configuration and calls this, and does not compose on its own. The two connection
+        /// strings arrive resolved; Entra ID and CORS read their own values from
+        /// <paramref name="configuration"/> inside their extension methods.
+        /// </remarks>
         /// <param name="services">The service collection to register into.</param>
+        /// <param name="configuration">The host configuration, passed to the extension methods
+        /// that resolve their own settings.</param>
         /// <param name="dbConnection">Resolved by the composition root from configuration.</param>
         /// <param name="blobConnection">Resolved by the composition root from configuration.</param>
         public static IServiceCollection RegistService(
             this IServiceCollection services,
+            IConfiguration configuration,
             string dbConnection,
             string blobConnection)
         {
@@ -34,6 +43,16 @@ namespace TrailBlaze.Api
 
             // Register service
             services.AddScoped<IUserService, UserService>();
+
+            // Register the caller abstraction. Scoped, because it reads the current request's
+            // claims; nothing outside a request should resolve it.
+            services.AddScoped<IUserContextService, UserContextService>();
+
+            // Register authentication, CORS and health checks. Each resolves its own
+            // configuration, so none of them needs a value passed in.
+            services.AddEntraAuthentication(configuration);
+            services.AllowCORS(configuration);
+            services.AddHealthChecks();
 
             // Others
             services.AddHttpContextAccessor();
