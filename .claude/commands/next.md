@@ -12,8 +12,9 @@ arguments, using Phase 1 selection from the `tdd-implement` agent — [.claude/a
 2. If there is **no remaining feature**, report that and suggest pruning/adding to
    `docs/features/backlog.md` — then stop.
 3. Otherwise, state which feature you are starting (file, number, priority, dependencies),
-   then execute the full `/implement` workflow for it (Phases 1–5, stopping before commit
-   for user approval).
+   then execute the full `/implement` workflow for it (Phases 1–7: branch → RED → GREEN →
+   verify → commit → push → pull request). Do not stop for approval before committing —
+   review happens in the PR.
 
 **One dependency to watch:** feature 10 (Figma integration) is blocked until the Figma Make
 export exists. If selection lands on 10 and the export is not in `src/web/`, say so and stop

@@ -40,6 +40,12 @@ code patterns and conventions. Add comments for complex logic.
 Refactor while keeping tests green. If the schema changed, update the data model in
 `docs/PRD.md` and the feature file.
 
-**When done:** report a concise summary — what was implemented, test results, changed
-files — then **STOP before committing**. Ask the user to approve the commit and whether to
-push and open the pull request (Phases 6–7). Do not merge anything without explicit approval.
+**When done:** continue straight through Phases 6–7 — commit, push the branch, and open the
+pull request against `develop` — **without stopping to ask for approval first**. Report a
+concise summary once the PR exists: what was implemented, test results, changed files, and
+the PR URL. Review happens *in the pull request*, not before it — the user reads the diff
+there and leaves comments if anything is wrong.
+
+**Merging:** a PR may be merged only once **every** review comment on it has been addressed.
+Never merge without explicit approval — a PR that is green and carries no comments is still
+not approval to merge.
