@@ -9,8 +9,9 @@ given — not to justify the rule, but because a rule whose reasoning is missing
 "simplified" away by the next person.
 
 **Reading it:** sections 1–2 are the layout and the one workflow you will use most. Sections
-3–9 are the rules by area. Section 10 is testing, 11 is CI, and **12 lists the places this
-standard and the code do not yet agree** — read that one before trusting the rest blindly.
+3–9 are the rules by area. Section 10 is testing, 11 is CI, and **12 points at the tech-debt
+register, which lists the places this standard and the code do not yet agree** — read that one
+before trusting the rest blindly.
 
 ---
 
@@ -90,6 +91,12 @@ second style in the same solution.
   > it, so the solution had two styles and this paragraph matched neither. The exception is
   > `Program.cs`, which has no namespace at all — top-level statements must precede one, and
   > `using` directives must precede the statements, so the file cannot take this form.
+  >
+  > **The cost of deferring it is the part worth keeping.** Nothing about the fix was hard; it was
+  > put off because touching 36 files looks large in review while doing nothing interesting. Feature
+  > 01 arrived in the meantime and followed the style it found, so the divergence widened while it
+  > waited rather than holding still. A mechanical fix everyone already agrees with is at its
+  > cheapest the moment it is agreed to.
 
 - **Generated code keeps the generator's style.** `Migrations/` is emitted by `dotnet ef` with a
   block-scoped namespace, and `TrailBlazeContextModelSnapshot` is rewritten in full on every
@@ -254,9 +261,26 @@ inherits it automatically — you do not register it, and you cannot forget it.
 
 ### Timestamps
 
-`AuditLog.Timestamp` is a `DateTimeOffset`. The audit columns on `EntityBase`
-(`CreatedOn`, `LastModifiedOn`) are `DateTime` and are **not yet maintained** — see section
-12. Record UTC, and prefer `DateTimeOffset` for anything new.
+`AuditLog.Timestamp` and the four audit columns on `EntityBase` — `CreatedOn`, `CreatedBy`,
+`LastModifiedOn`, `LastModifiedBy` — are all `DateTimeOffset`. Record UTC.
+
+**Do not stamp them by hand.** `AuditSaveChangesInterceptor` does it, and it works per entry state
+rather than wholesale:
+
+| Entry state | Fields it assigns |
+| --- | --- |
+| `Added` | `CreatedOn` (unconditional), `CreatedBy` (only where null), `IsDeleted = false` |
+| `Modified` | `LastModifiedOn` (unconditional), `LastModifiedBy` (unconditional) |
+
+A value written in a repository method beforehand is therefore **discarded on the same save** — with
+`CreatedBy` the one exception, assigned with `??=`, so a caller replaying known data can set it and
+keep it. That is the same discretion the key rule above gives to imports.
+
+Writing these by hand is not redundant but **wrong**: it leaves dead code that reads as though it
+were load-bearing. That is the defect in
+[item 01](../../docs/tech-debt/01-audit-columns-have-two-writers.md), where
+`DatabaseRepository.DeleteAsync` still writes `LastModifiedOn` and `LastModifiedBy = "sys"`. See
+section 5 for what `Actor` resolves to and why it is not always the caller.
 
 ---
 
@@ -273,8 +297,10 @@ inherits it automatically — you do not register it, and you cannot forget it.
   `(TableName, EntityId)` and one on `Timestamp`. Add the index when you add the query, not
   after the table is large.
 - **The `DbContext` is scoped and is not thread-safe.** Never share one across concurrent
-  tasks, and never start a task inside a loop that touches it. See section 12 for a
-  batch-write bug of exactly this shape found in the repository.
+  tasks, and never start a task inside a loop that touches it. See
+  [item 02](../../docs/tech-debt/02-deleteasync-n-round-trips.md) of the tech-debt register for the
+  batch-write bug in the repository that this rule is aimed at — one `FindAsync` awaited per id,
+  with no transaction around the batch.
 - **Never put a raw `IQueryable` on a repository interface.**
 
 ---
@@ -492,7 +518,7 @@ each one catches a specific regression that had already happened once.
 EF Core runs save interception **before it opens a connection**. Point the context at a port
 nothing listens on, and the audit entries are already staged in the change tracker by the time
 the save fails — so audit behaviour is testable with no database at all. `TestSupport/AuditHarness.cs`
-is the helper that wraps this — **to be added in feature 01** — and it wires the context through
+is the helper that wraps this, and it wires the context through
 `AddRepositoryPersistence` rather than by hand, so tests exercise the same composition the
 application uses.
 
@@ -525,6 +551,19 @@ and stops.
   absence, comment out the thing under test and confirm the test goes red before you trust it.
   A substring check on a column name passes whether or not the filter is applied; assert on
   the `WHERE` clause, or pair it with a control test that asserts the opposite.
+- **No behaviour to assert? Assert the invariant instead.** Some correct changes have no runtime
+  behaviour to drive — correcting a document, removing a dead member, deduplicating a configuration
+  value. When the thing you are protecting is a durable property of a **file** ("every command is
+  listed in the README", "no permission entry names another repository"), write a test that reads the
+  file and asserts the property, and confirm it goes red when the file is reverted. This is a
+  **`doc-assertion`**: a real test with a real failure mode, and the one mechanism that would have
+  caught a standard asserting a property of the code that the code had stopped having.
+- **When nothing at all can be asserted, say so instead of inventing coverage.** A workflow file, a
+  deployment step, a request line in a `.http` file — some work has no invariant a test could hold.
+  Do not write a test that cannot fail to make the change look finished. Record what you ran and what
+  you observed in a `Verification:` line, and state in the pull request why there is no test. **A
+  verified claim and a tested claim are different strengths of claim**, and blurring them is worse
+  than either; the tech-debt register marks its items with exactly this three-way split.
 - **Name the condition and the expected result**: `An_unauthenticated_request_is_recorded_as_anonymous`,
   not `TestActor2`.
 - **One behaviour per test.** Use `[Theory]` for the same behaviour across inputs.
@@ -557,70 +596,57 @@ project names must keep that job green.**
 
 ## 12. Where the code and this standard do not yet agree
 
-Listed so you are not surprised by them, and so fixing one is an obvious pull request.
+**This list now lives in [docs/tech-debt/](../../docs/tech-debt/00-debt-log.md).**
 
-1. **Audit columns are not maintained.** `DatabaseRepository.CreateAsync` does not set
-   `CreatedOn` or `CreatedBy`, and `UpdateAsync` does not set `LastModifiedOn` or
-   `LastModifiedBy`. Only `DeleteAsync` sets them — and it hardcodes `LastModifiedBy = "sys"`
-   instead of reading `IUserContextService`, so it attributes a real user's action to the
-   system even though the audit trail knows who they were. Until this is fixed, `CreatedOn` is
-   `default(DateTime)` and `LastModified*` cannot be trusted.
-2. **`DeleteAsync` issues one `FindAsync` per id** and wraps the batch in no transaction, so a
-   large delete is N round trips and can partially apply.
-3. **Migrations exist but are Npgsql-shaped — resolved, and now historical.** The provider swap
-   (feature 01) replaced `Npgsql` with `Microsoft.EntityFrameworkCore.SqlServer` and regenerated
-   the migration set, so `TrailBlaze.Repository/Migrations` is SQL Server-shaped, as is the
-   `nvarchar(max)` mapping on the audit snapshots. The strategy question this item used to raise
-   is settled: migrations are applied by the **deployment pipeline** with
-   `dotnet ef database update`, before the new revision takes traffic. An `IHostedService` that
-   migrated at startup was built and then removed — Azure Container Apps runs several replicas and
-   concurrent startup migrations race over the same DDL. `TrailBlazeContextFactory` therefore
-   resolves `DbConnection` from the environment and throws when it is absent, rather than
-   defaulting to a local string that would migrate the wrong database.
-4. **`UserController` diverges from section 2's route convention.** It inherits `Controller` rather
-   than `ControllerBase`, routes on `[controller]` rather than `api/[controller]`, and its `index`
-   action is a placeholder returning a bare string. `UserService` is no longer empty —
-   `GetOrCreateAsync` implements first-sight provisioning — so the scaffolding to replace here is
-   the controller, not the service.
-5. **A soft delete is recorded as `"Modified"`,** not as a distinct `"Deleted"`, because
-   `Action` holds the EF `EntityState`. A soft delete is therefore indistinguishable in the
-   history from an ordinary update.
-6. **Timestamps are inconsistent.** `EntityBase` and `AuditLog` both use `DateTimeOffset` now, but
-   `DatabaseRepository` writes `DateTime.UtcNow` into them.
-7. **`TrailBlaze.Api.http` requests `/weatherforecast/`,** which does not exist in this solution.
-8. **`SampleTemplate/placeholder.txt` — resolved, and now historical.** That file belonged to the
-   upstream template this solution was generated from, and neither it nor the template lives here
-   any more. The template CI job described in section 11 referred to it; this repository has no CI
-   at all.
-9. **`DbConnection` is accepted empty — resolved, and now historical.** Feature 01 introduced
-   `RequireSetting`, and the composition root now requires `DbConnection`, `BlobConnection` and
-   `AllowedOrigins`, failing startup with a message naming the key that is missing. The two cases
-   §9 previously left open — "runs for `/health` without a database" — no longer hold; see the
-   corrected note there.
-10. **Namespaces are block-scoped, not file-scoped — resolved 2026-09-16.** §1 prescribed
-    file-scoped namespaces and every file used the block-scoped form, so feature 01's new files
-    followed the code and widened the divergence rather than narrowing it. The mechanical PR this
-    item asked for has since been made: all 36 authored files are file-scoped with `using`
-    directives beneath the namespace, and §1 records the two files that cannot be — `Program.cs`,
-    which has no namespace, and `Migrations/`, which `dotnet ef` regenerates. Kept here rather
-    than deleted because it is the clearest example in this list of a divergence that stayed open
-    because it was deferred as mechanical.
-11. **§11 describes a CI workflow that feature 01 deliberately did not build.** The foundation
-    feature lists "no CI pipeline definition" among its non-goals, so §11 remains a description of
-    the target rather than of anything wired up. Saying it is "part of the foundation work" was
-    wrong; it is not claimed by any feature yet. It has grown more urgent since: the API is
-    deployed to Azure Container Apps and the web app to Azure Static Web Apps by GitHub workflow,
-    so a pipeline is now the only path either has to production — it is still not written.
-12. **Feature 02's profile behaviour shipped without the tests §10 requires.** The provisioning
-    hardening, the profile read/update routes, the avatar upload and removal, and the upload
-    validator are all implemented and the existing 41 tests pass — but the tests the feature
-    specifies were deliberately deferred, including the reflection test that guards `Role` from
-    being self-assignable and the storage-tier assertion that an avatar is genuinely public-read.
-    By §10 this work is **not finished**, and the checklist item "tests cover the behaviour" is
-    unmet for this branch. Recorded at
-    [02-entra-auth.md](../../docs/features/archive/02-entra-auth.md#testing-status). Anyone picking this up
-    should write those tests before treating the profile slice as a baseline — the privileged
-    `Role` field and the "no caller" path are both silent when wrong.
+It moved because it had drifted, and the drift is worth recording rather than quietly repairing.
+Item 1 below spent months asserting that the audit columns were unmaintained — after
+`AuditSaveChangesInterceptor` had started maintaining them. A document whose whole purpose is to be
+trustworthy about exactly that was wrong about it, and nothing noticed, because nothing checked.
+The register's first act was to re-verify every item against the code before filing it, and the same
+false claim was found in [PRD.md](../../docs/PRD.md) line 160.
+
+**File debt there, not here.** Not in a feature file, and not as a passing note in a pull request
+either. A claim recorded in two places is a claim that will disagree with itself; that is the defect
+this move cures, and re-creating a second list here would restore it.
+
+Numbers **01–12** in the register are the former items of this section, in the same order, and they
+never change — so a reference to "§12.N" written before the move still resolves.
+
+| Was | Now | State |
+|---|---|---|
+| 12.1 Audit columns are not maintained | [01 — Audit columns have two writers](../../docs/tech-debt/01-audit-columns-have-two-writers.md) | **open**, and the claim was false — see below |
+| 12.2 `DeleteAsync` issues one `FindAsync` per id | [02 — `DeleteAsync` does N round trips, untransacted](../../docs/tech-debt/02-deleteasync-n-round-trips.md) | open |
+| 12.3 Migrations were Npgsql-shaped | [03 — Migrations were Npgsql-shaped](../../docs/tech-debt/archive/03-migrations-npgsql-shaped.md) | archived — feature 01, PR #3 |
+| 12.4 `UserController` diverges from the route convention | [04 — `UserController` violates the route convention](../../docs/tech-debt/04-usercontroller-route-convention.md) | open |
+| 12.5 A soft delete is recorded as `"Modified"` | [05 — A soft delete is recorded as `"Modified"`](../../docs/tech-debt/05-soft-delete-recorded-as-modified.md) | open |
+| 12.6 Timestamps are inconsistent | [06 — Timestamp types are inconsistent](../../docs/tech-debt/06-timestamp-types-inconsistent.md) | open — a facet of 01 |
+| 12.7 `TrailBlaze.Api.http` requests `/weatherforecast/` | [07 — The `.http` file requests `/weatherforecast/`](../../docs/tech-debt/07-http-file-requests-weatherforecast.md) | open |
+| 12.8 `SampleTemplate/placeholder.txt` | [08 — `SampleTemplate/placeholder.txt`](../../docs/tech-debt/archive/08-sampletemplate-placeholder.md) | archived — the template is not here |
+| 12.9 `DbConnection` is accepted empty | [09 — `DbConnection` was accepted empty](../../docs/tech-debt/archive/09-dbconnection-accepted-empty.md) | archived — feature 01, PR #3 |
+| 12.10 Namespaces are block-scoped | [10 — Namespaces were block-scoped](../../docs/tech-debt/archive/10-block-scoped-namespaces.md) | archived — 2026-09-16 |
+| 12.11 §11 describes a CI workflow that was not built | [11 — There is no CI or deployment pipeline](../../docs/tech-debt/11-no-ci-pipeline.md) | open |
+| 12.12 Feature 02's tests were deferred | [12 — Feature 02's behaviour shipped without the tests §10 requires](../../docs/tech-debt/12-feature-02-tests-deferred.md) | open |
+
+### Two things the old list got wrong
+
+Both are the same failure — a claim about the code that no longer matched the code — and both were
+found by re-checking rather than by reading. They are recorded here because a reader who remembers
+the old wording should know which half of it to discard.
+
+- **12.1 was false, and the truth is narrower.** The columns are maintained: the interceptor stamps
+  all four on every save, and `AuditTests` proves it. What is actually wrong is that there are **two
+  writers** — `DatabaseRepository.DeleteAsync` still sets `LastModifiedOn` and
+  `LastModifiedBy = "sys"`, and the interceptor overwrites both on the same save. The repository's
+  writes are dead. Not "unmaintained columns" but "a dead writer", which is item 01.
+- **12.6's type claim was right and §3's was wrong.** The columns are `DateTimeOffset`; §3 called
+  them `DateTime` and added a second claim that they were not yet maintained. §3 is corrected in the
+  same pull request as this pointer.
+
+Four items (12.3, 12.8, 12.9, 12.10) had already resolved before the move and carry their history in
+`archive/`. Item 12.10 in particular is kept rather than deleted: it is the clearest example in this
+repository of a divergence that stayed open because it was deferred as mechanical — and it widened
+meanwhile, because feature 01's new files copied the style that was there.
+
 
 ---
 
