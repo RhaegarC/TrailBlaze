@@ -79,4 +79,4 @@ behavioural test, and it should not be dressed up as more.
 - [ ] Item [01](01-audit-columns-have-two-writers.md) landed, or this re-verified as already resolved
 - [ ] No `DateTime` write to a `DateTimeOffset` member remains in `TrailBlaze.Repository`
 - [ ] The grep result recorded in the PR body, including "none found" if that is the answer
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

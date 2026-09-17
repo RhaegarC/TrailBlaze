@@ -85,4 +85,4 @@ deliberately:
 - [ ] `Index()` deleted; no route answers for it
 - [ ] PRD's API surface, permission matrix and divergence note updated in the same PR
 - [ ] Feature 10/11 not already in flight against the old path, or coordinated with
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

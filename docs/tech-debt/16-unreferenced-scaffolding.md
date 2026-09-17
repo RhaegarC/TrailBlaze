@@ -107,4 +107,4 @@ is features 06–08 supplying the consumers. What this item owes now:
 - [ ] `StorageSeamTests.cs` states it is the seam's only consumer until features 06–08 land
 - [ ] Each of the four has a production caller (`grep` recorded in the closing PR)
 - [ ] Any signature that did not survive contact with its feature is recorded against that feature
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

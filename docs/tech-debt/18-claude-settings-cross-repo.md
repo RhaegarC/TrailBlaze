@@ -94,4 +94,4 @@ broad `Bash(cat > *)`, which is a separate judgement recorded above rather than 
 - [ ] `Bash(cat > *)` was decided on its own terms, and the decision recorded
 - [ ] A `doc-assertion` test fails when a foreign entry is added back
 - [ ] The file was cleaned on its own branch, and no session-added entry was lost in the process
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

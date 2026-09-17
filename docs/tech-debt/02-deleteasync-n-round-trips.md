@@ -110,4 +110,4 @@ inspected without a connection, so the round-trip count can be asserted rather t
 - [ ] A test asserting no partial apply on mid-batch failure, or a stated reason it cannot be written
 - [ ] The transaction decision recorded in the PR body (why tracked entities rather than `ExecuteUpdate`)
 - [ ] STANDARD §4's reference updated from "see section 12" to this item
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

@@ -41,8 +41,10 @@ one gets written*. That argument is why this item is a blocking test-gap rather 
 
 Checked against the feature file and the suite 2026-09-17.
 
-- The suite is 41 tests, 40 passing, 1 skipped (the tagged storage tier without credentials). None of
+- The suite is 42 tests, 41 passing, 1 skipped (the tagged storage tier without credentials). None of
   them covers feature 02's profile routes, the upload validator, or the provisioning conflict branch.
+  Verified by running `dotnet test` 2026-09-17, which is also what settled the count —
+  [testing-and-tdd.md](../testing-and-tdd.md) had it right while this file was off by one.
 - [02-entra-auth.md](../features/archive/02-entra-auth.md) carries a `## Testing status` section, two
   unmet `[ ]` criteria, and a `## Tests (TDD)` section prefaced as unwritten — it is the plan for
   this item, not a description of coverage.
@@ -119,4 +121,4 @@ environment, not here.
 - [ ] The feature file's `## Testing status` and unmet `[ ]` criteria updated to reflect what landed
 - [ ] STANDARD §12.12's claim re-verified: if it still says the tests are missing, it is correct; if
       they exist, this item closes
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

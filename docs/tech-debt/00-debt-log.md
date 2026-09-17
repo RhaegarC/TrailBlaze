@@ -34,6 +34,7 @@ names. Features number by priority because a scan reads the number
 | 17 | [`AllowedOrigins` is declared twice](17-allowedorigins-duplicated.md) | correctness | silent-wrong | Config | — (orphaned) | open |
 | 18 | [Tracked settings carry another repo's permissions](18-claude-settings-cross-repo.md) | hygiene | friction | Workflow | — (orphaned) | open |
 | 19 | [Documentation indexes have drifted](19-doc-indexes-drifted.md) | docs | cosmetic | Docs | — (orphaned) | open |
+| 20 | [`LastModifiedOn` is left at its sentinel on insert](20-lastmodified-unset-on-insert.md) | correctness | silent-wrong | Audit | — (orphaned) | open |
 
 Rows are ordered by number, which for 01–12 is §12 order and for 13+ is filing order. The queue
 order is a judgement, not a column — see "Where to start" at the bottom.
@@ -125,8 +126,10 @@ disappearing, and `sprint-status` warning that "all tests passing" is weaker tha
 
 ## Where to start
 
-Impact first, then whoever is closest to the code already. The three that repay a first hour most:
-**[01](01-audit-columns-have-two-writers.md)** (silent-wrong, a deletion not a design),
-**[13](13-description-too-long-hardcoded.md)** (friction, one line, testable), and
-**[17](17-allowedorigins-duplicated.md)** (silent-wrong, and the duplication already misbehaves
-between profiles). **[11](11-no-ci-pipeline.md)** blocks the most and is the largest.
+Impact first, then whoever is closest to the code already. The four that repay a first hour most:
+**[20](20-lastmodified-unset-on-insert.md)** (silent-wrong, one assertion and one branch, and it
+forces a schema decision worth making deliberately), **[01](01-audit-columns-have-two-writers.md)**
+(silent-wrong, a deletion rather than a design), **[13](13-description-too-long-hardcoded.md)**
+(friction, one line, testable), and **[17](17-allowedorigins-duplicated.md)** (silent-wrong, and the
+duplication already misbehaves between profiles). **[11](11-no-ci-pipeline.md)** blocks the most and
+is the largest.

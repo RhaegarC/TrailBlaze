@@ -1,6 +1,6 @@
 # 09 — `DbConnection` was accepted empty
 
-Status: **Archived** — resolved by [feature 01](../features/archive/01-foundation.md), merged to `develop` in PR #3 · [00-debt-log.md](../00-debt-log.md)
+Status: **Archived** — resolved by [feature 01](../../features/archive/01-foundation.md), merged to `develop` in PR #3 · [00-debt-log.md](../00-debt-log.md)
 Source: STANDARD §12.9 · Opened: 2026-09-15 · Archived: 2026-09-17
 
 ## What it was

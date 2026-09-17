@@ -92,4 +92,4 @@ Done. This item has no follow-on work, which is worth noting because it is rare 
 - [ ] The test was watched failing against a wrong value before being kept
 - [ ] `DescriptionTooLong` composes from `UserProfile.DescriptionLength`
 - [ ] Grep confirms nothing depended on the `const`
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

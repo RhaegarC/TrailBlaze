@@ -129,13 +129,15 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 - **Figma export defects, not export timing.** The export exists in `src/web/` (it is a mock — see
   "Where the code actually stands"), so feature 10 is no longer blocked on its *arrival*. It is
   blocked on the export being **fixed in Figma Make and re-exported**: the banner `+` navigates to
-  the create screen regardless of whether the current view is an activity detail
-  ([App.tsx:419-429](../../src/web/src/App.tsx#L419-L429)) and carries the "upload media" label
-  there ([App.tsx:402](../../src/web/src/App.tsx#L402)), so the second of the two behaviours the
-  frontend change asked for — the `+` starting a *media upload* inside an activity — is not
-  actually wired. `authRole` is likewise hard-coded at
-  [App.tsx:1184](../../src/web/src/App.tsx#L1184), which is what makes every role-gated affordance
-  in the export decorative. Feature 10 lists these as known gaps; they are export bugs rather than
-  doc gaps, and fixing them is out of scope for this documentation pass.
-- **Azure credentials in CI** — the tagged storage integration tier needs them to run; without
-  them CI proves the fake, not the blob implementation.
+  the create screen whatever the current view, `authRole` is hard-coded so every role-gated
+  affordance is decorative, and the "upload media" label has no behaviour behind it.
+  **[Item 15](../tech-debt/15-web-app-cannot-call-the-api.md) owns that list** — including which
+  defects are re-export fixes rather than doc gaps. This file no longer restates them.
+- **Azure credentials in CI** — the tagged storage integration tier needs them to run; without them
+  CI proves the fake, not the blob implementation.
+  [Item 11](../tech-debt/11-no-ci-pipeline.md) owns the pipeline decision and
+  [item 12](../tech-debt/12-feature-02-tests-deferred.md) the three assertions that need it.
+- **Known divergences live in the debt register.** [docs/tech-debt/00-debt-log.md](../tech-debt/00-debt-log.md)
+  is the single list of what the code does not yet do as the standard says. Nothing in that category
+  is filed here or in a feature file any more — a claim in two places is a claim that will disagree
+  with itself.

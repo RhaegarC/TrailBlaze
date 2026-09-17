@@ -108,4 +108,4 @@ what a local dev origin list is for. The README's rule is the thing that is wron
 - [ ] `AllowedOrigins` has exactly one local declaration, or the reason for two is written down
 - [ ] A test asserts the resolved value for at least one named profile
 - [ ] Each launch profile's effective origin set is stated, including `http`'s
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

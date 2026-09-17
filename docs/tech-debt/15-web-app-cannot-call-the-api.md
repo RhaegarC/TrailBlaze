@@ -104,4 +104,4 @@ acceptance criteria already cover.
 - [ ] The `+`-in-detail intent recorded in feature 10's scope, or explicitly dropped
 - [ ] The `authRole` no-setter shape flagged to feature 10 as not to reproduce
 - [ ] Closed by feature 10's PR — real API call observed, not asserted against mock data
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

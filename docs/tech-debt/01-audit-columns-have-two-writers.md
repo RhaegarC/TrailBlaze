@@ -106,4 +106,4 @@ Checked against the code 2026-09-17.
       audit assertion, which is the evidence the deletion was safe
 - [ ] STANDARD §3 and §12.1 corrected in the same PR
 - [ ] Item [06](06-timestamp-types-inconsistent.md) moved to resolved
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

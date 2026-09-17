@@ -98,4 +98,4 @@ never observed running against a PR that would have failed, it is unverified in 
 - [ ] STANDARD §11 rewritten to describe what exists; the state note removed or updated
 - [ ] `Verification:` line naming the PR where the pipeline was observed, and its result
 - [ ] "No test — and why" section in the PR body
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

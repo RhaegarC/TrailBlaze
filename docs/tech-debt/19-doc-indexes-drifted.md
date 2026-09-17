@@ -12,6 +12,7 @@ The documents that *index* other documents no longer describe them. Five verifie
 | [README.md:13](../../README.md#L13) | PRD has "25 logged decisions" | the PRD carries **Decision #30** |
 | [README.md:35-41](../../README.md#L35-L41) | six commands, listed as the workflow | there are **seven** — `/list-features` exists at [.claude/commands/list-features.md](../../.claude/commands/list-features.md) and is absent from the list |
 | [README.md:47-49](../../README.md#L47-L49) | required settings come from user-secrets, "never from `appsettings.json` or `launchSettings.json`" | `AllowedOrigins` is in **both** — see item [17](17-allowedorigins-duplicated.md) |
+| [README.md:86](../../README.md#L86) | the suite "runs 31 tests across the three tiers, 30 of them by default" | `dotnet test` reports **42 runnable, 41 passing, 1 skipped** |
 | [README.md:11-16](../../README.md#L11-L16) | the "Start here" table | has no row for `docs/tech-debt/`, which this register creates |
 | [STANDARD.md](../../src/api/STANDARD.md) §13 | "CI's template job stays green" | there is no CI at all, and no template job — item [11](11-no-ci-pipeline.md) |
 
@@ -45,12 +46,17 @@ Checked against each file 2026-09-17.
 - `ls .claude/commands/` → seven files including `list-features.md`; README lists six.
 - README:47-49 read in full, beside `launchSettings.json:20` and `appsettings.Development.json:8`.
 - The re-index output of 2026-09-17 recorded in this session, against `CLAUDE.md`'s header counts.
-- **Not verified, and flagged rather than asserted:** README:86 says the suite "runs 31 tests across
-  the three tiers, 30 of them by default", while the run recorded in item
-  [12](12-feature-02-tests-deferred.md) reports 41. The attribute count is 32
-  (`[Fact]`/`[Theory]` across the three projects), which is close to 31 rather than to 41 — theories
-  expand at runtime, so the two numbers may both be right about different things. Whoever closes this
-  item should run `dotnet test` and settle it rather than copy either number.
+- **The test count was settled by running the suite, 2026-09-17:** `dotnet test` reports **42
+  runnable, 41 passing, 1 skipped** — Service 10, Repository 27 passing + 1 skipped, Api 4. README's
+  "31 … 30 by default" is stale by eleven. [testing-and-tdd.md:20-22](../testing-and-tdd.md) already
+  had it right at "42 runnable … leaving 41 passing by default", so the README is the document that
+  drifted, not the strategy doc. Item [12](12-feature-02-tests-deferred.md)'s "41 tests, 40 passing"
+  was off by one and is corrected in the same pass.
+- **The attribute count is not the test count, which is what made this look uncertain.** There are
+  **32** `[Fact]`/`[Theory]` attributes across the three projects and **42** tests at runtime, because
+  theories expand — 31 was close enough to 32 to look like a plausible older value rather than a
+  stale one. Anyone re-checking a count here should read the runner's total, never the attribute
+  count.
 
 ## Testability
 
@@ -97,4 +103,4 @@ asserted either, being generated.
 - [ ] A `doc-assertion` test fails when a command is added and README is not updated
 - [ ] The test count was settled by running `dotnet test`, and the number in README matches
 - [ ] `CLAUDE.md`/`AGENTS.md` counts refreshed by `analyze`, in their own commit
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

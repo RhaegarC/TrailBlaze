@@ -272,6 +272,12 @@ rather than wholesale:
 | `Added` | `CreatedOn` (unconditional), `CreatedBy` (only where null), `IsDeleted = false` |
 | `Modified` | `LastModifiedOn` (unconditional), `LastModifiedBy` (unconditional) |
 
+One consequence of that split is easy to miss and is **not** yet right: nothing assigns
+`LastModifiedOn` on insert, so a row that has never been updated stores `default(DateTimeOffset)` —
+the year 1 — rather than a real instant. Do not rely on the column being populated; see item
+[20](../../docs/tech-debt/20-lastmodified-unset-on-insert.md), which also carries the decision about
+which way to fix it.
+
 A value written in a repository method beforehand is therefore **discarded on the same save** — with
 `CreatedBy` the one exception, assigned with `??=`, so a caller replaying known data can set it and
 keep it. That is the same discretion the key rule above gives to imports.

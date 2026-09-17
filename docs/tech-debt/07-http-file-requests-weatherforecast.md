@@ -69,4 +69,4 @@ Record both in the PR body under "No test — and why".
 - [ ] Lines needing a bearer token say so, so a 401 is not read as a broken file
 - [ ] `Verification:` line in this file recording what was requested and what came back
 - [ ] "No test — and why" section in the PR body
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

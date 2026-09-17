@@ -93,4 +93,4 @@ A `doc-assertion` test could pin that the standard still states the rule, but th
 - [ ] STANDARD §1's wording re-checked against the mechanism
 - [ ] `Verification:` line naming the command run and the observed result
 - [ ] "No test — and why" section in the PR body
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

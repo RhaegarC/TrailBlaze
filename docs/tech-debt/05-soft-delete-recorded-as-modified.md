@@ -95,4 +95,4 @@ action — it should fail against the current interceptor and pass after the fix
 - [ ] The chosen action vocabulary recorded in STANDARD §5, not just in the code
 - [ ] `AuditLog`'s XML doc corrected — it currently documents the defect as the design
 - [ ] The PR body states whether this lands before any deployment writes real history
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](../00-debt-log.md)
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)
