@@ -157,7 +157,7 @@ tables. They are drawn once, here, rather than repeated in the diagram:
 |---|---|---|
 | `Id` | string (GUID) | PK — **assigned by the application at construction**, not by the database |
 | `CreatedBy` | string, nullable | caller identity at insert |
-| `CreatedOn` | datetimeoffset | stamped by `AuditSaveChangesInterceptor` at insert, then not touched again — so it **is** stamped on every write path. The defect is a second, dead writer on the delete path: [item 01](tech-debt/01-audit-columns-have-two-writers.md) |
+| `CreatedOn` | datetimeoffset | stamped by `AuditSaveChangesInterceptor` at insert, then not touched again — so it **is** stamped on every write path. There was a second, dead writer on the delete path; it was deleted ([item 01](tech-debt/archive/01-audit-columns-have-two-writers.md), archived) |
 | `LastModifiedBy` | string, nullable | caller identity at the last update |
 | `LastModifiedOn` | datetimeoffset | set on every update, but **not** at insert — a row that has never been updated carries `default(DateTimeOffset)`, i.e. the year 1: [item 20](tech-debt/20-lastmodified-unset-on-insert.md) |
 | `IsDeleted` | bit, nullable | soft delete — a global query filter hides `true` rows by default |

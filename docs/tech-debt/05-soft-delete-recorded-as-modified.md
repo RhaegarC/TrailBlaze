@@ -15,11 +15,11 @@ Action = entry.State.ToString(),
 A soft delete sets `IsDeleted = true` and calls `Context.Update(item)`, which makes the state
 `Modified` — not `Deleted`
 ([DatabaseRepository.cs:84-85](../../src/api/TrailBlaze.Repository/DatabaseRepository.cs#L84-L85),
-two lines lower than it was before item [01](01-audit-columns-have-two-writers.md) landed).
+two lines lower than it was before item [01](archive/01-audit-columns-have-two-writers.md) landed).
 So the history records `"Modified"` for a delete.
 
 The entity's own XML documentation states the behaviour as fact rather than flagging it —
-[AuditLog.cs:39-42](../../src/api/TrailBlaze.Model/DatabaseEntities/AuditLog.cs#L39-L42) notes that a
+[AuditLog.cs:39-42](../../src/api/TrailBlaze.Model/DatabaseEntity/AuditLog.cs#L39-L42) notes that a
 soft delete's vocabulary is recorded as `Modified`.
 
 ## Why it matters
@@ -47,8 +47,8 @@ the history, and the history is only consulted after something has already gone 
 Checked against the code 2026-09-17.
 
 - `Action = entry.State.ToString()` at line 124; the `Modified` case that produces the state for a
-  soft delete is the same `Context.Update(item)` item [01](01-audit-columns-have-two-writers.md) is
-  about, though for a different reason.
+  soft delete is the same `Context.Update(item)` item [01](archive/01-audit-columns-have-two-writers.md)
+  was about, though for a different reason.
 - `SerializeEntity` writes `null` for `newValues` only when the state is `Deleted`
   ([:116-118](../../src/api/TrailBlaze.Repository/AuditSaveChangesInterceptor.cs#L116-L118)) — so
   because the state is `Modified`, both old and new values are captured, and `IsDeleted: true` is
@@ -74,16 +74,17 @@ action — it should fail against the current interceptor and pass after the fix
 3. GREEN: derive the action rather than copying the state — if `IsDeleted` is set on a `Modified`
    entry, record `"Deleted"`. Do **not** switch the entry to `EntityState.Deleted`: that is a hard
    delete and would destroy the row.
-4. Update [AuditLog.cs:39-42](../../src/api/TrailBlaze.Model/DatabaseEntities/AuditLog.cs#L39-L42),
+4. Update [AuditLog.cs:39-42](../../src/api/TrailBlaze.Model/DatabaseEntity/AuditLog.cs#L39-L42),
    whose XML doc currently documents the defect as intended behaviour.
 5. Update STANDARD §5's "What is recorded" and the note on `Actor` if the action vocabulary is now
    explicitly enumerated there.
 
 ## Out of scope / related
 
-- **Item [01](01-audit-columns-have-two-writers.md) is not a prerequisite.** Deleting the dead
-  audit writes there does not change the entity state, so a soft delete still records `"Modified"`
-  until this item is fixed. They can land in either order.
+- **Item [01](archive/01-audit-columns-have-two-writers.md) was not a prerequisite, and is now
+  archived — this item is unchanged by that.** Deleting the dead audit writes did not change the
+  entity state, so a soft delete still records `"Modified"` until this item is fixed. That is why 01
+  could close and leave this open.
 - **A backfill is deliberately not proposed.** If this ships after any real data exists, the rows
   written before it are unrecoverable by a schema change — recovering them means scanning
   `NewValues` JSON. The repair plan's job is to land before that, and the PR should say so.

@@ -43,14 +43,18 @@ stop exactly where the unset field begins — so the omission is mirrored in the
 noticed by it. This is item [12](12-feature-02-tests-deferred.md)'s argument in miniature: a guard
 that is absent looks identical to a guard that passes.
 
-**The PRD documents the opposite.** [PRD.md:163](../PRD.md#L163) states `LastModifiedOn` is "set at
-insert and on every update". It is not set at insert. That sentence was re-checked and found false
-while repointing the PRD at this register — the same shape as §12.1, a written claim about these
-columns that the code does not honour, surviving because nothing checks.
+**The PRD documented the opposite, and has been corrected.** [PRD.md:162](../PRD.md#L162) used to
+state `LastModifiedOn` is "set at insert and on every update". It is not set at insert, and the
+sentence was re-checked and found false while repointing the PRD at this register — the same shape as
+§12.1, a written claim about these columns that the code does not honour, surviving because nothing
+checks. The row now describes the real behaviour. The code it describes is still wrong, which is what
+this item is for: **correcting the document did not fix the defect, and must not be mistaken for
+having fixed it.**
 
-**It is distinct from item [01](01-audit-columns-have-two-writers.md), and does not close with it.**
-01's repair deletes the *dead* writes on the delete path; it neither adds nor removes anything on the
-insert path. Same columns, different code, different fix.
+**It is distinct from item [01](archive/01-audit-columns-have-two-writers.md), and did not close with it.**
+01's repair deleted the *dead* writes on the delete path; it neither added nor removed anything on the
+insert path, so this item survived that close untouched. Same columns, different code, different fix
+— which is why 01 is archived and this is not.
 
 ## Evidence
 
@@ -103,13 +107,14 @@ so this is one more assertion in an existing test — not a new tier, and not de
 
 ## Out of scope / related
 
-- **Item [01](01-audit-columns-have-two-writers.md)** — same columns, different defect (a dead writer
+- **Item [01](archive/01-audit-columns-have-two-writers.md)** — same columns, different defect (a dead writer
   on the delete path). Neither discharges the other.
-- **Item [06](06-timestamp-types-inconsistent.md)** is a facet of 01 and does not touch this.
+- **Item [06](archive/06-timestamp-types-inconsistent.md)** was a facet of 01 (both archived, PR #8)
+  and does not touch this.
 - **`IsDeleted = false` is assigned in the same `Added` branch** — a third, unrelated decision in
   those three lines. Noted so whoever fixes this does not assume the branch is only about timestamps.
-- **The `Modified` branch is not in question.** It is correct, and item 01 is about a *second* writer
-  competing with it.
+- **The `Modified` branch is not in question.** It is correct, and item 01 — now archived — was about
+  a *second* writer competing with it, not about the branch itself.
 
 ## Close checklist
 
