@@ -14,7 +14,8 @@ Action = entry.State.ToString(),
 
 A soft delete sets `IsDeleted = true` and calls `Context.Update(item)`, which makes the state
 `Modified` — not `Deleted`
-([DatabaseRepository.cs:80-83](../../src/api/TrailBlaze.Repository/DatabaseRepository.cs#L80-L83)).
+([DatabaseRepository.cs:84-85](../../src/api/TrailBlaze.Repository/DatabaseRepository.cs#L84-L85),
+two lines lower than it was before item [01](01-audit-columns-have-two-writers.md) landed).
 So the history records `"Modified"` for a delete.
 
 The entity's own XML documentation states the behaviour as fact rather than flagging it —

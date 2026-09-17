@@ -77,9 +77,11 @@ public class DatabaseRepository(TrailBlazeContext context) : IDbRepository
             T? item = await Context.FindAsync<T>(id);
             if (item != null)
             {
+                // Only the soft-delete flag is set here. The audit columns are stamped by
+                // AuditSaveChangesInterceptor on the save below, and it overwrites whatever a
+                // repository writes first -- so assigning LastModifiedOn/LastModifiedBy here
+                // would be dead code that reads as though it were load-bearing (STANDARD §3).
                 item.IsDeleted = true;
-                item.LastModifiedOn = DateTime.UtcNow;
-                item.LastModifiedBy = "sys";
                 Context.Update(item);
             }
         }

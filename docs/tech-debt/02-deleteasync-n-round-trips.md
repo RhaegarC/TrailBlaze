@@ -95,10 +95,11 @@ inspected without a connection, so the round-trip count can be asserted rather t
 
 ## Out of scope / related
 
-- **Item [01](01-audit-columns-have-two-writers.md)** touches the same method (the dead `"sys"`
-  writes at lines 81–82). Fixing both means editing the same nine lines, so consider doing 01 and 02
-  in one PR — with the caveat that 01 is a deletion and 02 is a redesign, and the second deserves its
-  own RED-first evidence.
+- **Item [01](01-audit-columns-have-two-writers.md)** touched the same method and is now landed: it
+  deleted the dead `"sys"` writes that sat at lines 81–82, so `DeleteAsync` is two lines shorter and
+  the line anchors elsewhere in this file predate that. Fixing 02 will edit the same method, and its
+  redesign deserves its own RED-first evidence — the caveat being that 01 was a deletion and changed
+  no behaviour, which 02 does.
 - **Item [16](16-unreferenced-scaffolding.md)** covers the broader question of committed-but-unused
   repository surface; this item is the case where the unused code is also wrong.
 - **Soft delete semantics** (item [05](05-soft-delete-recorded-as-modified.md)) are adjacent but
