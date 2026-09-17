@@ -108,8 +108,11 @@ git push -u origin feature/[number]-[feature-name]
 ### Deployment Notes
 - Any special considerations
 ```
-5. Wait for human review and approval
-6. Do NOT merge without approval
+5. Do not pause between Phase 5 and here to ask for approval — Phases 6–7 run straight through.
+   Review happens in the pull request: report the PR URL and let the user read the diff and
+   leave comments there.
+6. A PR may be merged only once **every** review comment on it has been addressed. Never merge
+   without explicit approval — a PR carrying no comments is still not approval to merge.
 
 #### Phase 8: Archive Feature (After PR Merge)
 
@@ -119,4 +122,4 @@ git push -u origin feature/[number]-[feature-name]
 4. Switch back to `develop` and sync with the remote: `git checkout develop && git pull --prune origin develop`
 5. Delete the merged feature branch locally: `git branch -D feature/[number]-[feature-name]` (the remote branch is auto-deleted when the PR merges)
 
-**Reporting:** when you finish, report a concise summary — feature implemented, test results, files changed — and state clearly which phases you completed. The caller decides whether to stop before commit (Phases 6–7) for explicit user approval; never merge without approval.
+**Reporting:** when you finish, report a concise summary — feature implemented, test results, files changed, and the PR URL — and state clearly which phases you completed. Phases 6–7 run automatically after Phase 5; do not pause before committing to ask for approval. Review happens in the pull request, and a PR may be merged only once every review comment on it has been addressed — never merge without explicit approval.

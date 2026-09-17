@@ -67,10 +67,16 @@
       "Bash(node -e \"try{const y=require\\('yaml'\\);const fs=require\\('fs'\\);const d=y.parse\\(fs.readFileSync\\('/d/TecShare/AITraining/repo/.gitlab-ci.yml','utf8'\\)\\);console.log\\('YAML OK'\\);console.log\\('job script lines:',JSON.stringify\\(d['build-and-push-api'].script,null,0\\)\\);}catch\\(e\\){console.log\\('node-yaml unavailable:',e.message.split\\('\\\\n'\\)[0]\\)}\")",
       "Bash(git -C /d/TecShare/AITraining/repo rev-parse --abbrev-ref HEAD)",
       "Bash(git -C /d/TecShare/AITraining/repo diff .claude/settings.json)",
-      "Bash(git commit -m 'ci: Add GitLab pipeline to build & push backend API image *)"
+      "Bash(git commit -m 'ci: Add GitLab pipeline to build & push backend API image *)",
+      "Bash(node .gitnexus/run.cjs detect-changes --scope all --repo . --limit 200)",
+      "Bash(grep -E \"→.*\\\\.cs$\")",
+      "Bash(git worktree *)",
+      "Bash(node .gitnexus/run.cjs detect-changes --scope compare --base-ref develop --repo .)",
+      "Bash(cat > *)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\chengmu\\AppData\\Local\\Temp"
+      "C:\\Users\\chengmu\\AppData\\Local\\Temp",
+      "\\tmp"
     ]
   }
 }
