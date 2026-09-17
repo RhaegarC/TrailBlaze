@@ -7,7 +7,7 @@ Source: STANDARD §12.2 · Discharges via: — (orphaned) · Opened: 2026-09-17 
 
 `DatabaseRepository.DeleteAsync` takes a list of ids and issues one `FindAsync` per id, then a
 single `SaveChangesAsync` with no transaction around the batch —
-[DatabaseRepository.cs:73-89](../../src/api/TrailBlaze.Repository/DatabaseRepository.cs#L73-L89):
+[DatabaseRepository.cs:73-91](../../src/api/TrailBlaze.Repository/DatabaseRepository.cs#L73-L91):
 
 ```csharp
 foreach (var id in ids)
@@ -57,7 +57,8 @@ against it, which is the argument for fixing it before 04 rather than after.
 Checked against the code 2026-09-17.
 
 - The loop and the untransacted `SaveChangesAsync` are at
-  [DatabaseRepository.cs:75-88](../../src/api/TrailBlaze.Repository/DatabaseRepository.cs#L75-L88).
+  [DatabaseRepository.cs:75-89](../../src/api/TrailBlaze.Repository/DatabaseRepository.cs#L75-L89)
+  (repointed when item 01 landed; the anchors elsewhere in this file are from before that).
 - STANDARD §4 already names this defect as the worked example of a rule it states: "never start a
   task inside a loop that touches the `DbContext`. See section 12 for a batch-write bug of exactly
   this shape found in the repository"
@@ -95,11 +96,12 @@ inspected without a connection, so the round-trip count can be asserted rather t
 
 ## Out of scope / related
 
-- **Item [01](01-audit-columns-have-two-writers.md)** touched the same method and is now landed: it
-  deleted the dead `"sys"` writes that sat at lines 81–82, so `DeleteAsync` is two lines shorter and
-  the line anchors elsewhere in this file predate that. Fixing 02 will edit the same method, and its
-  redesign deserves its own RED-first evidence — the caveat being that 01 was a deletion and changed
-  no behaviour, which 02 does.
+- **Item [01](archive/01-audit-columns-have-two-writers.md)** touched the same method and is now
+  archived (PR #8): it deleted the dead `"sys"` writes that sat at lines 81–82, so `DeleteAsync` is
+  two lines shorter and the line anchors elsewhere in this file predate that. Fixing 02 will edit the
+  same method, and its redesign deserves its own RED-first evidence — the caveat being that 01 was a
+  deletion and changed no behaviour, which 02 does. **01's `verification-only` close is not a
+  precedent for this item**: 02 changes behaviour, so it is `testable` and owes a red test first.
 - **Item [16](16-unreferenced-scaffolding.md)** covers the broader question of committed-but-unused
   repository surface; this item is the case where the unused code is also wrong.
 - **Soft delete semantics** (item [05](05-soft-delete-recorded-as-modified.md)) are adjacent but

@@ -19,11 +19,9 @@ names. Features number by priority because a scan reads the number
 
 | # | Debt (file) | Kind | Impact | Area | Discharges via | Status |
 |---|---|---|---|---|---|---|
-| 01 | [Audit columns have two writers](01-audit-columns-have-two-writers.md) | correctness | silent-wrong | Audit | — (orphaned) | open |
 | 02 | [`DeleteAsync` does N round trips, untransacted](02-deleteasync-n-round-trips.md) | correctness | silent-wrong | Persistence | — (orphaned) | open |
 | 04 | [`UserController` violates the route convention](04-usercontroller-route-convention.md) | correctness | friction | Api | — (orphaned) | open |
 | 05 | [A soft delete is recorded as `"Modified"`](05-soft-delete-recorded-as-modified.md) | correctness | silent-wrong | Audit | — (orphaned) | open |
-| 06 | [Timestamp types are inconsistent](06-timestamp-types-inconsistent.md) | correctness | silent-wrong | Audit | **01** | open |
 | 07 | [The `.http` file requests `/weatherforecast/`](07-http-file-requests-weatherforecast.md) | hygiene | cosmetic | Api | — (orphaned) | open |
 | 11 | [There is no CI or deployment pipeline](11-no-ci-pipeline.md) | capability | blocks | Workflow | — (orphaned) | open |
 | 12 | [Feature 02's tests were deferred](12-feature-02-tests-deferred.md) | test-gap | blocks | Tests | 11 (in part) | open |
@@ -69,10 +67,11 @@ the case where there is one. If an item is failing *now* — or if anything woul
 an Entra object id reach the wrong caller — it is not debt, it is a bug: file it with
 `/capture bug` and fix it with the `bug-fix` agent, where a privacy failure is Critical by default.
 
-The boundary is observable rather than a matter of taste. Item 01 writes the same field twice, and
-the **correct** writer wins, so nothing a caller sees is wrong — that is the definition of an item
-that belongs here. If the dead write were the one that won, it would be a bug. When you cannot tell
-which of the two you have, you have a bug.
+The boundary is observable rather than a matter of taste.
+[Item 01](archive/01-audit-columns-have-two-writers.md) wrote the same field twice and the
+**correct** writer won, so nothing a caller saw was wrong — that is the definition of an item that
+belongs here, and it is the register's worked example. Had the dead write been the one that won, it
+would have been a bug. When you cannot tell which of the two you have, you have a bug.
 
 ## Discharges via
 
@@ -82,7 +81,9 @@ register that quietly races the feature work already fixing the same code.
 - **`feature NN`** — that feature's PR is expected to close this. **Do not fix it independently**;
   that branch is already changing that code, and the two will conflict for no reason.
 - **another debt number** (`01`) — this item is a *facet* of that one, not a second repair. Fix 01
-  and this closes with it.
+  and this closes with it, even when the facet needs no edit of its own:
+  [item 06](archive/06-timestamp-types-inconsistent.md) closed exactly that way, discharged by 01
+  because the inconsistency lived inside the lines 01 deleted.
 - **`— (orphaned)`** — nothing claims it. These are the ones that need an owner, and they are the
   reason this register exists.
 
@@ -109,7 +110,9 @@ disappearing, and `sprint-status` warning that "all tests passing" is weaker tha
 
 | # | Item | Resolved | By |
 |---|---|---|---|
+| 01 | [Audit columns had two writers](archive/01-audit-columns-have-two-writers.md) | 2026-09-17 | PR #8 |
 | 03 | [Migrations were Npgsql-shaped](archive/03-migrations-npgsql-shaped.md) | feature 01 | PR #3 |
+| 06 | [Timestamp types were inconsistent](archive/06-timestamp-types-inconsistent.md) | with item 01, no separate change | PR #8 |
 | 08 | [`SampleTemplate/placeholder.txt`](archive/08-sampletemplate-placeholder.md) | upstream template | — |
 | 09 | [`DbConnection` was accepted empty](archive/09-dbconnection-accepted-empty.md) | feature 01 | PR #3 |
 | 10 | [Namespaces were block-scoped](archive/10-block-scoped-namespaces.md) | 2026-09-16 | — |
@@ -128,8 +131,12 @@ disappearing, and `sprint-status` warning that "all tests passing" is weaker tha
 
 Impact first, then whoever is closest to the code already. The four that repay a first hour most:
 **[20](20-lastmodified-unset-on-insert.md)** (silent-wrong, one assertion and one branch, and it
-forces a schema decision worth making deliberately), **[01](01-audit-columns-have-two-writers.md)**
-(silent-wrong, a deletion rather than a design), **[13](13-description-too-long-hardcoded.md)**
+forces a schema decision worth making deliberately), **[05](05-soft-delete-recorded-as-modified.md)**
+(silent-wrong, and it is the one item whose cost grows every day it stays open — it can only be fixed
+without a backfill while no history exists), **[13](13-description-too-long-hardcoded.md)**
 (friction, one line, testable), and **[17](17-allowedorigins-duplicated.md)** (silent-wrong, and the
 duplication already misbehaves between profiles). **[11](11-no-ci-pipeline.md)** blocks the most and
 is the largest.
+
+Item [01](archive/01-audit-columns-have-two-writers.md) and its facet
+[06](archive/06-timestamp-types-inconsistent.md) were the first two off this list, closed by PR #8.

@@ -284,7 +284,7 @@ keep it. That is the same discretion the key rule above gives to imports.
 
 Writing these by hand is not redundant but **wrong**: it leaves dead code that reads as though it
 were load-bearing. That was the defect in
-[item 01](../../docs/tech-debt/01-audit-columns-have-two-writers.md), where
+[item 01](../../docs/tech-debt/archive/01-audit-columns-have-two-writers.md), where
 `DatabaseRepository.DeleteAsync` wrote `LastModifiedOn` and `LastModifiedBy = "sys"` into a save the
 interceptor restamped anyway. Those two assignments are gone and the method now sets only
 `IsDeleted`, which is the whole of what a soft delete does. See
@@ -622,12 +622,12 @@ never change — so a reference to "§12.N" written before the move still resolv
 
 | Was | Now | State |
 |---|---|---|
-| 12.1 Audit columns are not maintained | [01 — Audit columns have two writers](../../docs/tech-debt/01-audit-columns-have-two-writers.md) | **open**, and the claim was false — see below |
+| 12.1 Audit columns are not maintained | [01 — Audit columns had two writers](../../docs/tech-debt/archive/01-audit-columns-have-two-writers.md) | archived — a verified close, PR #8; the claim was false — see below |
 | 12.2 `DeleteAsync` issues one `FindAsync` per id | [02 — `DeleteAsync` does N round trips, untransacted](../../docs/tech-debt/02-deleteasync-n-round-trips.md) | open |
 | 12.3 Migrations were Npgsql-shaped | [03 — Migrations were Npgsql-shaped](../../docs/tech-debt/archive/03-migrations-npgsql-shaped.md) | archived — feature 01, PR #3 |
 | 12.4 `UserController` diverges from the route convention | [04 — `UserController` violates the route convention](../../docs/tech-debt/04-usercontroller-route-convention.md) | open |
 | 12.5 A soft delete is recorded as `"Modified"` | [05 — A soft delete is recorded as `"Modified"`](../../docs/tech-debt/05-soft-delete-recorded-as-modified.md) | open |
-| 12.6 Timestamps are inconsistent | [06 — Timestamp types are inconsistent](../../docs/tech-debt/06-timestamp-types-inconsistent.md) | open — a facet of 01 |
+| 12.6 Timestamps are inconsistent | [06 — Timestamp types were inconsistent](../../docs/tech-debt/archive/06-timestamp-types-inconsistent.md) | archived — a facet of 01, no change of its own |
 | 12.7 `TrailBlaze.Api.http` requests `/weatherforecast/` | [07 — The `.http` file requests `/weatherforecast/`](../../docs/tech-debt/07-http-file-requests-weatherforecast.md) | open |
 | 12.8 `SampleTemplate/placeholder.txt` | [08 — `SampleTemplate/placeholder.txt`](../../docs/tech-debt/archive/08-sampletemplate-placeholder.md) | archived — the template is not here |
 | 12.9 `DbConnection` is accepted empty | [09 — `DbConnection` was accepted empty](../../docs/tech-debt/archive/09-dbconnection-accepted-empty.md) | archived — feature 01, PR #3 |
@@ -648,14 +648,16 @@ the old wording should know which half of it to discard.
   [20](../../docs/tech-debt/20-lastmodified-unset-on-insert.md)). What was actually wrong was that
   there were **two writers** — `DatabaseRepository.DeleteAsync` set `LastModifiedOn` and
   `LastModifiedBy = "sys"`, and the interceptor overwrote both on the same save, so the repository's
-  writes were dead. Not "unmaintained columns" but "a dead writer", which is item 01, and that dead
-  writer is now deleted.
+  writes were dead. Not "unmaintained columns" but "a dead writer", which is
+  [item 01](../../docs/tech-debt/archive/01-audit-columns-have-two-writers.md), and that dead writer
+  is now deleted.
 - **12.6's type claim was right and §3's was wrong.** The columns are `DateTimeOffset`; §3 called
   them `DateTime` and added a second claim that they were not yet maintained. §3 is corrected in the
   same pull request as this pointer.
 
-Four items (12.3, 12.8, 12.9, 12.10) had already resolved before the move and carry their history in
-`archive/`. Item 12.10 in particular is kept rather than deleted: it is the clearest example in this
+Four items (12.3, 12.8, 12.9, 12.10) had already resolved before the move, and two more (12.1, 12.6)
+have resolved since; all six carry their history in `archive/`. Item 12.10 in particular is kept
+rather than deleted: it is the clearest example in this
 repository of a divergence that stayed open because it was deferred as mechanical — and it widened
 meanwhile, because feature 01's new files copied the style that was there.
 
