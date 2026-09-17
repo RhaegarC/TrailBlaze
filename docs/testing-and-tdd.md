@@ -14,9 +14,15 @@ The API is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBla
 xUnit test project (`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`,
 `TrailBlaze.Service.Test`). New tests go in the project matching the layer they exercise.
 
-**Current state (2026-09-16).** The harness is in place. Each `*.Test` project references the
+**Current state (2026-09-17).** The harness is in place. Each `*.Test` project references the
 layer it exercises and `dotnet test` discovers tests in all three: 42 runnable, of which the one
 tagged `Category=StorageIntegration` skips without credentials, leaving 41 passing by default.
+
+**But the count is not the coverage.** The one product slice that has shipped — feature 02's profile
+routes, avatar upload and upload validator — has no tests at all; they were deliberately deferred.
+[Item 12](tech-debt/12-feature-02-tests-deferred.md) tracks writing them, and records why the gap is
+the dangerous kind: an untested guard everyone believes is tested is worse than one known to be
+untested. Read these numbers as "the foundation is green".
 
 `TestSupport/AuditHarness.cs` and `TestSupport/FakeUserContext.cs` live in
 `TrailBlaze.Repository.Test`; `TestSupport/FakeStorageRepository.cs` lives in
@@ -82,6 +88,25 @@ fake proves the caller's logic, not the blob implementation — so anything Azur
 
 These are the places where a passing test suite is the only evidence the app is not quietly
 serving private media to the wrong person.
+
+### When there is no behaviour to drive
+
+A correct change does not always have runtime behaviour to test. Two further shapes are sanctioned,
+so that such a change is not forced into a test that cannot fail
+([STANDARD.md](../src/api/STANDARD.md) §10):
+
+- **`doc-assertion`** — the change protects a durable property of a *file*: "every command is listed
+  in the README", "no permission entry names another repository". Write a test that reads the file
+  and asserts the property, and confirm it goes red when the file is reverted. It is a real test with
+  a real failure mode.
+- **`verification-only`** — nothing can be asserted at all: a workflow file, a deployment step, a
+  request line in a `.http` file. Record what was run and observed in a `Verification:` line, and say
+  in the pull request why there is no test. **Do not invent a test that cannot fail** to make the
+  change look finished.
+
+A verified claim and a tested claim are different strengths of claim, and the
+[debt register](tech-debt/00-debt-log.md) labels every item with which of the three applies rather
+than letting them read alike.
 
 ## Commands
 

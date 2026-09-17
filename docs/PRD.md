@@ -157,9 +157,9 @@ tables. They are drawn once, here, rather than repeated in the diagram:
 |---|---|---|
 | `Id` | string (GUID) | PK — **assigned by the application at construction**, not by the database |
 | `CreatedBy` | string, nullable | caller identity at insert |
-| `CreatedOn` | datetimeoffset | set at insert, then immutable. Not yet stamped on every write path — see STANDARD.md §12 |
+| `CreatedOn` | datetimeoffset | stamped by `AuditSaveChangesInterceptor` at insert, then not touched again — so it **is** stamped on every write path. The defect is a second, dead writer on the delete path: [item 01](tech-debt/01-audit-columns-have-two-writers.md) |
 | `LastModifiedBy` | string, nullable | caller identity at the last update |
-| `LastModifiedOn` | datetimeoffset | set at insert and on every update |
+| `LastModifiedOn` | datetimeoffset | set on every update, but **not** at insert — a row that has never been updated carries `default(DateTimeOffset)`, i.e. the year 1: [item 20](tech-debt/20-lastmodified-unset-on-insert.md) |
 | `IsDeleted` | bit, nullable | soft delete — a global query filter hides `true` rows by default |
 
 The `users` row is the one exception to the `Id` rule: see the open key-shape decision below the
@@ -375,9 +375,10 @@ non-`Public` row per page. Both producers go through the same repository method,
 the read-only scope stay single-sourced (feature 07).
 
 The `/user/...` routes are stated here in lowercase for readability; the implemented controller
-uses the ASP.NET `[controller]` token, which yields `/User/me`. That casing divergence is a
-known inconsistency tracked in [src/api/STANDARD.md](../src/api/STANDARD.md) §12, not a second
-route.
+uses the ASP.NET `[controller]` token, which yields `/User/me`. That casing divergence is a known
+inconsistency tracked as [item 04](tech-debt/04-usercontroller-route-convention.md), not a second
+route — and its repair is a **breaking route change**, so it is sequenced before anything consumes
+these paths (features 10 and 11 both do).
 
 ## Deployment
 

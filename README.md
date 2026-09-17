@@ -10,9 +10,10 @@ decides who may *edit* an entry rather than who may read it.
 
 | Document | What it holds |
 |---|---|
-| [docs/PRD.md](docs/PRD.md) | The product definition — 25 logged decisions, the canonical data model, the permission matrix, and the API surface |
+| [docs/PRD.md](docs/PRD.md) | The product definition — 30 logged decisions, the canonical data model, the permission matrix, and the API surface |
 | [docs/features/00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) | The 11-feature ladder, dependency order, and the Definition of Done |
 | [docs/testing-and-tdd.md](docs/testing-and-tdd.md) | Test tiers and the RED → GREEN → refactor discipline |
+| [docs/tech-debt/00-debt-log.md](docs/tech-debt/00-debt-log.md) | Known divergences between the code and the standard, and who owns each |
 | [docs/features/backlog.md](docs/features/backlog.md) | Ideas that are *not* yet features |
 
 ## Stack
@@ -32,10 +33,11 @@ decides who may *edit* an entry rather than who may read it.
 The workflow lives in `.claude/` and runs on slash commands:
 
 ```
-/capture feature NN   # stress-test an idea into a spec
+/capture <kind> NN    # a spec, a bug report, or a debt item
 /next                 # pick the lowest-numbered feature and implement it TDD
 /implement NN         # implement a specific feature
 /add-test NN          # RED only — write the missing tests
+/list-features        # every feature with its priority and status
 /sprint-status        # progress, DoD, branches, open PRs
 /archive NN           # after the PR merges
 ```
@@ -83,12 +85,15 @@ pointed somewhere else would migrate the wrong database and report success.
 
 ## Three things to know before you start
 
-1. **The suite is real but shallow.** `dotnet test` from `src/api/` runs 31 tests across the three
-   tiers, 30 of them by default — the storage-integration test skips without
+1. **The suite is real but shallow.** `dotnet test` from `src/api/` runs 42 tests across the three
+   tiers, 41 of them by default — the storage-integration test skips without
    `TRAILBLAZE_STORAGE_CONNECTION`, and only it exercises the real Azure implementation. What is
-   covered today is the foundation: the audit interceptor, the soft-delete filter, the model's
-   agreement with its migration snapshot, storage routing at unit level, and the host's startup
-   rules. No product behaviour is covered, because none exists yet.
+   covered is the foundation: the audit interceptor, the soft-delete filter, the model's agreement
+   with its migration snapshot, storage routing at unit level, and the host's startup rules. The one
+   product slice that has shipped — feature 02's profile routes, avatar upload and upload validator —
+   is **not** covered: its tests were deliberately deferred, and
+   [item 12](docs/tech-debt/12-feature-02-tests-deferred.md) tracks writing them. "Green" here means
+   the foundation is green.
 2. **`develop` is not deployable until feature 09 merges.** Features 04–08 build the CRUD and
    media mechanics while every signed-in user can still write anything; 09 imposes the ownership
    and admin rules. See the sequencing note in the sprint file.

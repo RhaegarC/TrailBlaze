@@ -71,6 +71,15 @@ git checkout -b feature/[number]-[feature-name]
   - For nits or suggestions, use your judgment
 7. Update documentation if needed
   - if the schema changed, update the [data model](../../docs/PRD.md#data-model) in `docs/PRD.md` and the feature file
+8. Update the debt register — **reciprocity, and skipping it is how the register drifts**
+  ([docs/tech-debt/00-debt-log.md](../../docs/tech-debt/00-debt-log.md))
+  - If this feature **discharged** an item — its `Discharges via` names this feature — resolve it in
+    this PR: `git mv` the item to `docs/tech-debt/archive/`, set its `Status`, and update the
+    register's open and archive tables.
+  - If the feature changed code an item describes but did **not** discharge it, correct that item's
+    `Evidence` and stamp `Last verified`. The divergence may now be gone (retire it) or now different
+    (say so) — either way, an item whose evidence was written against the old code is a claim nobody
+    has checked.
 
 #### Phase 6: Commit & Push
 
@@ -119,7 +128,14 @@ git push -u origin feature/[number]-[feature-name]
 1. Verify the feature PR is merged to `develop`
 2. Move the completed feature file to `docs/features/archive/`
 3. Update sprint tracking (if applicable) — the Definition of Done in `docs/features/00-mission-1-sprint.md`
-4. Switch back to `develop` and sync with the remote: `git checkout develop && git pull --prune origin develop`
-5. Delete the merged feature branch locally: `git branch -D feature/[number]-[feature-name]` (the remote branch is auto-deleted when the PR merges)
+4. **Settle the feature's debt, before the branch goes away.** Scan the register for open items whose
+   `Discharges via` names this feature, and close the loop on each: discharge it (archive the item,
+   update both tables) or release it — clear the field so the row reads `— (orphaned)` again and it
+   gets an owner instead of pointing at a feature that has already shipped without it. **Archiving
+   the feature is not evidence it discharged anything**, and this seam is the one nothing else
+   watches: a feature can archive with a green suite while the items it owned become nobody's
+   problem. If nothing named it, say so — that is a result, not a skipped step.
+5. Switch back to `develop` and sync with the remote: `git checkout develop && git pull --prune origin develop`
+6. Delete the merged feature branch locally: `git branch -D feature/[number]-[feature-name]` (the remote branch is auto-deleted when the PR merges)
 
 **Reporting:** when you finish, report a concise summary — feature implemented, test results, files changed, and the PR URL — and state clearly which phases you completed. Phases 6–7 run automatically after Phase 5; do not pause before committing to ask for approval. Review happens in the pull request, and a PR may be merged only once every review comment on it has been addressed — never merge without explicit approval.

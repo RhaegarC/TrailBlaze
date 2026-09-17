@@ -22,3 +22,10 @@ Numbering is Project #1 (Mission 1 — TrailBlaze Activity Journal).
 reachable without authentication, or where a SAS URL is issued to an unauthorized caller, is
 Critical regardless of how small the repro appears — the whole public-text/private-media split
 rests on that boundary holding. See [.claude/agents/bug-fix.md](../../.claude/agents/bug-fix.md).
+
+**The mirror of that rule is the tech-debt register.** A divergence nobody can observe — the code
+and the standard disagree, but every caller still sees correct behaviour — is **debt, not a bug**,
+and it does not belong in this log or on a `fix/*` branch: file it with `/capture debt` at
+[docs/tech-debt/00-debt-log.md](../tech-debt/00-debt-log.md). The register states the boundary as an
+observable test, which is why the two lists can be told apart at all — and why filing the same
+defect in both is a mistake rather than caution.
