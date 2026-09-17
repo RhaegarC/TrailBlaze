@@ -33,7 +33,7 @@ decides who may *edit* an entry rather than who may read it.
 The workflow lives in `.claude/` and runs on slash commands:
 
 ```
-/capture feature NN   # stress-test an idea into a spec
+/capture <kind> NN    # a spec, a bug report, or a debt item
 /next                 # pick the lowest-numbered feature and implement it TDD
 /implement NN         # implement a specific feature
 /add-test NN          # RED only — write the missing tests
