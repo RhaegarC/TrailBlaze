@@ -283,9 +283,11 @@ A value written in a repository method beforehand is therefore **discarded on th
 keep it. That is the same discretion the key rule above gives to imports.
 
 Writing these by hand is not redundant but **wrong**: it leaves dead code that reads as though it
-were load-bearing. That is the defect in
+were load-bearing. That was the defect in
 [item 01](../../docs/tech-debt/01-audit-columns-have-two-writers.md), where
-`DatabaseRepository.DeleteAsync` still writes `LastModifiedOn` and `LastModifiedBy = "sys"`. See
+`DatabaseRepository.DeleteAsync` wrote `LastModifiedOn` and `LastModifiedBy = "sys"` into a save the
+interceptor restamped anyway. Those two assignments are gone and the method now sets only
+`IsDeleted`, which is the whole of what a soft delete does. See
 section 5 for what `Actor` resolves to and why it is not always the caller.
 
 ---
@@ -639,11 +641,15 @@ Both are the same failure — a claim about the code that no longer matched the 
 found by re-checking rather than by reading. They are recorded here because a reader who remembers
 the old wording should know which half of it to discard.
 
-- **12.1 was false, and the truth is narrower.** The columns are maintained: the interceptor stamps
-  all four on every save, and `AuditTests` proves it. What is actually wrong is that there are **two
-  writers** — `DatabaseRepository.DeleteAsync` still sets `LastModifiedOn` and
-  `LastModifiedBy = "sys"`, and the interceptor overwrites both on the same save. The repository's
-  writes are dead. Not "unmaintained columns" but "a dead writer", which is item 01.
+- **12.1 was false, and the truth is narrower.** The columns are maintained — `AuditTests` proves it
+  — though not uniformly: the interceptor stamps `CreatedOn`/`CreatedBy` on `Added` and
+  `LastModifiedOn`/`LastModifiedBy` on `Modified`, so a row that has never been updated keeps its
+  sentinel `LastModifiedOn` outright (item
+  [20](../../docs/tech-debt/20-lastmodified-unset-on-insert.md)). What was actually wrong was that
+  there were **two writers** — `DatabaseRepository.DeleteAsync` set `LastModifiedOn` and
+  `LastModifiedBy = "sys"`, and the interceptor overwrote both on the same save, so the repository's
+  writes were dead. Not "unmaintained columns" but "a dead writer", which is item 01, and that dead
+  writer is now deleted.
 - **12.6's type claim was right and §3's was wrong.** The columns are `DateTimeOffset`; §3 called
   them `DateTime` and added a second claim that they were not yet maintained. §3 is corrected in the
   same pull request as this pointer.

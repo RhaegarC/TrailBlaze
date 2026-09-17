@@ -8,8 +8,10 @@ Source: STANDARD §12.1 · Discharges via: — (orphaned) · Opened: 2026-09-17 
 Two code paths write the same audit fields on a soft delete, and the one that runs second
 overwrites the first.
 
-`DatabaseRepository.DeleteAsync` writes them by hand —
-[DatabaseRepository.cs:80-83](../../src/api/TrailBlaze.Repository/DatabaseRepository.cs#L80-L83):
+`DatabaseRepository.DeleteAsync` wrote them by hand. The two assignments below were deleted on
+2026-09-17; what sits at
+[DatabaseRepository.cs:80-83](../../src/api/TrailBlaze.Repository/DatabaseRepository.cs#L80-L83)
+now is the comment that replaced them, so the anchor names the identifiers it is describing:
 
 ```csharp
 item.IsDeleted = true;
@@ -59,20 +61,38 @@ Checked against the code 2026-09-17.
 - Existing tests already prove it works: `An_insert_stamps_the_audit_columns`
   (`AuditTests.cs:64-75`) and `A_modified_entity_is_recorded_as_modified_and_stamped`
   (`AuditTests.cs:180-195`). Both pass today.
+- **Re-verified 2026-09-17, and the guard is weaker than the Testability section claims.** Those two
+  tests prove the *interceptor's* `Added`/`Modified` paths; neither calls
+  `DatabaseRepository.DeleteAsync`. The soft-delete method has **no test at all** — nothing in
+  `TrailBlaze.Repository.Test` invokes it — so they are the reasoning behind this deletion rather
+  than a guard on it. The deletion is neutral because the `Modified` case assigns both fields
+  unconditionally on the same save. That is an argument, not an assertion, and the close checklist
+  below is corrected to say so.
 - `DeleteAsync` has no caller in production code — no `Activity` entity exists yet — so the dead
   branch is currently unreachable, which is why nothing has ever noticed.
 
 ## Testability
 
-**testable**, in two parts, because the repair is a deletion:
+**Taken as `verification-only` on 2026-09-17**, replacing the `testable` this item was filed with.
+No behavioural test can distinguish before from after — the interceptor makes the two identical at
+the database, which is the point of the item — so a test written for this deletion would be the
+STANDARD §10 violation rather than the fix.
+
+The item was filed as **testable**, in two parts, because the repair is a deletion:
 
 1. **The deletion is behaviour-neutral**, so it needs no new test and a new test would be a lie —
-   STANDARD §10's "a test that cannot fail is not a test" applies. The guard is that the existing
-   `AuditTests` stay green: if either goes red, the writes were not dead and this item's premise is
-   wrong. That is the check to run first, before editing anything.
+   STANDARD §10's "a test that cannot fail is not a test" applies. The guard is `dotnet test` before
+   and after: if any test moved, the writes were not dead and this item's premise was wrong. That is
+   the check to run first, before editing anything.
 2. **The doc claim is assertable** (`doc-assertion`): a test that fails if STANDARD §3 or §12 states
    the audit columns are unmaintained. That is the artifact that would have caught this item a month
    earlier, and item [19](19-doc-indexes-drifted.md) is where the general mechanism belongs.
+
+Part 2 is **not written here**, and the reason is scope rather than capability: STANDARD §10 already
+sanctions the form, so nothing needs inventing — item 19 is the item that designs the mechanism, and
+one hand-rolled assertion inside a deletion PR is not that design. It is recorded rather than
+quietly dropped, because without it the §3 sentence this PR corrects ships with exactly the
+guarantee it had before.
 
 ## Repair plan
 
@@ -100,10 +120,19 @@ Checked against the code 2026-09-17.
 
 ## Close checklist
 
+- [ ] **Verification (required by the register for a `verification-only` close):** `dotnet test` run
+      before and after the change — 41 passed, 1 skipped, 42 total, both times, with no test moving —
+      and `grep -rn "[^f]DateTime\.UtcNow" src/api/` returning nothing, so no divergent write
+      survives anywhere in the API. Those two observations are the whole of the evidence: the
+      deletion itself is asserted by nothing, and this line is what says so out loud.
 - [ ] `AuditTests` green before the change (premise check) and after (no regression)
-- [ ] Lines 81–82 of `DatabaseRepository.cs` deleted
-- [ ] `LastModifiedBy` in the database is still the caller, not `"sys"` — confirmed via the existing
-      audit assertion, which is the evidence the deletion was safe
+- [ ] The two `LastModifiedOn`/`LastModifiedBy` assignments deleted from `DatabaseRepository.DeleteAsync`
+      (lines 81–82 before the change; the file now carries a comment in their place)
+- [ ] `LastModifiedBy` after a soft delete is still the caller, not `"sys"`. **Corrected 2026-09-17:
+      this cannot be confirmed by the existing audit assertion, because none covers `DeleteAsync`.**
+      It is verified by reasoning instead — the interceptor's `Modified` case assigns both fields
+      unconditionally — and the unchecked box is deliberate. Covering that method belongs with
+      [feature 04](../../docs/features/04-activity-crud.md), which is what first calls it.
 - [ ] STANDARD §3 and §12.1 corrected in the same PR
 - [ ] Item [06](06-timestamp-types-inconsistent.md) moved to resolved
 - [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)
