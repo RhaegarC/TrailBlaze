@@ -54,8 +54,8 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
 
             using var http = new HttpClient();
 
-            // Content type is asserted here or nowhere: the unit-tier fake discarded it, so
-            // nothing else in the suite would notice the upload losing its headers and
+            // Content type is asserted here or nowhere: the deleted unit-tier fake discarded
+            // it, so nothing else in the suite would notice the upload losing its headers and
             // serving every image as an opaque download.
             HttpResponseMessage response = await http.GetAsync(readUrl);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);

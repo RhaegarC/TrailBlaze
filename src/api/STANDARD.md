@@ -394,12 +394,24 @@ then user-secrets, then environment variables, then command line. Later sources 
   dotnet user-secrets set "DbConnection" "Server=tcp:<server>.database.windows.net,1433;Initial Catalog=TrailBlaze;User ID=<user>;Password=<password>;Encrypt=True;TrustServerCertificate=False"
   ```
 
-- **Every environment uses the real Azure SQL Database, not a local stand-in.** Azure SQL Database
-  is managed and has no image to run, so there is no `docker-compose.yml` and no database
-  container: local development is `dotnet run` against the real server, and the API is deployed to
-  Azure Container Apps from `src/api/Dockerfile`. Two things follow — the SQL Server's firewall
-  must allow the caller, and the connection string carries `Encrypt=True` without
-  `TrustServerCertificate=True`, since there is no self-signed certificate to accept.
+- **Every environment runs against the real Azure SQL Database, not a local stand-in.** Azure SQL
+  Database is managed and has no image to run: local development is `dotnet run` against the real
+  server, and the API is deployed to Azure Container Apps from `src/api/Dockerfile`. The SQL
+  Server's firewall must allow the caller. There is no `docker-compose.yml` and none is wanted —
+  neither deployment target consumes a local multi-service stack, so a compose file claiming to
+  stand in for one would be fiction. (`docker-compose.test.yml` is not that: it starts no
+  application process, serves only the test tier, and §10 covers it.)
+
+- **The application's connection string carries `Encrypt=True` without
+  `TrustServerCertificate=True`**, since a managed Azure SQL server presents a real certificate
+  and there is nothing self-signed to accept. **The test tier is the sole exception**, and it is
+  a narrow one: Azure SQL Edge serves a self-signed certificate while `Microsoft.Data.SqlClient`
+  6.x encrypts by default, so the *test* string must carry `TrustServerCertificate=True` or
+  `Encrypt=Optional`. That keyword never appears in `appsettings.json` or user-secrets. The
+  asymmetry is enforced rather than merely written down — `TrailBlaze.Repository.Test`'s
+  `TestEnvironment` parses a `TRAILBLAZE_SQL_CONNECTION` pointing at a loopback host and refuses
+  a string that lacks it, because the failure it prevents is a certificate error that names
+  neither the certificate nor the missing keyword.
 
 - **A missing required setting fails at startup with a message naming the setting** — not with
   a null reference when the first request arrives, and not with an exception naming a local
@@ -516,41 +528,104 @@ Tests live in the per-layer `*.Test` projects (section 1) and run with `dotnet t
 change without a test is not finished**; where tests exist in this solution, they exist because
 each one catches a specific regression that had already happened once.
 
-> **State as of 2026-09-15:** the harness exists. The three test projects reference the layer they
-> exercise and `dotnet test` discovers tests in each. `TestSupport/AuditHarness.cs` and
-> `FakeUserContext` are in `TrailBlaze.Repository.Test`; `TestSupport/FakeStorageRepository.cs` is in
-> `TrailBlaze.Service.Test`. The pattern below is what they implement.
+> **State as of 2026-09-18:** `TrailBlaze.Repository.Test` runs against two containers —
+> `azure-sql-edge` and `azure-storage-edge`, started by `docker-compose.test.yml` — and every test
+> that needs one is tagged `Category=Container` and **skips** when it cannot reach it.
+> `TrailBlaze.Api.Test` stays offline. `TrailBlaze.Service.Test` holds **no test files**: its
+> storage fake was deleted along with the rest of the fakes, and its real tests arrive with
+> features 06 and 08.
 
-### The pattern: no database required
+### Two tiers, and which one runs when
 
-EF Core runs save interception **before it opens a connection**. Point the context at a port
-nothing listens on, and the audit entries are already staged in the change tracker by the time
-the save fails — so audit behaviour is testable with no database at all. `TestSupport/AuditHarness.cs`
-is the helper that wraps this, and it wires the context through
-`AddRepositoryPersistence` rather than by hand, so tests exercise the same composition the
-application uses.
+| Tier | Needs | Consequence |
+| --- | --- | --- |
+| **Offline** | nothing | always runs |
+| **`Category=Container`** | `azure-sql-edge`, `azure-storage-edge` | skips — never fails — when unreachable |
+
+```bash
+docker compose -f docker-compose.test.yml up -d    # from src/api; reads MSSQL_SA_PASSWORD from .env
+dotnet test                                        # everything runnable
+dotnet test --filter "Category=Container"          # the container tier alone
+dotnet test --filter "Category!=Container"         # the tests touching neither container
+```
+
+**`Category=Container` is the only trait in the solution, and the two filters are not
+complements.** `Category!=Container` selects the tests that touch *neither* container — it is not
+"the offline run", because it also drops the storage tier, which runs whenever a storage endpoint
+answers, configured or not. With nothing configured at all the solution reports **31 passed, 28
+skipped** out of 59 — 27 and 28 of those in `TrailBlaze.Repository.Test`, plus 4 in
+`TrailBlaze.Api.Test`. The storage tests still run against the emulator fallback (storage needs no
+secret by design), so the 28 skips are the database tier and only it. Verified against this branch.
+
+### The database tier
+
+**`Migrate()`, never `EnsureCreated()`.** `EnsureCreated` builds the schema from the model and
+bypasses `Migrations/` entirely, so a broken migration stays broken and the test still passes — a
+test that cannot fail. It also forecloses `Migrate()` permanently: an `EnsureCreated` database has
+no `__EFMigrationsHistory`, so a later `Migrate()` tries to create tables that already exist.
+
+Each test class gets **one database of its own**, created and migrated in a fixture, dropped on
+dispose. Not one shared database, and not a transaction rolled back per test: a read-back through
+the *same* context hits EF's change tracker rather than the database, and a genuine second context
+needs a second connection in the same transaction, which needs MSDTC — absent from a Linux SQL Edge
+container. Row-level cleanup was the other candidate and is worse: this repo has no hard delete
+(`IDbRepository.DeleteAsync` is a *soft* delete), so it would mean raw SQL ordered by foreign key,
+extended by every future feature, rotting silently.
+
+A test that must build its own schema — `MigrationNarrowingTests` drives the schema to an earlier
+migration by hand — gets a database per *test* through `TrailBlazeServerFixture`, because a
+database cannot be returned to an earlier migration once anything has taken it to head.
+
+**Where the skip boundary is.** Not reaching the configured server skips; the container is simply
+not running. Everything past that is a failure, deliberately — a migration that will not apply
+against a real engine is the exact bug this tier exists to find, and degrading it to a skip would
+hide the one thing it was built for.
+
+`FakeUserContext` stands in for the HTTP-backed implementation; set the caller you want to test —
+authenticated, anonymous, or no request at all.
+
+### `Skip.IfNot` works by throwing, and that trips three things
 
 ```csharp
-[Fact]
-public void An_insert_is_recorded_with_its_key_and_table()
+[SkippableFact]                                  // NOT [Fact]
+public async Task A_soft_deleted_row_disappears()
 {
-    using var harness = new AuditHarness();
-    var order = new Order { Reference = "A-1" };
-    harness.Context.Orders.Add(order);
-
-    harness.Save();                       // fails on connection, after interception
-
-    var log = harness.SingleEntry();
-    Assert.Equal("Orders", log.TableName);
-    Assert.Equal(order.Id, log.EntityId);
+    Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
+    ...
 }
 ```
 
-`FakeUserContext` stands in for the HTTP-backed implementation; set the caller you want to
-test — authenticated, anonymous, or no request at all.
+1. **Under a plain `[Fact]` it fails the test.** `Skip.IfNot` throws `SkipException`, and only
+   `[SkippableFact]`/`[SkippableTheory]`'s runner converts that into a skip. Under `[Fact]` it is
+   an exception like any other — twelve tests went red with nothing configured before this was
+   understood.
+2. **Inside anything that catches, the skip is swallowed.** `Record.ExceptionAsync` and
+   `Assert.ThrowsAsync` catch everything, including the `SkipException`, which then comes back as
+   the exception under test; the test fails reporting the skip message as its *expected* value.
+   Resolve the fixture's client or repository **before** the recorder, never inside it.
+3. **Only the fixtures skip for you.** Branching on `IsAvailable` by hand is how a test ends up
+   either not skipping or skipping for a reason it never states.
 
-Queries can be inspected without executing them using `ToQueryString()`, which builds the SQL
-and stops.
+### What the container tier cost: one lost claim, and one that got stronger
+
+The old offline repository tier pointed EF at an unreachable port and asserted every save
+*failed*. It worked because save interception runs before a connection opens, so the staged audit
+rows were readable with no database at all.
+
+- **Lost, and not worth mourning.** That harness proved *EF runs interception before it opens a
+  connection*. That is an EF ordering guarantee, not a TrailBlaze behaviour, and it is unobservable
+  against a live server. Nothing asserts it now, and nothing should.
+- **Stronger, not merely equivalent.** The old tier read the audit rows out of the change tracker
+  that had just written them, so "the row was recorded" meant "the interceptor staged something".
+  The tier reads them back through a fresh scope, so every assertion is a round trip: SQL Server
+  accepted the write and the row is on disk.
+- **The tripwire is gone, and that is the real loss.** The old harness asserted that the save
+  *failed*, as a signal that the tier had not silently stopped testing. That job is now done by
+  the skip — which is louder, and has its own failure mode, described above.
+
+Queries can be inspected without executing them using `ToQueryString()`, which builds the SQL and
+stops. `SoftDeleteFilterTests` still does exactly that; `SoftDeleteExecutionTests` is the container
+tier that complements it, because a generated predicate and an applied one are different claims.
 
 ### Rules
 

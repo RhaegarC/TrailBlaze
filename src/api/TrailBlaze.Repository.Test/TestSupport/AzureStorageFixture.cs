@@ -28,8 +28,9 @@ public sealed class AzureStorageFixture : IAsyncLifetime
     /// <summary>
     /// The closed set from <see cref="Constant.StorageContainer"/>, listed here rather than
     /// read reflectively. Adding a container to the constant without provisioning it here is
-    /// caught by <c>StorageProvisioningTests</c>, which asks the account about each name the
-    /// constant declares.
+    /// caught by
+    /// <c>StorageContainerRoutingTests.Every_container_the_closed_set_declares_exists_on_the_account</c>,
+    /// which asks the account about each name the constant declares.
     /// </summary>
     private static readonly string[] Containers =
     [
