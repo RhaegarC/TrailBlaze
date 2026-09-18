@@ -87,6 +87,17 @@ public static class TestEnvironment
     /// </summary>
     public static string Storage() => Read(StorageConnectionVariable) ?? AzuriteConnection;
 
+    /// <summary>
+    /// Whether the storage account was named explicitly rather than falling back to the
+    /// emulator.
+    /// </summary>
+    /// <remarks>
+    /// Only used to word a skip: "nothing answered at the emulator, start it with ..." and
+    /// "the account you configured is not answering" are the same failure with two different
+    /// fixes, and the message cannot tell them apart without asking this.
+    /// </remarks>
+    public static bool StorageIsConfigured => Read(StorageConnectionVariable) is not null;
+
     /// <summary>The connection string for the container the compose file starts. Stated
     /// explicitly rather than left to defaults, because both of these are the subject of a
     /// documented contradiction — see <see cref="Validate"/>.</summary>
