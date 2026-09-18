@@ -39,9 +39,9 @@ public sealed class UserModelTests
     public void A_profile_column_is_bounded_to_its_documented_length(
         string propertyName, int expectedLength)
     {
-        using var harness = new AuditHarness();
+        using var offline = new OfflineContext();
 
-        IProperty property = PropertyOf(harness, propertyName);
+        IProperty property = PropertyOf(offline, propertyName);
 
         Assert.Equal(expectedLength, property.GetMaxLength());
     }
@@ -58,9 +58,9 @@ public sealed class UserModelTests
     public void A_preference_column_is_non_nullable_and_defaulted(
         string propertyName, string expectedDefault)
     {
-        using var harness = new AuditHarness();
+        using var offline = new OfflineContext();
 
-        IProperty property = PropertyOf(harness, propertyName);
+        IProperty property = PropertyOf(offline, propertyName);
 
         Assert.False(property.IsNullable);
         Assert.Equal(expectedDefault, property.GetDefaultValue());
@@ -74,14 +74,14 @@ public sealed class UserModelTests
     [Fact]
     public void The_avatar_path_is_nullable_because_most_users_have_no_avatar()
     {
-        using var harness = new AuditHarness();
+        using var offline = new OfflineContext();
 
-        Assert.True(PropertyOf(harness, nameof(User.AvatarBlobPath)).IsNullable);
+        Assert.True(PropertyOf(offline, nameof(User.AvatarBlobPath)).IsNullable);
     }
 
-    private static IProperty PropertyOf(AuditHarness harness, string propertyName)
+    private static IProperty PropertyOf(OfflineContext offline, string propertyName)
     {
-        IProperty? property = harness.Context.Model
+        IProperty? property = offline.Context.Model
             .FindEntityType(typeof(User))!
             .FindProperty(propertyName);
 
