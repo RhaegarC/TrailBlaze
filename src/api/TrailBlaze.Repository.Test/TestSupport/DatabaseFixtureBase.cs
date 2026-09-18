@@ -1,9 +1,6 @@
 namespace TrailBlaze.Repository.Test.TestSupport;
 
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using TrailBlaze.Repository;
 
 /// <summary>
 /// A database of this fixture's own: created, given a schema, and dropped again.
@@ -33,7 +30,7 @@ using TrailBlaze.Repository;
 /// </remarks>
 public abstract class DatabaseFixtureBase : IAsyncLifetime
 {
-    private bool _created;
+    private TestDatabase? _database;
     private ServiceProvider? _provider;
 
     /// <summary>False when there is no database to test against, in which case every test
@@ -44,17 +41,14 @@ public abstract class DatabaseFixtureBase : IAsyncLifetime
     /// <summary>Why <see cref="IsAvailable"/> is false. Empty when it is true.</summary>
     public string SkipReason { get; private set; } = string.Empty;
 
-    /// <summary>The server this fixture connected to, with whatever catalog it named.</summary>
-    public string ServerConnectionString { get; private set; } = string.Empty;
-
-    /// <summary>This fixture's own database name, unique per run so two runs cannot collide
-    /// and a stray database is obviously one that a crash failed to drop.</summary>
-    public string DatabaseName { get; private set; } = string.Empty;
+    /// <summary>This fixture's own database.</summary>
+    protected TestDatabase Database =>
+        _database ?? throw new InvalidOperationException(
+            "The fixture has not been initialized, or is unavailable. Call "
+            + "`Skip.IfNot(fixture.IsAvailable, fixture.SkipReason)` before this.");
 
     /// <summary>The connection string for this fixture's own database.</summary>
-    public string DatabaseConnectionString =>
-        new SqlConnectionStringBuilder(ServerConnectionString) { InitialCatalog = DatabaseName }
-            .ConnectionString;
+    public string DatabaseConnectionString => Database.ConnectionString;
 
     public async Task InitializeAsync()
     {
@@ -66,28 +60,22 @@ public abstract class DatabaseFixtureBase : IAsyncLifetime
             return;
         }
 
-        if (!await AnswersAsync(connection))
+        if (!await TestDatabase.AnswersAsync(connection))
         {
             Unavailable(
-                $"{TestEnvironment.SqlConnectionVariable} is set, but nothing answered at "
-                + $"{new SqlConnectionStringBuilder(connection).DataSource}. Start it with "
-                + "`docker compose -f docker-compose.test.yml up -d` from src/api.");
+                $"A connection string is set, but nothing answered at "
+                + $"{new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connection).DataSource}. "
+                + "Start it with `docker compose -f docker-compose.test.yml up -d` from src/api.");
             return;
         }
 
-        ServerConnectionString = connection;
-        DatabaseName = $"TrailBlazeTest_{Guid.NewGuid():N}";
-
-        // Bracket-quoted because an unquoted identifier is a syntax error the moment a name
-        // needs one. The value is a prefix this type wrote plus a generated GUID, never
-        // anything a caller supplied, so there is no name to sanitise.
-        await ExecuteAsync($"CREATE DATABASE [{DatabaseName}]");
-        _created = true;
+        _database = await TestDatabase.CreateAsync(connection);
 
         // Built once, after the database exists and before the schema is applied, so the
         // schema path and every test scope resolve through the same registration the
         // application uses.
-        _provider = TestPersistence.Build(DatabaseConnectionString, FakeUserContext.NoRequest());
+        _provider = TestPersistence.Build(
+            Database.ConnectionString, FakeUserContext.NoRequest());
 
         await ApplySchemaAsync();
         IsAvailable = true;
@@ -112,10 +100,9 @@ public abstract class DatabaseFixtureBase : IAsyncLifetime
     /// Brings this fixture's empty database up to the schema the tests expect.
     /// </summary>
     /// <remarks>
-    /// Abstract rather than a virtual <c>MigrateAsync</c> call because one test needs the
-    /// opposite: <c>MigrationNarrowingTests</c> has to stop at an earlier migration, insert
-    /// data the later one cannot accept, and then move forward. Sharing the create-and-drop
-    /// machinery while differing here is what lets both exist.
+    /// Abstract because not every fixture wants the same schema, or any: the migrated fixture
+    /// applies the migration set, and a fixture that only proves the server answers does
+    /// nothing here at all.
     /// </remarks>
     protected abstract Task ApplySchemaAsync();
 
@@ -127,48 +114,10 @@ public abstract class DatabaseFixtureBase : IAsyncLifetime
             _provider = null;
         }
 
-        if (!_created)
+        if (_database is not null)
         {
-            return;
-        }
-
-        _created = false;
-
-        // EF pools connections, and a pooled connection to the database being dropped blocks
-        // it. Clearing is cheaper and more reliable than waiting for the pool to age out.
-        SqlConnection.ClearAllPools();
-
-        // SINGLE_USER ... ROLLBACK IMMEDIATE evicts anything still attached. Without it the
-        // DROP fails intermittently with "database in use", which would look like flakiness
-        // rather than the cleanup it is.
-        await ExecuteAsync(
-            $"ALTER DATABASE [{DatabaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; "
-            + $"DROP DATABASE [{DatabaseName}];");
-    }
-
-    /// <summary>Runs server-scoped DDL against whatever catalog the server string named.
-    /// <c>CREATE DATABASE</c> and <c>DROP DATABASE</c> do not care which one that is.</summary>
-    private async Task ExecuteAsync(string sql)
-    {
-        await using var connection = new SqlConnection(ServerConnectionString);
-        await connection.OpenAsync();
-
-        await using SqlCommand command = connection.CreateCommand();
-        command.CommandText = sql;
-        await command.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<bool> AnswersAsync(string connectionString)
-    {
-        try
-        {
-            await using var connection = new SqlConnection(connectionString);
-            await connection.OpenAsync();
-            return true;
-        }
-        catch (SqlException)
-        {
-            return false;
+            await _database.DisposeAsync();
+            _database = null;
         }
     }
 
