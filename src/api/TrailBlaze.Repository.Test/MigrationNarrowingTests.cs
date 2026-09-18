@@ -75,7 +75,7 @@ public sealed class MigrationNarrowingTests(TrailBlazeServerFixture server)
         Exception? thrown = await MigrateOverAsync(
             database, new string('x', Constant.UserProfile.DisplayNameLength + 100));
 
-        SqlException? failure = FindSqlException(thrown);
+        SqlException? failure = SqlFailures.Find(thrown);
 
         Assert.True(
             failure is not null,
@@ -143,26 +143,5 @@ public sealed class MigrationNarrowingTests(TrailBlazeServerFixture server)
             displayName);
 
         return await Record.ExceptionAsync(() => migrator.MigrateAsync());
-    }
-
-    /// <summary>
-    /// The <see cref="SqlException"/> in an exception's inner chain, or <c>null</c>.
-    /// </summary>
-    /// <remarks>
-    /// Walked rather than caught at the throw site because EF is free to wrap a provider failure
-    /// on its way out of <c>MigrateAsync</c>, and pinning the exact wrapper would make this test
-    /// about EF's exception plumbing rather than about the data not fitting.
-    /// </remarks>
-    private static SqlException? FindSqlException(Exception? exception)
-    {
-        for (Exception? current = exception; current is not null; current = current.InnerException)
-        {
-            if (current is SqlException sql)
-            {
-                return sql;
-            }
-        }
-
-        return null;
     }
 }

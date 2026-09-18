@@ -108,8 +108,15 @@ public sealed class AzureStorageFixture : IAsyncLifetime
     /// <remarks>
     /// Skips rather than throwing when the account is absent, so a test cannot forget to check
     /// availability and fail with a connection error that says nothing about the container.
-    /// The calling test must be <c>[SkippableFact]</c> — under a plain <c>[Fact]</c> the
-    /// <c>SkipException</c> is just an exception and the test fails.
+    /// The calling test must be <c>[SkippableFact]</c> or <c>[SkippableTheory]</c> — under a
+    /// plain <c>[Fact]</c> the <c>SkipException</c> is just an exception and the test fails.
+    /// <para>
+    /// <b>Call this outside anything that catches.</b> <c>Skip.IfNot</c> works by throwing, so
+    /// inside an <c>Assert.ThrowsAsync</c> or a <c>Record.ExceptionAsync</c> the skip is caught
+    /// and handed back as the exception under test — the test then reports a failure with the
+    /// skip message as its expected value, on a machine whose only problem is that no container
+    /// is running. Resolve the client or the repository first, then wrap the call.
+    /// </para>
     /// </remarks>
     public BlobContainerClient Container(string name)
     {
@@ -119,8 +126,8 @@ public sealed class AzureStorageFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// The production implementation against this account, with the same skip contract as
-    /// <see cref="Container"/>.
+    /// The production implementation against this account, with the same skip contract and the
+    /// same "call this outside anything that catches" rule as <see cref="Container"/>.
     /// </summary>
     public AzureBlobStorageRepository Repository()
     {

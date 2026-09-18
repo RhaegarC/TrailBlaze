@@ -89,8 +89,15 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
     [SkippableFact]
     public async Task A_delete_of_something_absent_is_not_an_error()
     {
+        // Resolved before the recorder, and that ordering is load-bearing. Repository() skips
+        // by throwing a SkipException when no account answers, and Xunit.Record.ExceptionAsync
+        // catches everything -- so putting it inside would turn the skip into an exception the
+        // assertion then reports as a failure, and the tier would go red on a machine that
+        // simply has no container running.
+        AzureBlobStorageRepository storage = fixture.Repository();
+
         Exception? thrown = await Record.ExceptionAsync(
-            () => fixture.Repository().DeleteAsync(
+            () => storage.DeleteAsync(
                 Constant.StorageContainer.Media, $"integration/{Guid.NewGuid():N}.txt"));
 
         Assert.Null(thrown);
