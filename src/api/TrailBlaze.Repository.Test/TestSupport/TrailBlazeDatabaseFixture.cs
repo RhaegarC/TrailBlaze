@@ -23,10 +23,9 @@ public sealed class TrailBlazeDatabaseFixture : DatabaseFixtureBase
         // snapshot, and SoftDeleteFilterTests reads generated SQL. Two artefacts agreeing
         // with each other, neither ever applied -- which is exactly how Npgsql-shaped
         // migrations once shipped (archived item 03).
-        await using ServiceProvider provider = BuildProvider();
-        await using AsyncServiceScope scope = provider.CreateAsyncScope();
-
+        using IServiceScope scope = CreateScope();
         TrailBlazeContext context = scope.ServiceProvider.GetRequiredService<TrailBlazeContext>();
+
         await context.Database.MigrateAsync();
     }
 

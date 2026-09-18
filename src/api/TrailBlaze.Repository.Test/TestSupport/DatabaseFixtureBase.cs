@@ -34,6 +34,7 @@ using TrailBlaze.Repository;
 public abstract class DatabaseFixtureBase : IAsyncLifetime
 {
     private bool _created;
+    private ServiceProvider? _provider;
 
     /// <summary>False when there is no database to test against, in which case every test
     /// must skip rather than fail. Read it through <c>CreateHarness</c> or an equivalent that
@@ -83,9 +84,29 @@ public abstract class DatabaseFixtureBase : IAsyncLifetime
         await ExecuteAsync($"CREATE DATABASE [{DatabaseName}]");
         _created = true;
 
+        // Built once, after the database exists and before the schema is applied, so the
+        // schema path and every test scope resolve through the same registration the
+        // application uses.
+        _provider = TestPersistence.Build(DatabaseConnectionString, FakeUserContext.NoRequest());
+
         await ApplySchemaAsync();
         IsAvailable = true;
     }
+
+    /// <summary>
+    /// A scope over this fixture's database, through the application's own registration.
+    /// </summary>
+    /// <remarks>
+    /// A scope rather than a context, so the caller cannot hold one open across tests: every
+    /// call gets a fresh change tracker, which is what makes a read-back a database read
+    /// instead of a view of what the last save left in memory. The scope must be disposed by
+    /// the caller — <c>using IServiceScope scope = fixture.CreateScope()</c>.
+    /// </remarks>
+    public IServiceScope CreateScope() =>
+        (_provider ?? throw new InvalidOperationException(
+            "The fixture has not been initialized, or is unavailable. Call "
+            + "`Skip.IfNot(fixture.IsAvailable, fixture.SkipReason)` before this."))
+        .CreateScope();
 
     /// <summary>
     /// Brings this fixture's empty database up to the schema the tests expect.
@@ -98,15 +119,14 @@ public abstract class DatabaseFixtureBase : IAsyncLifetime
     /// </remarks>
     protected abstract Task ApplySchemaAsync();
 
-    /// <summary>
-    /// A provider over this fixture's database, built through the application's own
-    /// registration.
-    /// </summary>
-    protected ServiceProvider BuildProvider() =>
-        TestPersistence.Build(DatabaseConnectionString, FakeUserContext.NoRequest());
-
     public async Task DisposeAsync()
     {
+        if (_provider is not null)
+        {
+            await _provider.DisposeAsync();
+            _provider = null;
+        }
+
         if (!_created)
         {
             return;
