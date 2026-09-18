@@ -53,8 +53,13 @@ specified in [src/api/STANDARD.md](../src/api/STANDARD.md) §3 and §10, and enf
 Deployment: the API runs on **Azure Container Apps** from the image `src/api/Dockerfile` builds;
 the web app runs on **Azure Static Web Apps**, deployed by GitHub workflow. There is no
 `docker-compose.yml` — neither target consumes a multi-service local stack, so there is none.
-Azure SQL Database, Azure Blob and Entra ID are **real cloud resources** in every environment,
-including development and tests — nothing is emulated locally.
+Azure SQL Database, Azure Blob and Entra ID are **real cloud resources** in every environment the
+*application* runs in, including development — the API is never pointed at a local stand-in.
+
+**The test tier is the one exception, and it is deliberate (Decisions #5 and #6).** `dotnet test`
+runs against containers started by `src/api/docker-compose.test.yml` — SQL Edge and Azurite —
+because a test that asserts against a fake asserts about the fake. That file starts **no
+application process**; it is not the local multi-service stack the sentence above rules out.
 
 ### Current state vs. target
 
@@ -79,8 +84,8 @@ some work the ladder attributes to features 01–02 already exists:
 | Database engine | **Azure SQL Server** | **done** — `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated on SQL Server | feature 01 |
 | API hosting | ACA from a container image | **done** — `src/api/Dockerfile` builds the image, `.dockerignore` keeps local build output out of the context. No `docker-compose.yml`: neither target needs a local multi-service stack | feature 01 |
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
-| Test harness | xUnit per layer, no-database pattern ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 42 tests, 41 passing | feature 01 |
-| Blob abstraction | `IStorageRepository` with an in-memory fake, three containers | **done** — `IStorageRepository` in `TrailBlaze.Interface`, an Azure adapter in `TrailBlaze.Repository`, and the fake in `TrailBlaze.Service.Test` | feature 01 |
+| Test harness | xUnit per layer, container-backed tiers ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 59 tests, of which 31 pass and 28 skip on a machine with no containers, and all 59 pass with them up. `TrailBlaze.Service.Test` holds no tests yet | feature 01 |
+| Blob abstraction | `IStorageRepository`, three containers, no fake | **done** — `IStorageRepository` in `TrailBlaze.Interface` and the single Azure adapter in `TrailBlaze.Repository`. The storage tier runs that adapter against Azurite, so nothing stands in for it | feature 01 |
 | Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
 | Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | **done** — all five exist, bounded to the lengths in the data model. The migration that narrows `Role`/`DisplayName`/`Description` has not been applied to any database yet | feature 02 |
 | Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | **done** — all four profile routes exist and return DTOs; the behaviour behind them is implemented but **not yet covered by tests** (see [02-entra-auth.md](features/archive/02-entra-auth.md#testing-status)) | feature 02 |
@@ -121,8 +126,8 @@ Every requirement decision from the grilling session, in order:
 | 2 | Audience for activity text vs media | **Activity text is public or restricted by the entry's visibility** (see #26); **images and videos always require sign-in** — this half is unchanged and applies at every visibility level |
 | 3 | Is it one journal or many | **One shared journal** — everyone posts to one feed; visibility governs who may read an entry, ownership governs who may edit it. Private entries are an escape hatch within the shared feed, not private journals (see #26) |
 | 4 | Media storage | **Azure Blob Storage** (not local disk, not the database) |
-| 5 | Blob endpoint per environment | **Real Azure Storage account for everything**, dev and tests included |
-| 6 | Tests vs. the live Azure dependency | **Fake `IStorageRepository` in unit tests**; a separate integration tier exercises real Azure |
+| 5 | Blob endpoint per environment | **Real Azure Storage account for the application in every environment**, dev included. **Scoped 2026-09-18:** the *test* tier now runs against containers from `docker-compose.test.yml` — Azurite for storage, SQL Edge for the database — so "dev and tests included" no longer holds for tests. Decision #6 is why |
+| 6 | Tests vs. the live Azure dependency | **No fake for storage or for the database.** The tier runs the real implementations against those containers by default, and skips when they are not running. **Reversed 2026-09-18** (was: an in-memory `IStorageRepository` fake in unit tests plus a credentialed integration tier). The fake implemented the contract it was asserting, so it proved that a dictionary tolerates a key — and a fake shadows the real implementation's invariants while appearing to test them |
 | 7 | How media reaches the browser | **Short-lived SAS URLs** issued by an authenticated endpoint; container stays private |
 | 8 | Authentication | **Entra ID** |
 | 9 | Roles | **User + Admin**; admin can edit/delete any activity |
@@ -390,6 +395,12 @@ one, and local development is `dotnet run` against the real cloud resources.
 Everything the API talks to is a real cloud resource reached by configuration: **Azure SQL
 Database** (which has no container image to run locally), **Azure Blob** and **Entra ID**. Secrets
 therefore live in user-secrets locally and in pipeline variables for deployment.
+
+**The test tier is the exception, and it is a different thing from a local stack.** `dotnet test`
+starts `src/api/docker-compose.test.yml`, which brings up SQL Edge and Azurite purely so the
+database and storage tiers have an engine to speak to. It starts no application process, serves no
+request, and stands in for nothing the deployed product uses — it replaces the two *fakes* the
+suite used to carry, not the two *cloud services* the product uses.
 
 **Migrations are applied by the deployment pipeline, not at API startup.** Azure Container Apps runs
 several replicas, and replicas migrating concurrently on startup race each other over the same DDL.

@@ -4,8 +4,11 @@ using Microsoft.EntityFrameworkCore;
 using TrailBlaze.Repository.Test.TestSupport;
 
 /// <summary>
-/// The soft-delete filter, proved by inspecting generated SQL rather than by executing it —
-/// there is no database in this tier (STANDARD §10).
+/// The shape of the soft-delete filter, proved by inspecting the generated SQL. Nothing here
+/// connects, which is the point: the filter is a query-translation question, and this is the
+/// half of the answer that survives on a machine with no container. That the filter also
+/// <em>executes</em> — a deleted row disappearing from a real query — is
+/// <c>SoftDeleteExecutionTests</c>'s subject and needs a server.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -25,9 +28,9 @@ public sealed class SoftDeleteFilterTests
     [Fact]
     public void An_ordinary_query_excludes_soft_deleted_rows()
     {
-        using var harness = new AuditHarness();
+        using var offline = new OfflineContext();
 
-        string predicate = WhereClause(harness.Context.Users
+        string predicate = WhereClause(offline.Context.Users
             .Where(user => user.DisplayName == "Ada")
             .ToQueryString());
 
@@ -37,9 +40,9 @@ public sealed class SoftDeleteFilterTests
     [Fact]
     public void The_predicate_is_absent_when_the_filter_is_bypassed_explicitly()
     {
-        using var harness = new AuditHarness();
+        using var offline = new OfflineContext();
 
-        string predicate = WhereClause(harness.Context.Users
+        string predicate = WhereClause(offline.Context.Users
             .IgnoreQueryFilters()
             .Where(user => user.DisplayName == "Ada")
             .ToQueryString());
@@ -55,12 +58,12 @@ public sealed class SoftDeleteFilterTests
     [Fact]
     public void The_filter_is_applied_by_convention_and_history_is_the_exception()
     {
-        using var harness = new AuditHarness();
+        using var offline = new OfflineContext();
 
         string usersPredicate = WhereClause(
-            harness.Context.Users.Where(user => user.Id == "x").ToQueryString());
+            offline.Context.Users.Where(user => user.Id == "x").ToQueryString());
         string historyPredicate = WhereClause(
-            harness.Context.AuditLogs.Where(log => log.Id == "x").ToQueryString());
+            offline.Context.AuditLogs.Where(log => log.Id == "x").ToQueryString());
 
         Assert.Contains("IsDeleted", usersPredicate);
         Assert.DoesNotContain("IsDeleted", historyPredicate);

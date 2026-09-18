@@ -7,9 +7,20 @@ using Microsoft.AspNetCore.Mvc.Testing;
 /// Boots the real application pipeline for tests.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The application refuses to start without its required settings, so the factory supplies
-/// them. The connection strings point at a port nothing listens on: this tier asserts how
-/// the host behaves, not what the database holds, and no test here should reach a server.
+/// them. Its connection strings point at a port nothing listens on, because this tier asserts
+/// how the host behaves rather than what the database holds: none of these tests should reach
+/// a server.
+/// </para>
+/// <para>
+/// <b>That is a statement about this tier, not about the suite.</b> The unreachable string also
+/// appears in <c>TrailBlaze.Repository.Test</c>'s <c>OfflineContext</c>, and there it marks the
+/// model-metadata tests, which need a context and no connection either. The repository tier's
+/// container tests do reach a server — through their own fixtures, against the databases the
+/// compose file starts — so a reader who finds this string in more than one place should not
+/// conclude that no test anywhere talks to a database.
+/// </para>
 /// <para>
 /// Nothing has to be removed from the service collection to keep this tier offline. Migrations
 /// are applied by the deployment pipeline rather than at startup, so booting the host touches

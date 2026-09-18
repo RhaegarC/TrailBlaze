@@ -4,7 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using TrailBlaze.Repository.Test.TestSupport;
 
 /// <summary>
-/// The model and the migration set, checked without a database.
+/// The model and the migration set, checked without a database — deliberately, not for want
+/// of one. These are metadata questions, so they run on every machine including one with no
+/// container. See <see cref="OfflineContext"/>.
 /// </summary>
 public sealed class PersistenceModelTests
 {
@@ -16,23 +18,24 @@ public sealed class PersistenceModelTests
     [Fact]
     public void The_context_is_configured_for_sql_server()
     {
-        using var harness = new AuditHarness();
+        using var offline = new OfflineContext();
 
-        Assert.Equal("Microsoft.EntityFrameworkCore.SqlServer", harness.Context.Database.ProviderName);
+        Assert.Equal("Microsoft.EntityFrameworkCore.SqlServer", offline.Context.Database.ProviderName);
     }
 
     /// <summary>
     /// The migrations and the model must agree, or the schema a deployment applies is not
-    /// the schema the code expects. This is the offline equivalent of "the migration set is
-    /// current" — it compares the model to the snapshot and never connects.
+    /// the schema the code expects. This compares the model to the snapshot and never
+    /// connects; that the set also <em>applies</em> is
+    /// <c>DatabaseSchemaTests</c>'s subject, which does need a server.
     /// </summary>
     [Fact]
     public void The_model_matches_the_migration_snapshot()
     {
-        using var harness = new AuditHarness();
+        using var offline = new OfflineContext();
 
         Assert.False(
-            harness.Context.Database.HasPendingModelChanges(),
+            offline.Context.Database.HasPendingModelChanges(),
             "The model and the migration snapshot disagree. Regenerate with "
             + "`dotnet ef migrations add <name>` and commit the result.");
     }
@@ -46,9 +49,9 @@ public sealed class PersistenceModelTests
     [Fact]
     public void The_audit_snapshots_are_unbounded_strings()
     {
-        using var harness = new AuditHarness();
+        using var offline = new OfflineContext();
 
-        var entity = harness.Context.Model
+        var entity = offline.Context.Model
             .FindEntityType(typeof(TrailBlaze.Model.DatabaseEntity.AuditLog))!;
 
         string oldValues = entity.FindProperty(nameof(TrailBlaze.Model.DatabaseEntity.AuditLog.OldValues))!

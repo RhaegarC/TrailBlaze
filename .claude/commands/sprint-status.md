@@ -30,6 +30,9 @@ Present as a short table plus a two-line "next action" summary.
   can still write anything. Until feature 09 (permission enforcement) is merged, `develop` must
   not be treated as a usable environment. If 09 is not done, say so in the summary rather than
   reporting a clean-looking sprint.
-- **The storage integration tier.** It needs live Azure credentials to run. Without them, CI
-  proves the in-memory fake, not the real blob implementation — so "all tests passing" is a
-  weaker claim than it looks. Report which tier actually ran if you can tell.
+- **The container tiers, and the difference between a skip and a pass.** The database and storage
+  tiers need `docker-compose.test.yml` running; without it they **skip**, and a skip is not a pass.
+  The default `dotnet test` on a bare machine therefore reports 31 passed and 28 skipped, and
+  quoting only the pass count would overstate what ran. There is no storage fake to fall back on —
+  when the container is down, the blob implementation is simply untested. Report the skipped count
+  alongside the passed count, and never describe a run with skips as "all tests passing".

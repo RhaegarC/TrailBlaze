@@ -14,10 +14,13 @@
 /// <c>Constant.StorageContainer</c>; pass those, not string literals.
 /// </para>
 /// <para>
-/// <b>Unit tests inject an in-memory fake</b> and therefore prove the caller's logic, never
-/// the vendor implementation. Anything specific to the real backend — SAS generation,
-/// container existence, content-type round-tripping — is only proven by the tagged storage
-/// integration tier. Azure is a real dependency in every environment, including tests.
+/// <b>No fake of this contract exists, so this is not a seam a test can substitute.</b> The
+/// storage tier in <c>TrailBlaze.Repository.Test</c> exercises the real
+/// <c>AzureBlobStorageRepository</c> against a live account — Azurite by default, a real account
+/// when <c>TRAILBLAZE_STORAGE_CONNECTION</c> names one — and skips when nothing answers there.
+/// Anything specific to the backend (SAS generation, container existence, content-type
+/// round-tripping) is therefore proven, not stood in for. Azure is a real dependency in every
+/// environment, including tests.
 /// </para>
 /// </remarks>
 public interface IStorageRepository

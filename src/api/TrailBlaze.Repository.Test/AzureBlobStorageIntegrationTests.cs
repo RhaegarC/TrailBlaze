@@ -1,88 +1,105 @@
 namespace TrailBlaze.Repository.Test;
 
-using Azure.Storage.Blobs;
+using System.Net;
 using TrailBlaze.Model;
+using TrailBlaze.Repository.Test.TestSupport;
 
 /// <summary>
 /// The only tier that can speak about the real <c>IStorageRepository</c> implementation:
-/// upload, read back through a minted URL, and delete, against a live Azure Storage account.
+/// a minted signature is accepted by the server, the object comes back with its content type,
+/// and the delete really removes it.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Azure is a real cloud resource in every environment (PRD Decision #5), so this needs
-/// credentials. It is tagged <c>Category=StorageIntegration</c> and skips — never fails —
-/// when the connection string is absent, so the default <c>dotnet test</c> stays green and
-/// offline on a machine that has no account.
+/// <b>What is distinct here is that the signature works.</b>
+/// <c>StorageContainerRoutingTests</c> reads a SAS out of the URL and checks its shape and its
+/// expiry; neither proves the server accepts it. Signing is computed locally from the account
+/// key, so a wrong key, a wrong resource string or a permissions mistake all produce a
+/// perfectly well-formed URL that is refused on fetch — the failure is invisible until
+/// something fetches, which is what this does.
 /// </para>
 /// <para>
-/// Run it explicitly with credentials in the environment:
-/// <c>TRAILBLAZE_STORAGE_CONNECTION="..." dotnet test --filter Category=StorageIntegration</c>
-/// </para>
-/// <para>
-/// A unit test that stays inside the in-memory fake proves the caller's logic and nothing
-/// about this code — SAS generation, content-type round-tripping and container existence
-/// live here or nowhere.
+/// It runs against the Azurite emulator by default, which needs no credentials, and against a
+/// real account when <c>TRAILBLAZE_STORAGE_CONNECTION</c> names one. Both reach the same code;
+/// only the account behind it differs.
 /// </para>
 /// </remarks>
-[Trait("Category", "StorageIntegration")]
-public sealed class AzureBlobStorageIntegrationTests
+[Trait("Category", "Container")]
+public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture)
+    : IClassFixture<AzureStorageFixture>
 {
-    private const string ConnectionStringVariable = "TRAILBLAZE_STORAGE_CONNECTION";
-
-    private static string? ConnectionString =>
-        Environment.GetEnvironmentVariable(ConnectionStringVariable);
-
+    /// <summary>
+    /// A URL minted for a private object fetches it, carrying the content type it was stored
+    /// with, and stops fetching it once the object is gone.
+    /// </summary>
+    /// <remarks>
+    /// The second half is what proves the delete happened. The URL outlives the object it names
+    /// — a SAS is a signature, not a handle — so asking for it again cannot be read as success
+    /// merely because the signature is still valid.
+    /// </remarks>
     [SkippableFact]
-    public async Task An_upload_reads_back_through_a_minted_url_and_then_deletes()
+    public async Task A_minted_url_reads_a_private_object_back_and_dies_with_it()
     {
-        Skip.IfNot(
-            !string.IsNullOrWhiteSpace(ConnectionString),
-            $"Set {ConnectionStringVariable} to run the storage integration tier.");
-
-        var storage = new AzureBlobStorageRepository(ConnectionString!);
-        string container = Constant.StorageContainer.Media;
-        await EnsureContainerExistsAsync(ConnectionString!, container);
-
-        // A path per run, so a failed run cannot be mistaken for the next one's leftovers.
+        AzureBlobStorageRepository storage = fixture.Repository();
+        const string Container = Constant.StorageContainer.Media;
         string path = $"integration/{Guid.NewGuid():N}.txt";
         byte[] content = "trail-blaze"u8.ToArray();
 
         try
         {
-            await storage.UploadAsync(container, path, new MemoryStream(content), "text/plain");
+            await storage.UploadAsync(Container, path, new MemoryStream(content), "text/plain");
 
-            Uri readUrl = await storage.CreateReadUrlAsync(container, path, TimeSpan.FromMinutes(5));
+            Uri readUrl = await storage.CreateReadUrlAsync(
+                Container, path, TimeSpan.FromMinutes(5));
+
             using var http = new HttpClient();
 
-            // Content type is asserted here or nowhere: the unit-tier fake discards it, so
-            // nothing else in the suite would notice the upload losing its headers and
+            // Content type is asserted here or nowhere: the deleted unit-tier fake discarded
+            // it, so nothing else in the suite would notice the upload losing its headers and
             // serving every image as an opaque download.
             HttpResponseMessage response = await http.GetAsync(readUrl);
-            Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal("text/plain", response.Content.Headers.ContentType?.MediaType);
             Assert.Equal(content, await response.Content.ReadAsByteArrayAsync());
         }
         finally
         {
-            await storage.DeleteAsync(container, path);
+            await storage.DeleteAsync(Container, path);
         }
 
-        // The URL outlives the object, so asking for it again must now be a 404 rather than
-        // a stale success -- which is what proves the delete really happened.
-        Uri staleUrl = await storage.CreateReadUrlAsync(container, path, TimeSpan.FromMinutes(5));
+        Uri staleUrl = await storage.CreateReadUrlAsync(Container, path, TimeSpan.FromMinutes(5));
+
         using var httpClient = new HttpClient();
         HttpResponseMessage afterDelete = await httpClient.GetAsync(staleUrl);
 
-        Assert.Equal(System.Net.HttpStatusCode.NotFound, afterDelete.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);
     }
 
     /// <summary>
-    /// The production implementation reads and writes objects but does not provision the
-    /// containers, which are a deployment concern. The test therefore creates its own.
+    /// Deleting an object that is already gone is a cleanup, not a failure.
     /// </summary>
-    private static async Task EnsureContainerExistsAsync(string connectionString, string container)
+    /// <remarks>
+    /// The caller asked for the object to not be there, and it is not. This is the one claim
+    /// that needs a real backend to be worth anything: the deleted fake implemented the
+    /// contract it was asserting, so it proved only that a dictionary tolerates a missing key.
+    /// The implementation reaches this with <c>DeleteIfExists</c> rather than <c>Delete</c>,
+    /// and swapping one for the other is a one-word change that would turn every idempotent
+    /// cleanup into an exception.
+    /// </remarks>
+    [SkippableFact]
+    public async Task A_delete_of_something_absent_is_not_an_error()
     {
-        var client = new BlobServiceClient(connectionString);
-        await client.GetBlobContainerClient(container).CreateIfNotExistsAsync();
+        // Resolved before the recorder, and that ordering is load-bearing. Repository() skips
+        // by throwing a SkipException when no account answers, and Xunit.Record.ExceptionAsync
+        // catches everything -- so putting it inside would turn the skip into an exception the
+        // assertion then reports as a failure, and the tier would go red on a machine that
+        // simply has no container running.
+        AzureBlobStorageRepository storage = fixture.Repository();
+
+        Exception? thrown = await Record.ExceptionAsync(
+            () => storage.DeleteAsync(
+                Constant.StorageContainer.Media, $"integration/{Guid.NewGuid():N}.txt"));
+
+        Assert.Null(thrown);
     }
 }

@@ -12,9 +12,13 @@ using TrailBlaze.Interface.Repository;
 /// this file.
 /// </summary>
 /// <remarks>
-/// Unit tests never construct this — they inject the in-memory fake. Only the
-/// <c>Category=StorageIntegration</c> tier, which needs real credentials and is excluded
-/// when they are absent, exercises the code below.
+/// <para>
+/// There is no fake of this type anywhere in the solution. The <c>Category=Container</c> tier in
+/// <c>TrailBlaze.Repository.Test</c> constructs this class directly and runs it against a live
+/// account — the Azurite emulator by default, which needs no credentials, or a real account when
+/// <c>TRAILBLAZE_STORAGE_CONNECTION</c> names one. When nothing answers at the endpoint, those
+/// tests <b>skip</b> rather than fail.
+/// </para>
 /// <para>
 /// It requires a <b>shared-key</b> connection string: <see cref="CreateReadUrlAsync"/> signs
 /// a SAS locally, which needs the account key. A connection string carrying only a SAS token,

@@ -77,7 +77,10 @@ feature: their endpoints ship permissive and are brought under the matrix here.
       read or write another user's profile, and an attempt gets **403**
 - [ ] A rejected mutation performs **no blob operation**: on a 403, a 401, or the visibility
       **404**, the request reaches neither `IStorageRepository` nor the repository — the check runs
-      before any side effect
+      before any side effect *(the `IStorageRepository` half is the ordering claim, and as of
+      2026-09-18 it is assertable only by the purpose-built recording double described in the
+      test plan below — the blanket fake it used to be counted against is deleted; the outcome half
+      is "leaves no blob", asserted against a real backend)*
 - [ ] Requests to gated routes carry no `Authorization` header → **401**, not 403; a valid token
       belonging to the wrong principal → **403**
 - [ ] **403 and 404 are not interchangeable, and the distinction is now load-bearing.** A caller
@@ -117,12 +120,22 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   real pipeline with a test token, asserting the exact status code: 401 unauthenticated, 403
   authenticated-but-not-permitted, 404 absent **or invisible**, 200/201/204 allowed. Assert the
   **403/404 pair on the same route** — `PUT` on another user's `Public` activity is 403, on their
-  `Private` activity is 404 — and that a denied request makes **no** call into the fake
-  `IStorageRepository`.
+  `Private` activity is 404 — and that a denied request **leaves no blob**. **Changed 2026-09-18:
+  that replacement is weaker by one inference, and the weakening is the point of saying it here.**
+  The old assert counted calls into a fake `IStorageRepository`, which is deleted. "Leaves no blob"
+  observes an outcome against a real backend — and it cannot separate *never called storage* from
+  *called storage, failed, and cleaned up*, which the call count could. The stronger ordering claim
+  is kept where it is wanted, with a **purpose-built recording double defined inside that one test**:
+  it implements `IStorageRepository` only to record whether it was invoked, exists for no other test,
+  and is not a stand-in for the repository. Authorization being evaluated before any blob operation
+  is the single claim such a double is still sanctioned for; the outcome half is the container tier's.
 - Integration (`TrailBlaze.Repository.Test`) — the `CreatedByUserId` lookup the ownership decision
   reads returns the right owner, including after an update, and the visibility lookup reads the
-  activity's current `Type`. This tier needs no database: the lookups are exercised through the
-  `DbContext` and the generated SQL is inspected with `ToQueryString()`
+  activity's current `Type`. **Changed 2026-09-18: "this tier needs no database" no longer holds.**
+  A lookup that *returns* an owner is an executed query, and the repository tier now has a real engine
+  to execute it against — one database per test class, created with `Migrate()` and dropped on
+  dispose. `ToQueryString()` remains the offline instrument, at the model tier, where the claim is
+  about the generated statement rather than about the row it selects
   ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Regression guard: a test asserting the anonymous-allowed route set is exactly
   `GET /api/activities` and `GET /api/activities/{id}`, so a new endpoint added later without an

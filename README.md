@@ -42,7 +42,9 @@ The workflow lives in `.claude/` and runs on slash commands:
 /archive NN           # after the PR merges
 ```
 
-Backend tests run from `src/api/` with `dotnet test`.
+Backend tests run from `src/api/` with `dotnet test`. Two containers back the database and storage
+tiers — start them with `docker compose -f docker-compose.test.yml up -d` first, or those 28 tests
+**skip** rather than fail. See [testing-and-tdd.md](docs/testing-and-tdd.md).
 
 ## Running it locally
 
@@ -57,9 +59,11 @@ dotnet user-secrets set "BlobConnection" "<azure storage connection string>"
 dotnet run
 ```
 
-There is no `docker-compose.yml`. The API is deployed to **Azure Container Apps** from the image
-`src/api/Dockerfile` builds, and the web app to **Azure Static Web Apps** by its own workflow —
-neither needs a local multi-service stack, so there is none to orchestrate.
+There is no `docker-compose.yml`, and none is wanted: the API is deployed to **Azure Container
+Apps** from the image `src/api/Dockerfile` builds, and the web app to **Azure Static Web Apps** by
+its own workflow, and neither consumes a local multi-service stack. `src/api/docker-compose.test.yml`
+is not a local stack — it starts **no application process**, only the two containers the test tier
+talks to, and it is documented in [testing-and-tdd.md](docs/testing-and-tdd.md).
 
 Three things to arrange before the first run, all of them outside the app:
 
@@ -85,18 +89,21 @@ pointed somewhere else would migrate the wrong database and report success.
 
 ## Three things to know before you start
 
-1. **The suite is real but shallow.** `dotnet test` from `src/api/` runs 42 tests across the three
-   tiers, 41 of them by default — the storage-integration test skips without
-   `TRAILBLAZE_STORAGE_CONNECTION`, and only it exercises the real Azure implementation. What is
-   covered is the foundation: the audit interceptor, the soft-delete filter, the model's agreement
-   with its migration snapshot, storage routing at unit level, and the host's startup rules. The one
-   product slice that has shipped — feature 02's profile routes, avatar upload and upload validator —
-   is **not** covered: its tests were deliberately deferred, and
+1. **The suite is real but shallow.** `dotnet test` from `src/api/` discovers 59 tests. With the two
+   test containers running, all 59 pass; with nothing configured, **31 pass and 28 skip** — the
+   skips are the database tier, and they are reported rather than hidden. What is covered is the
+   foundation: the audit interceptor, the soft-delete filter executed against the engine, the
+   **migration set actually applying**, the fluent bounds reaching the schema, storage routing
+   including a minted SAS the server accepts, and the host's startup rules. The one product slice
+   that has shipped — feature 02's profile routes, avatar upload and upload validator — is **not**
+   covered: its tests were deliberately deferred, and
    [item 12](docs/tech-debt/12-feature-02-tests-deferred.md) tracks writing them. "Green" here means
    the foundation is green.
 2. **`develop` is not deployable until feature 09 merges.** Features 04–08 build the CRUD and
    media mechanics while every signed-in user can still write anything; 09 imposes the ownership
    and admin rules. See the sequencing note in the sprint file.
-3. **Azure Blob is real in every environment**, tests included. Unit tests inject an in-memory
-   `IStorageRepository` fake so the RED → GREEN loop stays offline; a tagged
-   `Category=StorageIntegration` tier exercises the real account and needs credentials.
+3. **Azure Blob is real in every environment**, tests included — there is no `IStorageRepository`
+   fake, so nothing stands in for the real implementation. The `Category=Container` storage tier runs
+   the real `AzureBlobStorageRepository` against the **Azurite emulator by default**, which needs no
+   credentials, and against a real account when `TRAILBLAZE_STORAGE_CONNECTION` names one. It skips
+   when nothing answers.

@@ -10,18 +10,26 @@ Ask, of anything that starts up, writes, or holds state:
 - **What is it deployed to?** A `docker-compose.yml` was written and then removed: it existed
   because the inherited scaffold implied a local stack, while the real targets are Azure Container
   Apps for the API and Azure Static Web Apps for the web app. Neither consumes a compose file, so
-  there was no stack to orchestrate.
+  there was no stack to orchestrate. (`src/api/docker-compose.test.yml` exists and is not that: it
+  starts no application process and is not deployed anywhere.)
 - **How many of it runs?** A design correct on one instance can be wrong on many. Migrations
   applied by an `IHostedService` at startup were correct until ACA ran several replicas, which race
   each other over the same DDL. The same reasoning applies to feature 03's startup admin seeding.
 - **What does it reach over the network?** Azure SQL Database is managed and has no local
   stand-in, so "it works on my machine" was never an available fallback — the connection string,
   the firewall, and the database's existence are all prerequisites rather than things the app
-  arranges.
+  arranges. (The *test tier* has containers that stand in for both services; the deployed
+  application still has none, which is the case that matters here.)
 
 A design that has not been checked against its target is unverified, however green its tests are.
-Tests here run with no database and a fake storage service, so they cannot speak to deployment
-shape at all.
+
+**The test tier has since grown a real engine and a real blob service, and that does not settle this
+question.** `docker-compose.test.yml` starts SQL Edge and Azurite so the database and storage tiers
+have something to talk to, so migrations, schema bounds and SAS round-trips are now *executed*
+rather than simulated — a real gain, and one that removed two fakes. But one container is not
+several ACA replicas, an emulator's certificate and ACL behaviour are not a real account's, and no
+test signs in through Entra. **The suite can now speak to engine shape, and still cannot speak to
+deployment shape** — so this question is still asked of the design, not of the test run.
 
 **How to apply:** when reviewing a change that runs on a host, say which host and how many
 instances, and check the design against that. Do this *before* reviewing the code inside it — two

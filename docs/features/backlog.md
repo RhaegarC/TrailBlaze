@@ -21,7 +21,7 @@ only numbered `docs/features/NN-name.md` files claim a priority slot. Promote an
 | Idea | Why it was rejected |
 |---|---|
 | Local-disk media storage | Replaced by Azure Blob (Decision #4). |
-| Azurite emulator | Declined — real Azure in every environment (Decision #5). |
+| Azurite emulator | Declined as a **stand-in for Azure in the application** — real Azure in every environment (Decision #5). **Adopted for the test tier on 2026-09-18, and this is new information rather than a reversal:** the suite now runs the real `AzureBlobStorageRepository` against Azurite and a real `TrailBlazeContext` against SQL Edge, replacing the two fakes it used to carry, because a test asserting against a fake asserts about the fake. The application itself still reaches real Azure everywhere (Decision #6 is the one that was reversed). |
 | API-proxied media streaming | Chosen against; SAS URLs were picked so Azure carries the bandwidth and video seeking works (Decision #7). |
 | Inherited dynamic-form features (conditional fields, remote lookups, form config with live preview) | Copied in from a different product; `Activity` has fixed fields and `Location` is free text, so these have nothing to describe (Decision #18). |
 

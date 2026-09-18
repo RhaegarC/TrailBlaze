@@ -12,10 +12,13 @@ feature number (e.g. `06`) — resolve to `docs/features/<number>-<name>.md` and
    touches already cover.
 3. **Identify gaps** — acceptance-criteria behaviors not yet covered by a test.
 4. **Write NEW failing test(s)** for those gaps, following the test tiers in
-   [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md) (backend xUnit unit tests — using the
-   in-memory `IStorageService` fake, never the network — plus the repository tier, which runs with
-   no database at all: the EF Core save interception fires before a connection opens, so audit,
-   soft-delete and key behaviour are asserted offline, with queries inspected via `ToQueryString()`).
+   [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md). In outline: offline unit tests for
+   validation, policy construction and permission evaluation; a repository model tier that stays
+   offline and inspects generated SQL via `ToQueryString()`; and two **`Category=Container`** tiers
+   in `TrailBlaze.Repository.Test` that run the real `AzureBlobStorageRepository` against Azurite
+   and a real `TrailBlazeContext` against SQL Edge. There is **no `IStorageRepository` fake** —
+   nothing stands in for the storage implementation, so a storage behaviour is asserted against a
+   live backend or not at all. Those tiers skip, never fail, when nothing answers.
    Place them in the matching layer's test project under `src/api/` (e.g. `TrailBlaze.Service.Test`,
    `TrailBlaze.Api.Test`).
 5. **Run the relevant suite** (`dotnet test`) and confirm

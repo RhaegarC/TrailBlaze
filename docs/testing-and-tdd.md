@@ -1,6 +1,6 @@
 # Backend Testing & TDD Strategy
 
-Status: **Draft** (2026-09-15)
+Status: **Draft** (2026-09-18)
 
 Referenced by the `tdd-implement` and `bug-fix` agents — the TDD workflow (RED → GREEN →
 refactor) runs on the tiers below.
@@ -14,9 +14,12 @@ The API is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBla
 xUnit test project (`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`,
 `TrailBlaze.Service.Test`). New tests go in the project matching the layer they exercise.
 
-**Current state (2026-09-17).** The harness is in place. Each `*.Test` project references the
-layer it exercises and `dotnet test` discovers tests in all three: 42 runnable, of which the one
-tagged `Category=StorageIntegration` skips without credentials, leaving 41 passing by default.
+**Current state (2026-09-18).** Two containers back the suite — `azure-sql-edge` and
+`azure-storage-edge`, started by [`docker-compose.test.yml`](../src/api/docker-compose.test.yml) —
+and 59 tests are discovered: 55 in `TrailBlaze.Repository.Test`, 4 in `TrailBlaze.Api.Test`, and
+none in `TrailBlaze.Service.Test`. **With the containers running all 59 pass. With nothing
+configured, 31 pass and 28 skip** — and that second number is the honest description of a bare
+machine, not a failure.
 
 **But the count is not the coverage.** The one product slice that has shipped — feature 02's profile
 routes, avatar upload and upload validator — has no tests at all; they were deliberately deferred.
@@ -24,53 +27,116 @@ routes, avatar upload and upload validator — has no tests at all; they were de
 the dangerous kind: an untested guard everyone believes is tested is worse than one known to be
 untested. Read these numbers as "the foundation is green".
 
-`TestSupport/AuditHarness.cs` and `TestSupport/FakeUserContext.cs` live in
-`TrailBlaze.Repository.Test`; `TestSupport/FakeStorageRepository.cs` lives in
-`TrailBlaze.Service.Test`. The API tier boots the real pipeline through `WebApplicationFactory`
-and supplies unreachable connection strings, so it needs no database either — nothing has to be
-removed from the service collection to achieve that, because migrations are applied by the
-deployment pipeline rather than at startup, and the context is not resolved until a request asks
-for it.
+`TestSupport/` lives in `TrailBlaze.Repository.Test` and holds the container fixtures,
+`TestEnvironment`, and `FakeUserContext`. **There is no fake for storage and none for the
+database**: the tier runs the real `AzureBlobStorageRepository` against a live account, and a real
+`TrailBlazeContext` against a real engine. The API tier boots the real pipeline through
+`WebApplicationFactory` and supplies unreachable connection strings, so it needs no database —
+nothing has to be removed from the service collection to achieve that, because migrations are
+applied by the deployment pipeline rather than at startup, and the context is not resolved until a
+request asks for it.
 
 ## Test tiers
 
 | Tier | Scope | Tooling | Runs |
 |---|---|---|---|
-| Backend unit | Services, **ownership/permission evaluation**, upload validation, SAS policy construction, pagination clamping | xUnit | Always — fast, offline |
-| Backend integration | EF Core **with no database at all** — persistence, repositories, queries, cascade deletes | xUnit + EF Core | Always — offline |
-| Storage integration | The real Azure Blob implementation of `IStorageRepository` — upload, delete, SAS round-trip | xUnit + Azure SDK | **Explicitly tagged**; requires credentials |
+| Backend unit | Upload validation, SAS policy construction, pagination clamping, and ownership/permission evaluation once feature 09 lands | xUnit | Always — fast, offline |
+| Repository model | EF Core's *model* and its *generated SQL* — keys, column types and lengths, soft-delete predicates read through `ToQueryString()` | xUnit + EF Core | Always — offline, opens no connection |
+| Database | The real engine: the migration set applies, the fluent bounds reached `INFORMATION_SCHEMA`, a duplicate key collides, the soft-delete filter executes, audit JSON round-trips, a narrowing `ALTER COLUMN` is refused | xUnit + SQL Edge | **`Category=Container`** — skips when unreachable |
+| Storage | The real `AzureBlobStorageRepository`: upload, content-type round-trip, a minted SAS that the server accepts, public/private routing, a move | xUnit + Azure SDK | **`Category=Container`** — skips when unreachable |
 
-## Testing without a database
+`Category=Container` is **the only trait in the solution**. That makes the two obvious filters easy
+to misread: `--filter "Category!=Container"` is not "the offline run", it is the 20 tests that touch
+*neither* container — which excludes the 11 storage tests, and those run on a bare machine too,
+because storage falls back to the emulator and needs no secret. The bare-machine run is plain
+`dotnet test`, which is 31 passed and 28 skipped.
 
-The repository tier needs **nothing listening on a port**. EF Core's save interception runs
-before the provider opens a connection, so audit stamping, soft-delete filtering, and
-application-assigned keys are all provable offline — and a LINQ query can be inspected with
-`ToQueryString()` instead of executed.
+## What still runs offline, and why it is worth keeping
 
-The pattern is specified in [src/api/STANDARD.md](../src/api/STANDARD.md) §10. In outline: the
-context is wired through the same `AddRepositoryPersistence` entry point the application uses, the
-HTTP-backed `IUserContextService` is replaced with a fake so a test can set the caller, and the
-repository is exercised against that. No container, no connection string, no credentials — which
-is why this tier runs on every test invocation rather than on a CI-only branch.
+The repository model tier compares the model to its snapshot and inspects generated SQL with
+`ToQueryString()`, which builds the statement and stops. That is two in-memory artefacts compared to
+each other: it proves what EF *would* send, and it cannot prove the engine accepts it. It earns its
+place by being the tier that catches a fluent-configuration change in under a second, and by failing
+on a machine with no container at all.
 
-This is what makes the tier *fast*, but not what makes it *trustworthy*: the fake user context is
-a stand-in, so anything that depends on the real token pipeline still needs the E2E tier
-(feature 11).
+Which is exactly why the database tier exists. A `ToQueryString()` assertion and an executed one are
+different claims, and the second is the one that catches a migration that never applied.
+
+**One claim this document used to make has been withdrawn rather than tested.** An earlier version
+of this table listed *cascade deletes* under the offline repository tier. The model has no foreign
+keys — `AuditLog` is deliberately not an `EntityBase`, and nothing else declares a relationship — so
+there is nothing to cascade, and the row was describing a property the schema does not have. It is
+removed rather than satisfied by inventing a test for a behaviour that does not exist.
+
+## The container tier
+
+### Skipping, not failing
+
+Reaching nothing at the configured endpoint **skips**; a container that is simply not running is not
+a bug in the code under test. Everything past the connect check is a **failure**, deliberately — a
+migration that will not apply against a real engine is the exact bug this tier exists to find, and
+degrading it to a skip would hide the one thing it was built for.
+
+`Skip.IfNot` works by throwing, which trips three things worth knowing before writing a test here:
+
+- It requires `[SkippableFact]` / `[SkippableTheory]`. Under a plain `[Fact]` the thrown
+  `SkipException` is just an exception and the test **fails**.
+- It must be called **outside** anything that catches. `Record.ExceptionAsync` and
+  `Assert.ThrowsAsync` catch the `SkipException` too and hand it back as the exception under test, so
+  the test reports a failure whose "expected" value is the skip message. Resolve the fixture's client
+  or repository before the recorder.
+- The fixtures skip for you. Branching on `IsAvailable` by hand is how a test ends up either not
+  skipping or skipping for a reason it never states.
+
+### Isolation
+
+Each test class gets **one database of its own**, created and migrated in a fixture, dropped on
+dispose. Not one shared database, and not a transaction rolled back per test: a read-back through the
+*same* context hits EF's change tracker rather than the database, and a genuine second context needs
+a second connection inside one transaction, which needs MSDTC — absent from a Linux SQL Edge
+container. Row-level cleanup was the other candidate and is worse: this repo has no hard delete
+(`IDbRepository.DeleteAsync` is a *soft* delete), so it would mean raw SQL ordered by foreign key,
+extended by every future feature, rotting silently.
+
+`Migrate()`, never `EnsureCreated()`. `EnsureCreated` builds the schema from the model and bypasses
+`Migrations/` entirely, so a broken migration stays broken and the test still passes — a test that
+cannot fail.
+
+A test that must build its own schema — `MigrationNarrowingTests` drives a database to an earlier
+migration by hand — gets a database per *test*, because a database cannot be returned to an earlier
+migration once anything has taken it to head.
+
+### Storage
+
+One account for the whole tier, and containers created rather than assumed. Objects are GUID-keyed
+and the containers are shared in production, so there is nothing to isolate.
+
+The tier runs against the **Azurite emulator by default**, which needs no credentials at all, and
+against a real account when `TRAILBLAZE_STORAGE_CONNECTION` names one. Both reach the same code;
+only the account behind it differs. That is what makes this tier runnable on any machine rather than
+on a credentialed CI branch.
+
+Provisioning includes setting each container's access level — but **only when the endpoint is
+loopback**. A test run must never change the access level of a container in a real account: that is a
+deployment change with a security consequence, made silently, by a process whose whole job is to
+observe.
 
 ## The Azure dependency
 
-Azure Blob is a **real cloud resource in every environment** (PRD Decision #5), which would
-normally make the test suite slow, credentialed, and non-hermetic. The design contains this:
+Azure Blob is a **real cloud resource in every environment** (PRD Decision #5). The design contains
+that by routing all blob access through `IStorageRepository`, so the vendor is confined to one file
+and the contract names no Azure type.
 
-- All blob access goes through **`IStorageRepository`**.
-- **Unit tests inject an in-memory fake.** They never touch the network. This is where the
-  RED → GREEN loop lives, and it stays instant and offline.
-- A small **storage integration tier** exercises the real account and is tagged so it can be
-  excluded when credentials are absent. CI must hold Azure credentials for this tier to run.
+**There is no fake implementation of `IStorageRepository`, and its absence is deliberate.** A deleted
+in-memory fake once stood here; it implemented the contract it was asserting, which meant a test
+asserting "upload then read back" proved only that a dictionary tolerates a key. A fake shadows the
+real implementation's invariants while appearing to test them. Anything Azure-specific — SAS
+generation, container existence, content-type round-tripping — is now proven against a live account
+or not at all.
 
-The fake is for *unit* tests only. A test that asserts upload behavior while never leaving the
-fake proves the caller's logic, not the blob implementation — so anything Azure-specific
-(SAS generation, container existence, content-type round-tripping) belongs in the tagged tier.
+What that costs is real and is stated rather than hidden: the RED → GREEN loop for storage-facing
+code is no longer instant, and the tier skips on a machine with no emulator. What it buys is that no
+storage assertion in this suite is an assertion about a fake.
 
 ## TDD discipline
 
@@ -110,14 +176,25 @@ than letting them read alike.
 
 ## Commands
 
-- Backend (from `src/api/`): `dotnet test`
-- Storage integration tier only, with credentials in the environment:
+From `src/api/`:
 
-  ```bash
-  TRAILBLAZE_STORAGE_CONNECTION="<azure storage connection string>" \
-    dotnet test --filter Category=StorageIntegration
-  ```
+```bash
+docker compose -f docker-compose.test.yml up -d    # reads MSSQL_SA_PASSWORD from .env
+dotnet test                                        # everything runnable here
+dotnet test --filter "Category=Container"          # the container tiers alone
+dotnet test --filter "Category!=Container"         # the 20 tests touching neither container
+docker compose -f docker-compose.test.yml down
+```
 
-  Without `TRAILBLAZE_STORAGE_CONNECTION` the test **skips** rather than fails, so `dotnet test`
-  is green on a machine with no Azure account. A skip is reported in the run summary — it is a
-  skip, not a silent exclusion, so the tier cannot be forgotten by vanishing from the output.
+`.env` is gitignored; [`.env.example`](../src/api/.env.example) is tracked and holds the shape
+without the secret. The SA password reaches the tests two ways — the compose file reads
+`MSSQL_SA_PASSWORD` from `.env`, and `TestEnvironment` composes a connection string from the same
+variable — so one exported value serves both.
+
+The test variables are named `TRAILBLAZE_SQL_CONNECTION` and `TRAILBLAZE_STORAGE_CONNECTION` rather
+than the application's `DbConnection`/`BlobConnection`, and that is load-bearing: a developer with a
+working API setup has the latter in their shell already, pointing at a real Azure SQL Database. A
+test tier that read them would have `dotnet test` create and drop databases in production.
+
+A skip is reported in the run summary. It is a skip, not a silent exclusion, so a tier cannot be
+forgotten by vanishing from the output.

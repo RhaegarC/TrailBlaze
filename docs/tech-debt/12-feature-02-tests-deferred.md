@@ -1,7 +1,7 @@
 # 12 — Feature 02's behaviour shipped without the tests §10 requires
 
 Status: **open** · Kind: test-gap · Impact: blocks · Area: Tests
-Source: STANDARD §12.12 · Discharges via: 11 (in part) · Opened: 2026-09-17 · Last verified: 2026-09-17
+Source: STANDARD §12.12 · Discharges via: 11 (in part) · Opened: 2026-09-17 · Last verified: 2026-09-18
 
 ## What the debt is
 
@@ -41,10 +41,10 @@ one gets written*. That argument is why this item is a blocking test-gap rather 
 
 Checked against the feature file and the suite 2026-09-17.
 
-- The suite is 42 tests, 41 passing, 1 skipped (the tagged storage tier without credentials). None of
-  them covers feature 02's profile routes, the upload validator, or the provisioning conflict branch.
-  Verified by running `dotnet test` 2026-09-17, which is also what settled the count —
-  [testing-and-tdd.md](../testing-and-tdd.md) had it right while this file was off by one.
+- The suite is 59 tests as of 2026-09-18 (**31 passed, 28 skipped** with nothing configured; 59 passed
+  with the containers up). None of them covers feature 02's profile routes, the upload validator, or
+  the provisioning conflict branch. Re-measured by running `dotnet test` 2026-09-18; the count was 42
+  when this item was opened, which is what the older "42 tests, 41 passing, 1 skipped" recorded.
 - [02-entra-auth.md](../features/archive/02-entra-auth.md) carries a `## Testing status` section, two
   unmet `[ ]` criteria, and a `## Tests (TDD)` section prefaced as unwritten — it is the plan for
   this item, not a description of coverage.
@@ -53,8 +53,9 @@ Checked against the feature file and the suite 2026-09-17.
 
 ### What can be written now versus what cannot
 
-The three items that route to feature 11 must not swallow the rest — most of this is ordinary
-offline-testable work, and it should be done without waiting for 11.
+The three items that needed an environment must not swallow the rest — most of this is ordinary
+offline-testable work, and it should be done without waiting for anything. (As of 2026-09-18 two of
+those three no longer wait for feature 11 either; see the re-stamp below the table.)
 
 | Assertion | Tier | Now? |
 |---|---|---|
@@ -70,12 +71,33 @@ offline-testable work, and it should be done without waiting for 11.
 | The new `users` columns round-trip; preferences default rather than persist as null | Repository | **Yes** |
 | No token → 401, and **no `users` insert occurs** (rejection precedes the write) | Api | **Yes** |
 | `GET /user/me` returns the profile fields; a display-name change is visible on the next read | Api | **Yes** |
-| The duplicate-key race's `SqlException` catch recognises what SQL Server throws | — | **No** — needs a database |
-| The narrowing `ALTER COLUMN` against a populated table | — | **No** — needs an environment |
-| An avatar is retrievable by a credential-free HTTP GET from the real container | Storage | **No** — needs credentials |
+| The duplicate-key race's `SqlException` catch recognises what SQL Server throws | Container | **Partly** — see below |
+| The narrowing `ALTER COLUMN` against a populated table | Container | **Yes** — `MigrationNarrowingTests` |
+| An avatar is retrievable by a credential-free HTTP GET from the real container | Container | **Yes** — `StorageContainerRoutingTests` |
 
-The last three are evidence debt, not test debt: no offline test can settle them. They are described
-in the feature file under "Three things no offline test can prove" and belong to
+**Re-stamped 2026-09-18: the bottom three moved out of "unprovable offline" and into the container
+tier.** They were evidence debt while nothing in the solution could reach an engine or an account,
+and the sentence that used to sit here — *"no offline test can settle them"* — stays true and stopped
+mattering, because the tier that settles them is not offline. What each one needs is now checked,
+not assumed:
+
+- **The narrowing `ALTER COLUMN`** is `MigrationNarrowingTests`, both halves: the failure (a
+  300-character value against the narrowed column, asserting `SqlException` 8152/2628) and a passing
+  variant, so the failing one cannot be red for an unrelated reason.
+- **The credential-free avatar GET** is
+  `StorageContainerRoutingTests.A_public_container_serves_its_object_to_an_unsigned_url`, a theory
+  over `avatars` and `covers` that also asserts the URL carries no `sig=` — which is the part feature
+  07 forbids, not merely the part it permits. Its negative control is the same URL shape against
+  `media`.
+- **The duplicate-key row is settled in part, and the part that is missing is feature 02's own.** The
+  engine's half is measured: `DuplicateKeyTests` asserts the refusal is a duplicate-key `SqlException`
+  (2627 for this schema, 2601 accepted) and that the loser leaves the winner's row readable. What
+  remains unwritten is the *catch* — `UserService.GetOrCreateAsync` recognising that number and
+  retrying, which is service-layer code and still has no test. So this row is not closed by the
+  container tier; it is split, and the service half stays here.
+
+The race itself was never in this table and is still not testable here: reproducing it needs two
+simultaneous requests, which is load evidence and belongs to
 [feature 11](../features/11-e2e-verification.md).
 
 ## Testability
@@ -84,8 +106,10 @@ in the feature file under "Three things no offline test can prove" and belong to
 asserts a property of a *type definition*, not a behaviour, and is the one test here whose value is
 entirely in failing when a field is added later.
 
-The bottom three rows are **verification-only** in this tier; they close against feature 11's
-environment, not here.
+The bottom three rows are **testable** as of 2026-09-18 — two are already written and green against
+the container tier, and the third is split, its engine half measured and its service half still
+here. None of them is `verification-only` any more; the race alone remains so, and it was never a row
+in this table.
 
 ## Repair plan
 
@@ -99,8 +123,10 @@ environment, not here.
 4. Run `/add-test 02` if it still resolves — the command was built for exactly this shape of gap, and
    the feature file's `## Tests (TDD)` block is its input. Note the file is now in `archive/`, so the
    command's path resolution may need to be pointed at it explicitly.
-5. When the offline rows are green, decide the fate of the bottom three: leave them recorded here as
-   routing to 11, or close them with 11's environment if it exists by then.
+5. ~~Decide the fate of the bottom three.~~ **Decided 2026-09-18:** they run in the container tier,
+   which needs no credentials and no environment beyond the compose file, so none of them waits for
+   feature 11. Two are written. The third closes only when the *service* half lands — the catch in
+   `GetOrCreateAsync` that recognises the number `DuplicateKeyTests` measures.
 
 ## Out of scope / related
 
@@ -109,15 +135,16 @@ environment, not here.
   the missing reflection test guards.
 - **Item [04](04-usercontroller-route-convention.md)** changes the profile routes these Api-tier
   tests will assert. If 04 lands first, write the tests against the resolved paths.
-- **Feature 11** owns the three unprovable assertions. This item should not be closed while claiming
-  them; if 11 has not run, close this item on the twelve offline rows and let the three stay recorded
-  in the feature file.
+- **Feature 11** owned the three unprovable assertions until 2026-09-18, when the container tier
+  made two of them ordinary tests. **Feature 11 keeps only the race** — two simultaneous requests —
+  and the deployed shape. This item no longer waits on 11 for anything it can prove itself.
 
 ## Close checklist
 
 - [ ] The reflection test exists and is commented as to why it can pass from day one
 - [ ] Every "Now? Yes" row in the sub-table above is covered by a test that was seen to fail
-- [ ] The storage tier's public-read assertion either exists or is explicitly deferred to feature 11
+- [x] The storage tier's public-read assertion exists (`StorageContainerRoutingTests`, 2026-09-18)
+- [ ] The service-layer duplicate-key catch is tested against the number `DuplicateKeyTests` measures
 - [ ] The feature file's `## Testing status` and unmet `[ ]` criteria updated to reflect what landed
 - [ ] STANDARD §12.12's claim re-verified: if it still says the tests are missing, it is correct; if
       they exist, this item closes
