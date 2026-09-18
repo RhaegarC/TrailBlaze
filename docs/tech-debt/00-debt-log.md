@@ -17,6 +17,13 @@ because STANDARD §12's mapping table, the PRD, feature files and merged PR bodi
 names. Features number by priority because a scan reads the number
 (`/next` picks the lowest); nothing scans this folder, so there is nothing to encode.
 
+Items 21–27 arrived together, on 2026-09-18, from one change: running the suite against real
+containers. That is not a convention breaking — it is what the change was for. A fake storage
+service and an unreachable connection string cannot show you what the engine does, and seven of the
+things they were hiding became visible the first time the tests touched a real one. Filing them in
+one commit is the honest record of a single afternoon's evidence, and each one carries its own
+`Source` line naming the date.
+
 | # | Debt (file) | Kind | Impact | Area | Discharges via | Status |
 |---|---|---|---|---|---|---|
 | 02 | [`DeleteAsync` does N round trips, untransacted](02-deleteasync-n-round-trips.md) | correctness | silent-wrong | Persistence | — (orphaned) | open |
@@ -33,6 +40,13 @@ names. Features number by priority because a scan reads the number
 | 18 | [Tracked settings carry another repo's permissions](18-claude-settings-cross-repo.md) | hygiene | friction | Workflow | — (orphaned) | open |
 | 19 | [Documentation indexes have drifted](19-doc-indexes-drifted.md) | docs | cosmetic | Docs | — (orphaned) | open |
 | 20 | [`LastModifiedOn` is left at its sentinel on insert](20-lastmodified-unset-on-insert.md) | correctness | silent-wrong | Audit | — (orphaned) | open |
+| 21 | [The public/private container set exists only in prose](21-container-access-levels-in-prose.md) | capability | silent-wrong | Storage | — (orphaned) | open |
+| 22 | [The test tier's database engine is a retired product](22-test-engine-is-a-retired-product.md) | correctness | friction | Tests | — (orphaned) | open |
+| 23 | [Feature specs assert foreign keys the model does not have](23-foreign-keys-asserted-that-do-not-exist.md) | docs | friction | Model | features 04/06 (in part) | open |
+| 24 | [Every write method returns the entry count, not the rows named](24-write-methods-return-entry-count.md) | correctness | silent-wrong | Persistence | — (orphaned) | open |
+| 25 | [`TrailBlaze.Service.Test` has no tests, and no way to host the ones it needs](25-service-test-tier-is-empty.md) | test-gap | friction | Tests | features 06/08 (in part) | open |
+| 26 | [The composition root has never opened a connection](26-composition-root-never-opened-a-connection.md) | test-gap | friction | Api | — (orphaned) | open |
+| 27 | [`Category!=Container` is not the offline run](27-container-filter-is-not-the-offline-run.md) | docs | cosmetic | Docs | — (orphaned) | open |
 
 Rows are ordered by number, which for 01–12 is §12 order and for 13+ is filing order. The queue
 order is a judgement, not a column — see "Where to start" at the bottom.
@@ -140,3 +154,14 @@ is the largest.
 
 Item [01](archive/01-audit-columns-have-two-writers.md) and its facet
 [06](archive/06-timestamp-types-inconsistent.md) were the first two off this list, closed by PR #8.
+
+Of the seven filed on 2026-09-18, two are silent-wrong and cheap:
+**[24](24-write-methods-return-entry-count.md)** (one helper, and the container tier already measures
+the wrong number) and **[21](21-container-access-levels-in-prose.md)** (a startup assertion; today
+the rule that `covers` and `avatars` are public and `media` is private exists only in a doc comment,
+so nothing in a deployment sets it). The other
+five do not repay an hour: [22](22-test-engine-is-a-retired-product.md) and
+[25](25-service-test-tier-is-empty.md) change how much the suite is worth rather than fixing
+anything now, and [23](23-foreign-keys-asserted-that-do-not-exist.md),
+[26](26-composition-root-never-opened-a-connection.md) and
+[27](27-container-filter-is-not-the-offline-run.md) are documentation and shape debt.

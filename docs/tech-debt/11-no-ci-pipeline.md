@@ -24,9 +24,13 @@ project's rule is that a PR merges once every comment is addressed — but the o
 whatever the reviewer remembers to run. `dotnet test` is run by hand, when someone thinks to. A PR
 that breaks the build can merge clean, and the break is found by whoever pulls `develop` next.
 
-**The storage-integration tier is already known to be unproven in CI**
-([testing-and-tdd.md:5-9](../testing-and-tdd.md), item [12](12-feature-02-tests-deferred.md)). Without
-a pipeline there is not even a place to fix that.
+**The container tiers have no place to run, and 2026-09-18 changed what that costs.** The storage
+tier used to be the one tier that needed credentials, so "unproven in CI" was a funding problem as
+much as a pipeline one. It no longer is: it runs the real `AzureBlobStorageRepository` against the
+Azurite emulator, which carries no secret, so **CI could run it tomorrow with no Azure account at
+all** — and the database tier likewise, against SQL Edge. What was a credential gap is now purely a
+missing pipeline, which makes this item the whole of the obstacle rather than half of it. Without
+one there is not even a place to run them.
 
 **STANDARD §11 describes a workflow that does not exist**, which makes the standard a document about
 an imagined system in exactly the way §12.1 was. §11's "State as of 2026-09-15" note is honest about
@@ -34,7 +38,8 @@ this; the section title is not.
 
 **The lesson from the foundation feature is worth carrying:** an `IHostedService` that migrated at
 startup was built and then removed, because ACA runs several replicas and concurrent startup
-migrations race over the same DDL ([STANDARD.md:570-579](../../src/api/STANDARD.md#L570-L579)). The
+migrations race over the same DDL ([PRD.md:406-408](../PRD.md#L406-L408) — the passage used to sit in
+STANDARD §12, which is now this register). The
 pipeline is not a convenience that replaces that; it is the design that made removing it safe. Until
 it exists, the removal left a gap rather than a replacement.
 
@@ -50,7 +55,7 @@ Checked against the repo 2026-09-17.
 - [01-foundation.md](../features/archive/01-foundation.md) lists "no CI pipeline definition" among
   its non-goals, so no feature has ever claimed this work.
 - STANDARD §11 carries a state note admitting the workflow is not wired
-  ([STANDARD.md:536-540](../../src/api/STANDARD.md#L536-L540)).
+  ([STANDARD.md:658](../../src/api/STANDARD.md#L658)).
 
 ## Testability
 

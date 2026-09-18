@@ -1,7 +1,7 @@
 # 20 — `LastModifiedOn` is left at its sentinel on every insert
 
 Status: **open** · Kind: correctness · Impact: silent-wrong · Area: Audit
-Source: found 2026-09-17 while repointing the PRD · Discharges via: — (orphaned) · Opened: 2026-09-17 · Last verified: 2026-09-17
+Source: found 2026-09-17 while repointing the PRD · Discharges via: — (orphaned) · Opened: 2026-09-17 · Last verified: 2026-09-18
 
 ## What the debt is
 
@@ -36,12 +36,18 @@ rather than absent. Nothing throws, no test fails, and the value is plausible en
 review: it *looks* like a date.
 
 **The tests encode the gap instead of catching it.** `AuditTests` asserts `CreatedOn != default` and
-`CreatedBy` on insert ([AuditTests.cs:72-73](../../src/api/TrailBlaze.Repository.Test/AuditTests.cs#L72-L73)),
+`CreatedBy` on insert ([AuditTests.cs:78-79](../../src/api/TrailBlaze.Repository.Test/AuditTests.cs#L78-L79)),
 and asserts `LastModifiedOn != default` only on **update**
-([:193-194](../../src/api/TrailBlaze.Repository.Test/AuditTests.cs#L193-L194)). The insert assertions
+([:267-268](../../src/api/TrailBlaze.Repository.Test/AuditTests.cs#L267-L268)). The insert assertions
 stop exactly where the unset field begins — so the omission is mirrored in the test file rather than
 noticed by it. This is item [12](12-feature-02-tests-deferred.md)'s argument in miniature: a guard
 that is absent looks identical to a guard that passes.
+
+*(Line references re-checked 2026-09-18, when the tier gained a database and the file shifted by
+about seventy lines. The re-check also makes the omission sharper than it read before: the insert
+test now round-trips the row — it re-reads `CreatedBy` and `CreatedOn` from the database and compares
+them ([:84-85](../../src/api/TrailBlaze.Repository.Test/AuditTests.cs#L84-L85)) — so the file
+demonstrates that it knows how to assert a stored column, and still does not assert this one.)*
 
 **The PRD documented the opposite, and has been corrected.** [PRD.md:162](../PRD.md#L162) used to
 state `LastModifiedOn` is "set at insert and on every update". It is not set at insert, and the
@@ -58,14 +64,21 @@ insert path, so this item survived that close untouched. Same columns, different
 
 ## Evidence
 
-Checked against the code and the suite 2026-09-17.
+Checked against the code 2026-09-18, and against the suite on both dates.
 
 - The interceptor's switch has `Added` and `Modified` cases; only `Modified` touches
   `LastModifiedOn`/`LastModifiedBy`.
 - `EntityBase` declares `public DateTimeOffset LastModifiedOn { get; set; }` with no initialiser.
 - `CreateAsync<T>(T item)` and `CreateAsync<T>(List<T>)` both set nothing beyond the add.
 - `InitialCreate.cs:48` — `nullable: false`, no `defaultValue`.
-- `dotnet test` 2026-09-17: **42 runnable, 41 passing, 1 skipped.** Nothing asserts the insert case.
+- `dotnet test` 2026-09-17: **42 runnable, 41 passing, 1 skipped.** 2026-09-18: **59 discovered**
+  (31 passed / 28 skipped unconfigured; 59 passed with the containers up). **Neither run asserts the
+  insert case for `LastModifiedOn`.**
+- **The sentinel is now stored in a real database, which the offline tier could not have shown.**
+  The container tier inserts rows for real, and its insert test re-reads `CreatedBy`/`CreatedOn` from
+  the database — so `0001-01-01T00:00:00+00:00` is a value this suite writes to SQL Server and reads
+  back without comment. The defect was already real; what changed on 2026-09-18 is that it is no
+  longer merely inferred from the interceptor's `switch`.
 
 ## The decision this item is really asking for
 
@@ -91,6 +104,13 @@ the diff to imply.
 `LastModifiedBy == the caller` on an **inserted** row and watch it fail.
 `TestSupport/AuditHarness.cs` exists and `AuditTests` already asserts the insert case for `CreatedOn`,
 so this is one more assertion in an existing test — not a new tier, and not dependent on item 12.
+
+**Re-stamped 2026-09-18: the assertion lands in `Category=Container`.** `AuditHarness` now builds
+through a real database rather than an unreachable connection string, so the fixed test skips when
+no container answers. That is the honest arrangement — the claim is about a stored column — but it
+means the repair's evidence is a **skip** on a bare machine, and the PR that closes this item should
+show the run with the containers up. The offline half of the file (`AuditTests`' model-level cases)
+is unaffected and still runs anywhere.
 
 ## Repair plan
 

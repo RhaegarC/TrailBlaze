@@ -58,10 +58,18 @@ Checked against the code 2026-09-17.
 
 ## Testability
 
-**testable** at the repository tier with no database, and the existing suite already has the shape:
-`A_modified_entity_is_recorded_as_modified_and_stamped` (`AuditTests.cs:180-195`) asserts on the
-`Action` value today. The new test asserts that a soft-deleted entity is recorded with a distinct
-action — it should fail against the current interceptor and pass after the fix.
+**testable** at the repository tier, and the existing suite already has the shape:
+`A_modified_entity_is_recorded_as_modified_and_stamped`
+([`AuditTests.cs:251`](../../src/api/TrailBlaze.Repository.Test/AuditTests.cs#L251)) asserts on the
+`Action` value today, and `SoftDeleteExecutionTests` exercises the filter against a real engine. The
+new test asserts that a soft-deleted entity is recorded with a distinct action — it should fail
+against the current interceptor and pass after the fix.
+
+**Re-stamped 2026-09-18.** This section previously said "testable … **with no database**", because
+the repository tier then pointed EF at an unreachable port and read audit rows out of the change
+tracker. That pattern is gone: the audit tier now runs against SQL Edge and reads its rows back
+through a fresh scope, so the claim is a round trip rather than an inspection. The item is no
+*easier* to test than before — it is harder to test **falsely**, which is the point.
 
 ## Repair plan
 
