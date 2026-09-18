@@ -51,6 +51,10 @@ The repository was initialised from a generic layered .NET scaffold, which lande
   to Azure Container Apps and the web app to Azure Static Web Apps by GitHub workflow, so neither
   consumes a local multi-service stack. Still absent: **no CI pipeline**, which 01 does not claim
   and which is now the only path either component has to production.
+  **Superseded in part (2026-09-18).** The counts and the storage fake above are historical: the
+  suite is now 59 tests, and the fake is deleted — storage and the database run against containers
+  started by `src/api/docker-compose.test.yml`. `docker-compose.yml` is still absent, and that is
+  unchanged; the test-scoped file starts no application process and is not deployed.
 - **02 — implemented and archived (merged to `develop` in PR #4), but its tests are deferred, so it
   is still unfinished.** All the work is in
   place: the key shape is settled as `users.Id = oid` (the PRD's surrogate proposal was rejected
@@ -81,7 +85,7 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 
 | # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
 |---|---|---|---|---|
-| 01 | [foundation](archive/01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations applied by the pipeline; `Dockerfile` for the ACA image; `IStorageRepository` abstraction with a fake; config for Azure Blob | archived |
+| 01 | [foundation](archive/01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations applied by the pipeline; `Dockerfile` for the ACA image; `IStorageRepository` abstraction with a fake; config for Azure Blob | archived — the fake was deleted 2026-09-18 (see the note above) |
 | 02 | [entra-auth](archive/02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | archived — tests deferred |
 | 03 | [admin-seeding](03-admin-seeding.md) | 02 | `Role` stored on `users`; exactly one admin seeded from configuration at startup; role readable by the authorization path | not started |
 | 04 | [activity-crud](04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. **`Type` is stored here, enforced in 05/09** | not started |
@@ -133,8 +137,12 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
   affordance is decorative, and the "upload media" label has no behaviour behind it.
   **[Item 15](../tech-debt/15-web-app-cannot-call-the-api.md) owns that list** — including which
   defects are re-export fixes rather than doc gaps. This file no longer restates them.
-- **Azure credentials in CI** — the tagged storage integration tier needs them to run; without them
-  CI proves the fake, not the blob implementation.
+- **Azure credentials in CI** — **re-stamped 2026-09-18, and the gap is narrower than this said.**
+  The storage tier no longer needs credentials at all: it runs the real `AzureBlobStorageRepository`
+  against the Azurite container, which carries no secret, so CI proves the blob implementation
+  without an Azure account. What still needs real credentials is the much smaller set of claims only
+  a real account can settle — its certificate, its ACL behaviour, and its API-version acceptance —
+  plus feature 11's end-to-end tier.
   [Item 11](../tech-debt/11-no-ci-pipeline.md) owns the pipeline decision and
   [item 12](../tech-debt/12-feature-02-tests-deferred.md) the three assertions that need it.
 - **Known divergences live in the debt register.** [docs/tech-debt/00-debt-log.md](../tech-debt/00-debt-log.md)

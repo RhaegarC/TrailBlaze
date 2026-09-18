@@ -20,7 +20,7 @@ feature's exit condition: when they all check, Mission 1 is done.
 ## Story
 
 As the team delivering this journal I want the complete journey exercised against a deployed
-stack with real Azure and real Entra so that "it works on my machine with a fake storage service"
+stack with real Azure and real Entra so that "it works on my machine against the emulator"
 is replaced by evidence that a visitor, a user, and an admin each see exactly what the PRD says.
 
 ## Dependencies
@@ -34,14 +34,23 @@ unless they all pass. It is last in the ladder by design.
 
 Each is performed against a running stack: the API running from its container image, configured
 against the real Azure SQL Database, the real Azure Blob account and real Entra ID, with the
-`src/web/` app served alongside. No fake `IStorageRepository`, no emulator, no `InMemory` provider.
+`src/web/` app served alongside. No fake `IStorageRepository`, no `InMemory` provider — and **no
+emulator**, which is the one clause here that has to be read against a changed baseline
+(2026-09-18). The ordinary suite runs against emulators by default: the storage tier falls back to
+Azurite because it needs no credentials, and the database tier runs against `azure-sql-edge` from
+`docker-compose.test.yml`. This pass is the tier that deliberately does not, and the distinction is
+the whole of its value — a container on this machine cannot answer whether the real account's
+containers exist, whether its signatures are accepted, whether its container access levels are what
+the app assumes, or whether the real tenant issues the token the API validates.
 
 - [ ] The API runs against the real Azure SQL Database; `GET /health` returns 200, and the schema
       matches the PRD data model — the migration set having been applied by the pipeline, not by
       the API
 - [ ] The running API reaches the **real** `covers` and `avatars` (public) and `media` (private)
-      containers, and the **real** Entra tenant, by configuration; the fake used in unit tests is
-      nowhere in this path
+      containers, and the **real** Entra tenant, by configuration; no test double, emulator, or
+      placeholder account string is anywhere in this path — the unit tests' fake is deleted outright
+      (2026-09-18), and the emulators the suite falls back to are the thing this criterion is
+      distinguished *from*
 - [ ] **Anonymous browsing — Public only**: with no sign-in, `GET /api/activities` returns a
       paged, date-descending list containing **Public** entries only — every `Shared` and
       `Private` entry is absent from it — and the app renders it with covers; `pageSize` is
@@ -125,11 +134,14 @@ What it runs is everything that already exists, plus the tiers that only this pa
 
 - Unit / integration (`dotnet test` from `src/api/`): the full suite must be green on the same
   commit under verification. This is a precondition of the pass, not the pass itself.
-- Storage integration (`TrailBlaze.Service.Test`, tagged): `dotnet test --filter
-  Category=StorageIntegration` runs against the real Azure account — the tier that proves the blob
-  implementation rather than the fake, and the only tier that can catch SAS generation,
-  content-type round-tripping, and the **cover-move** copy-then-delete across the public line
-  (Decision #29), where the assertion that matters is that the old public blob is gone.
+- Storage integration (`TrailBlaze.Repository.Test`, tagged `Category=Container`): `dotnet test
+  --filter "Category=Container"` with `TRAILBLAZE_STORAGE_CONNECTION` naming the **real** account —
+  the tier runs the real `AzureBlobStorageRepository`, and what this pass adds over the ordinary run
+  is the account behind it: same code, a real one instead of the Azurite fallback (2026-09-18; the
+  project was `TrailBlaze.Service.Test` and the tag `Category=StorageIntegration`, which no longer
+  exists). It is the only tier that can catch SAS generation, content-type round-tripping, and the
+  **cover-move** copy-then-delete across the public line (Decision #29), where the assertion that
+  matters is that the old public blob is gone.
 - Manual end-to-end walkthrough: the journey in the acceptance criteria above, performed by hand
   against the running stack, because the frontend it drives is out of TDD scope
   ([docs/testing-and-tdd.md](../testing-and-tdd.md)).
@@ -165,6 +177,9 @@ What it runs is everything that already exists, plus the tiers that only this pa
 - Not a release gate for the pipeline, and not a substitute for the per-feature tests that produced
   the green suite it starts from.
 - **Database target.** The database is **Azure SQL Database** (PRD Decision #16); the provider swap
-  landed in feature 01 and development runs against a real Azure SQL Database rather than a local
-  stand-in, so a local pass is aimed at the target engine. It still records which server and
-  database it actually ran against rather than assuming the target one.
+  landed in feature 01, and development and this pass run against a real Azure SQL Database rather
+  than a local stand-in. The suite is the one place that has a stand-in — the container tier's
+  `azure-sql-edge` (2026-09-18) — and it is a real SQL Server engine, which is precisely why "it
+  passed against Edge" is not evidence about the target. This pass therefore runs against the real
+  Azure SQL Database, and still records which server and database it actually ran against rather
+  than assuming the target one.
