@@ -78,7 +78,7 @@ the deletion, not an assertion on it. The item was corrected rather than left im
 did not have, and its close-checklist box for "the stored actor is still the caller" was left
 unchecked deliberately.
 
-`DeleteAsync` still has no test of any kind. Feature [04](../../features/04-activity-crud.md) is
+`DeleteAsync` still has no test of any kind. Feature [04](../../features/archive/04-activity-crud.md) is
 its first caller, and covering it belongs there.
 
 ## Lesson

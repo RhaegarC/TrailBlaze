@@ -15,8 +15,8 @@ not exist.
 | [PRD — data model](../PRD.md#data-model), ER diagram | `CreatedByUserId`, `ActivityId`, `UploadedByUserId` drawn as `FK` | `CreatedByUserId` fixed 2026-09-19 by feature 04; the two `media` ones open |
 | [PRD — data model](../PRD.md#data-model), column table | those three rows read **FK →** another table's id | `activities.CreatedByUserId` fixed 2026-09-19 by feature 04; the two `media` rows open |
 | [PRD — API surface](../PRD.md#api-surface) | `DELETE /api/activity/{id}` — "Delete (cascades media)" | open |
-| [04 — acceptance criteria](../features/04-activity-crud.md#acceptance-criteria) | `CreatedByUserId` **FK** → `users.Id` | fixed 2026-09-19 |
-| [04 — tests](../features/04-activity-crud.md#tests-tdd) | the **FK** to `users.Id` is asserted from the EF model; "the cascade to media rows is a mapping" | fixed 2026-09-19 |
+| [04 — acceptance criteria](../features/archive/04-activity-crud.md#acceptance-criteria) | `CreatedByUserId` **FK** → `users.Id` | fixed 2026-09-19 |
+| [04 — tests](../features/archive/04-activity-crud.md#tests-tdd) | the **FK** to `users.Id` is asserted from the EF model; "the cascade to media rows is a mapping" | fixed 2026-09-19 |
 | [06 — dependencies](../features/06-media-upload.md#dependencies) | 04's **FK gives the cascade delete** | fixed 2026-09-19 |
 | [06 — acceptance criteria](../features/06-media-upload.md#acceptance-criteria) | `DELETE /api/activity/{id}` cascades to media rows "(FK cascade)" | fixed 2026-09-19 |
 

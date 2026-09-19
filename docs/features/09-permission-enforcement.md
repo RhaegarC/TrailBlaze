@@ -36,7 +36,7 @@ the access the PRD grants them — and nothing more by default.
 
 - [03-admin-seeding](archive/03-admin-seeding.md) (`users.Role` stored and constrained; the admin is a row
   someone sets by hand, so this feature must not assume one exists)
-- [04-activity-crud](04-activity-crud.md) (activities, their `CreatedByUserId`, and the routes this feature gates)
+- [04-activity-crud](archive/04-activity-crud.md) (activities, their `CreatedByUserId`, and the routes this feature gates)
 
 Features 05–08 (public list, media upload, SAS delivery, cover images) are **retrofitted** by this
 feature: their endpoints ship permissive and are brought under the matrix here.
@@ -149,7 +149,7 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   in the PRD, not data-driven grants.
 - No dedicated admin screens (Decision #21): admin is elevated rights in the same routes and UI.
 - **This feature does *not* introduce `activities.Type`; it enforces it.** The column and its
-  round-tripping belong to feature [04](04-activity-crud.md) and the read filter to
+  round-tripping belong to feature [04](archive/04-activity-crud.md) and the read filter to
   [05](05-public-activity-list.md). What lands here is the *single predicate* the other two
   consult, and its application to every remaining route. Stated explicitly because this feature
   is where a reader would expect visibility to be introduced, and looking for it here would make
