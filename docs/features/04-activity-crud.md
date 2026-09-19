@@ -5,16 +5,17 @@ Source: [PRD](../PRD.md) — Decisions #10/#11/#12/#25/#26 + "API surface" and t
 
 ## Summary
 
-Create, read, update, and delete an activity. The field set is fixed: `Title`, `Location`,
-`ActivityDate` (a **calendar date — no time, no timezone**), optional `Description`, optional
-`CoverImageBlobPath`, and `Type` — the **visibility** (`Public` | `Shared` | `Private`, Decision
-#26). `CreatedOn` is recorded for audit and doubles as the tiebreaker that orders two activities
-logged on the same day. This feature ships the CRUD mechanics only; **who is allowed to call
-them, and who is allowed to read the result, are features 09 and 05** — this feature stores and
-round-trips `Type`, it does not enforce it.
+Create, read, update, and delete an activity, and read the paged list the journal shows. The field
+set is fixed: `Title`, `Location`, `ActivityDate` (a **calendar date — no time, no timezone**),
+optional `Description`, optional `CoverImageBlobPath`, and `Type` — the **visibility**
+(`Public` | `Shared` | `Private`, Decision #26). `CreatedOn` is stamped server-side and is the
+list's sort key, newest entry first. This feature stores `Type` and applies the **read** half of the
+visibility rule to the list; **who may mutate an entry is feature [09](09-permission-enforcement.md)'s**,
+and the detail read, the cover URL and the enriched payload are
+[05](05-public-activity-list.md)'s.
 
 Storing `Type` here rather than in feature 09 is deliberate: it is a column on the activity, so
-it belongs with the other columns. Feature 09 owns the *evaluation* of it.
+it belongs with the other columns. Feature 09 owns the *evaluation* of it on the mutation side.
 
 ## Story
 
@@ -33,8 +34,8 @@ where I went and when.
       foreign keys, [item 23](../tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)); `Id` and the remaining audit and soft-delete
       columns come from `EntityBase` (the PRD draws them once), so `IsDeleted` is present and the
       global query filter applies to this table
-- [x] Routes exist for `POST /api/activities`, `GET /api/activities/{id}`,
-      `PUT /api/activities/{id}`, and `DELETE /api/activities/{id}`
+- [x] Routes exist for `POST /api/activity`, `GET /api/activity/{id}`,
+      `PUT /api/activity/{id}`, and `DELETE /api/activity/{id}`
 - [x] `Type` accepts only `Public`, `Shared`, and `Private`; any other value is rejected with 400
       naming the field, and no row is written. Input comparison is case-insensitive but the stored
       value is canonical, so a reader never has to normalise it
@@ -70,9 +71,38 @@ where I went and when.
 - [x] `CoverImageBlobPath` is never settable through the create or update body — it is written only
       by the cover upload path in feature 08
 
-**Not this feature's criterion:** ordering by `ActivityDate DESC, CreatedOn DESC`. It was listed
-here and belongs to [05-public-activity-list](05-public-activity-list.md), which owns the list, its
-paging and its sort; a criterion written twice is one that can disagree with itself.
+The paged list, which is the first anonymous read in the product:
+
+- [x] `GET /api/activity` is reachable with **no** bearer token and returns a paging envelope —
+      `Items` plus the `Page`, `PageSize` and `Total` actually applied, so a caller can see the clamp
+      and page deterministically
+- [x] `page` is a **zero-based** index defaulting to 0, and `pageSize` defaults to **10**. A
+      `pageSize` above 100 is **clamped to 100** rather than rejected or honoured, so the endpoint can
+      never return an unbounded set (Decision #23)
+- [x] `pageSize` of 0 or less falls back to the default, a negative `page` is read as the first page,
+      and a page past the end returns 200 with an empty item list rather than an error
+- [x] Items are ordered by `CreatedOn` **descending**, tie-broken by `Id` descending, so the order is
+      total and stable across pages (Decision #10, **changed 2026-09-19** — see below)
+- [x] **Anonymous visibility:** with no token the items are exactly the `Public` entries.
+      **Signed-in visibility:** `Public` + `Shared` + the caller's own `Private`, and never another
+      user's `Private` (Decision #26)
+- [x] The filter is applied **in the query**, not to a materialised page: a row the caller may not see
+      cannot consume a page slot, and `Total` counts the filtered set rather than the table
+- [x] The list withholds `CoverImageBlobPath` from a caller with no token — the first anonymous
+      response in the product, and an anonymous caller may not be handed a blob path (Decision #30)
+
+**The admin branch of the visibility rule is not implemented here, and cannot be.** It reads a role,
+and `IUserContextService` carries none — a role has exactly one source, the `users` row, which is a
+store read this predicate does not perform. Reading it is part of the permission work
+[09](09-permission-enforcement.md) owns; until then an admin pages what a user pages. Asserted as
+such rather than left to be discovered.
+
+**Ordering was changed on 2026-09-19, and the PRD changed with it.** Decision #10 originally made the
+user-chosen `ActivityDate` the sort key with `CreatedOn` as the tiebreaker; this feature's review
+settled on **`CreatedOn` descending**, tie-broken by `Id` descending, because `ActivityDate` is
+client-supplied and backdating is accepted — an entry written today for last month lands mid-list and
+shifts a page boundary when it does. The list is ordered by when an entry was *written*, not by when
+it claims to have happened.
 
 ## Tests (TDD)
 
@@ -98,11 +128,28 @@ is not covered by any tier, and is called out rather than implied.**
   `ActivityDate` column is `date` in `INFORMATION_SCHEMA` rather than only in the model; the insert
   is stamped; an edit read-then-written keeps `CreatedOn` and `CreatedByUserId`; the engine refuses
   a `Type` outside the closed set; a deleted row leaves the read path and stays in the table.
-- Api (`TrailBlaze.Api.Test`) — offline by design. All four routes answer **401** to an anonymous
-  caller, which asserts the authorization rule and the route template together: a misspelled path
-  would be a 404. **The host has no authentication scheme unless `TenantId` and `Audience` are
-  configured**, and in that state an `[Authorize]` route answers 500 — see
-  [item 28](../tech-debt/28-unconfigured-auth-answers-500.md) — so these tests wire both.
+- Api (`TrailBlaze.Api.Test`) — offline by design. All four protected routes answer **401** to an
+  anonymous caller, which asserts the authorization rule and the route template together: a misspelled
+  path would be a 404. The list route is asserted from the other side — `GET /api/activity` reaches
+  the service, so the answer is the **500** the unreachable store produces, and neither the 401 of an
+  authorized-only route nor the 404 of a route that does not exist. **The host has no authentication
+  scheme unless `TenantId` and `Audience` are configured**, and in that state an `[Authorize]` route
+  answers 500 — see [item 28](../tech-debt/28-unconfigured-auth-answers-500.md) — so these tests wire
+  both.
+- Paging and visibility (`TrailBlaze.Service.Test`) — offline: the defaults, the 100 clamp, the
+  fallback for a non-positive size, the saturating skip on a page past the end, the reported total,
+  the anonymous and signed-in predicates compiled and applied to rows, and the ordering. The
+  predicate is compiled from the expression the service hands the store, so what is asserted is the
+  rule itself rather than a string that names a column.
+- Paging against the engine (`TrailBlaze.Repository.Test`, `Category=Container`) — the store's half:
+  a page comes back newest first, paging returns every row exactly once, a past-the-end page is
+  empty, a deleted row leaves both the page and the count, and **an excluded row does not consume a
+  page slot** — the last seeded with the visible rows *older* than the hidden ones, so a filter
+  applied after the page would show up as an empty page.
+- The composed statement (`TrailBlaze.Repository.Test`, offline) — `ActivityModelTests` asserts the
+  generated SQL carries the `ORDER BY`/`OFFSET` and that the `OFFSET` follows both the soft-delete
+  predicate and `[Type]`, which is the model-level evidence for the same claim the container test
+  makes about behaviour.
 - **Not covered, and worth saying plainly: nothing exercises the service against a store.** The
   API tier's connection string points at a dead port, the database tier never builds a
   `TrailBlazeContext` (`TrailBlaze.Service.Test` does not reference `TrailBlaze.Repository`), and
@@ -121,8 +168,11 @@ is not covered by any tier, and is called out rather than implied.**
 - **This slice is not safe to deploy** — it builds the CRUD mechanics while every authenticated
   caller may still edit or delete anything, and feature **09** adds the ownership and admin rules.
   See the sequencing note in [00-mission-1-sprint.md](00-mission-1-sprint.md).
-- No `GET /api/activities` list, paging, or sorting endpoint — that is 05, which clamps `pageSize`
-  server-side.
+- **The list ships here; what [05](05-public-activity-list.md) still owns is the payload.** The
+  cover URL, the media count and the creator's display name are absent from a list item, the detail
+  read `GET /api/activity/{id}` is still a plain 200 for any id, and the admin branch of the
+  visibility rule is unread. No caller-selectable sort, no search, no filtering (Decision #23) — the
+  visibility filter is an access rule rather than a query the caller chose.
 - No cover upload: the column exists, nothing but feature 08 writes it.
 - No media upload or SAS delivery — 06 and 07.
 - No search or filtering of any kind (PRD Decision #23).
@@ -133,7 +183,7 @@ is not covered by any tier, and is called out rather than implied.**
   table is written by an `AuditSaveChangesInterceptor`. Neither is configured or exposed here.
 - The anonymous/user/admin access matrix for these four routes is stated and enforced in 09, not
   here.
-- **`Type` is stored, not enforced, in this slice.** `GET /api/activities/{id}` here returns the
+- **`Type` is stored, not enforced, in this slice.** `GET /api/activity/{id}` here returns the
   row for any id; hiding a `Shared` or `Private` entry from a caller who may not read it is the
   read-filtering rule owned by [05-public-activity-list](05-public-activity-list.md) and
   [09-permission-enforcement](09-permission-enforcement.md). Splitting it this way keeps the CRUD

@@ -259,6 +259,23 @@ public static class Constant
     }
 
     /// <summary>
+    /// The page sizes the activity list accepts.
+    /// </summary>
+    /// <remarks>
+    /// The cap is not a preference to be argued with at the call site: it is what keeps the
+    /// endpoint from ever returning an unbounded set, so a caller asking for more is clamped
+    /// rather than refused.
+    /// </remarks>
+    public static class ActivityPaging
+    {
+        /// <summary>Applied when a caller sends nothing, and to a size this endpoint will not honour.</summary>
+        public const int DefaultPageSize = 10;
+
+        /// <summary>The largest page this endpoint returns, whatever a caller asks for.</summary>
+        public const int MaxPageSize = 100;
+    }
+
+    /// <summary>
     /// What an uploaded file may be: the content types each kind accepts and the size cap each
     /// is held to.
     /// </summary>

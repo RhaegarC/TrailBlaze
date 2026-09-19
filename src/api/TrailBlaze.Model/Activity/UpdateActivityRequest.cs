@@ -1,6 +1,6 @@
 namespace TrailBlaze.Model.Activity;
 
-/// <summary>The body of <c>PUT /api/activities/{id}</c>.</summary>
+/// <summary>The body of <c>PUT /api/activity/{id}</c>.</summary>
 public sealed record UpdateActivityRequest : IActivityInput
 {
     public string? Title { get; init; }

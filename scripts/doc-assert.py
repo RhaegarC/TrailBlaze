@@ -83,10 +83,10 @@ def links_resolve():
 
 
 def counts_have_one_home():
-    """A live test count appears only in the test strategy, which owns it.
+    """A live test count appears only in the sprint file, which owns it.
 
     A count on a dated line is a measurement of a moment rather than a claim about now,
-    and the strategy doc's own drift record needs to be able to quote one. Debt items are
+    and the sprint file's own drift record needs to be able to quote one. Debt items are
     exempt for the same reason: recording what a run reported, on what date, is the item's
     function — a register entry is evidence, not a second home.
     """
@@ -94,7 +94,7 @@ def counts_have_one_home():
     dated = re.compile(r"\b(?:19|20)\d\d-\d\d-\d\d\b|\bas of\b|\bMeasured\b|\bChecked\b")
     failures = []
     for path in markdown_files():
-        if path == TEST_STRATEGY or is_archived(path) or DEBT in path.parents:
+        if path == SPRINT or is_archived(path) or DEBT in path.parents:
             continue
         text = prose(path.read_text(encoding="utf-8"))
         for number, line in enumerate(text.splitlines(), start=1):
@@ -260,9 +260,27 @@ def no_relationship_the_model_does_not_declare():
     return failures
 
 
+def strategy_names_no_feature():
+    """The test strategy describes the workflow, and carries no feature's status.
+
+    It is the standard every feature is implemented against, so a fact that changes when a
+    feature lands does not belong in it: the tiers, the container rules and the commands are
+    stable, while "what is covered today" is status and the sprint table owns it. Feature
+    *numbers* are the proxy for that — a type name such as `FakeUserContext` is a fact about
+    the code the workflow runs against, and stays.
+    """
+    pattern = re.compile(r"\bfeature\s+\d", re.IGNORECASE)
+    failures = []
+    for number, line in enumerate(prose(TEST_STRATEGY.read_text(encoding="utf-8")).splitlines(), start=1):
+        if pattern.search(line):
+            failures.append(f"{relative(ROOT, TEST_STRATEGY)}:{number}: {line.strip()}")
+    return failures
+
+
 CHECKS = [
     ("Every relative markdown link resolves", links_resolve),
-    ("Test counts live only in the test strategy", counts_have_one_home),
+    ("Test counts live only in the sprint file", counts_have_one_home),
+    ("The strategy states workflow, not feature status", strategy_names_no_feature),
     ("No document asserts CI that does not exist", ci_is_not_contradicted),
     ("The sprint table covers the feature set", sprint_table_covers_features),
     ("The debt register is complete and points at real files", debt_register_is_complete),

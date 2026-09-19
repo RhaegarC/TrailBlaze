@@ -30,6 +30,6 @@ Present as a short table plus a two-line "next action" summary.
   Say so in the summary rather than reporting a clean-looking sprint.
 - **The container tiers, and the difference between a skip and a pass.** The database and storage
   tiers need `docker-compose.test.yml` running; without it they **skip**, and a skip is not a pass.
-  Quote the counts from `docs/testing-and-tdd.md`, which is their only home — a number carried
-  here is a number that goes stale here. Report the skipped count alongside the passed count, and
-  never describe a run with skips as "all tests passing".
+  Quote the counts from `docs/features/00-mission-1-sprint.md`, which is their only home — a number
+  carried here is a number that goes stale here. Report the skipped count alongside the passed
+  count, and never describe a run with skips as "all tests passing".

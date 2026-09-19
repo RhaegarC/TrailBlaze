@@ -18,7 +18,7 @@ claim that mentions a repository — what the service *hands* it — is a record
 the test file that uses it, which answers no reads. **Fact 1 is now firmly closed**: the project
 holds tests of real product behaviour, and (c)'s cost is visible in the same PR rather than deferred
 — the spec bullets name whose behaviour they assert. The counts themselves live in
-[testing-and-tdd.md](../testing-and-tdd.md), which is their only home.
+[00-mission-1-sprint.md](../features/00-mission-1-sprint.md), which is their only home.
 
 **What (c) does not buy, stated plainly.** The two tiers meet nowhere. No test drives
 `ActivityService` → `IDbRepository` → SQL Server in one run: the service tier cannot construct a
@@ -125,7 +125,7 @@ Checked 2026-09-18.
 - `dotnet test` reported the project in the run and added 0 to the total; on 2026-09-18 the
   solution's 59 tests were 55 repository + 4 Api, re-measured 2026-09-19 at 66 — 60 repository,
   4 Api, 2 here. That was the last measurement taken for this item; for what the run reports now,
-  [testing-and-tdd.md](../testing-and-tdd.md) is the only home.
+  [00-mission-1-sprint.md](../features/00-mission-1-sprint.md) is the only home.
 - `TrailBlaze.Service.Test.csproj` lists no `ProjectReference` to `TrailBlaze.Repository`.
 - The four spec bullets above were re-pointed on 2026-09-18 and each carries a note saying its tier
   is unsettled.

@@ -1,6 +1,6 @@
 namespace TrailBlaze.Model.Activity;
 
-/// <summary>The body of <c>POST /api/activities</c>.</summary>
+/// <summary>The body of <c>POST /api/activity</c>.</summary>
 public sealed record CreateActivityRequest : IActivityInput
 {
     public string? Title { get; init; }

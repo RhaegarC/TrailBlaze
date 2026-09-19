@@ -22,6 +22,7 @@ public sealed record ActivityResponse
 
     public required string Type { get; init; }
 
-    /// <summary>The stored path, never a URL. Feature 08 fills it in; nothing here writes it.</summary>
+    /// <summary>The stored path, never a URL. Feature 08 fills it in; nothing here writes it, and a
+    /// list response withholds it from a caller who has no token.</summary>
     public string? CoverImageBlobPath { get; init; }
 }

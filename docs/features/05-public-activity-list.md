@@ -5,16 +5,24 @@ Source: [PRD](../PRD.md) — Decisions #2/#3/#10/#23/#25/#26/#29/#30 + "Media st
 
 ## Summary
 
-The read surface: a paged list of activities ordered by activity date descending, plus a detail
-read. These two endpoints are the only routes in the API that a caller with **no** token may
-reach — the deliberate exceptions to default-deny (PRD "Authentication & authorization") — so
-this feature also owns the rule deciding **which activities a given caller sees at all**.
+The read surface's second half: the detail read, and the payload both reads carry.
 
-That rule is `activities.Type` (Decision #26). An anonymous caller pages the `Public` entries; a
-signed-in caller pages `Public` + `Shared` + their own `Private`; an admin pages everything. The
-list applies it as a filter; the detail read applies it as a **404**, so an entry a caller may not
-read is indistinguishable from one that does not exist — "this row exists" is itself the fact
-being withheld.
+**The list route, its paging and its visibility filter ship in [04](04-activity-crud.md)**, because a
+list with no filter hands every caller every row — the paging and the rule deciding who sees what are
+one mechanism, and were built as one. What is left here is the second read and the response shape:
+`GET /api/activity/{id}`, which applies the same rule as a **404** rather than a filter, so an entry a
+caller may not read is indistinguishable from one that does not exist — "this row exists" is itself
+the fact being withheld; the cover URL, the media count and the creator's display name a list item
+still does not carry; and the scoping that keeps a user id and a blob path out of a response anyone
+can fetch.
+
+**The detail read is the one route with no envelope and no paging, and that is the whole difference
+between the two reads.** The list's `page`, `pageSize` and ordering belong to 04; this feature must
+not change them, and restating them here would be the second copy that drifts.
+
+One branch of the rule is not implementable yet: **an admin reads everything**, and reading a role
+means reading the `users` row, which `IUserContextService` does not do. That is the permission work
+[09](09-permission-enforcement.md) owns, and until it lands an admin reads what a user reads.
 
 Media is never reachable here at any visibility level. The payload names the creator and gives an
 item count (Decision #30) but carries no user id, no blob path, and no SAS URL, which is what
@@ -22,8 +30,8 @@ keeps the private container's contents out of a response an anonymous caller can
 
 ## Story
 
-As a visitor I want to page through activities ordered by date descending so that I can browse the
-journal without signing in.
+As a reader I want an entry's own page and the name of the person who wrote it, so that the journal
+reads as entries rather than as anonymous rows.
 
 ## Dependencies
 
@@ -32,17 +40,9 @@ journal without signing in.
 
 ## Acceptance criteria
 
-- [ ] `GET /api/activities` returns 200 for a request carrying **no** bearer token
-- [ ] `GET /api/activities/{id}` returns 200 for a request carrying **no** bearer token, **for a `Public` entry**
-- [ ] Query parameters are `page` (1-based, default 1) and `pageSize` (default 20)
-- [ ] `pageSize` above 100 is **clamped to 100**, not rejected and not honoured — the endpoint can never return an unbounded set
-- [ ] `pageSize` of 0, negative, or non-numeric falls back to the default 20 rather than erroring
-- [ ] Items are ordered by `ActivityDate` descending; rows sharing an `ActivityDate` are tie-broken by `CreatedOn` descending, so the order is total and stable across pages (Decision #10)
-- [ ] The response is a paging envelope — `items` plus the total count and the page/pageSize actually applied, so a caller can detect the clamp and page deterministically
-- [ ] **Anonymous visibility filter:** with no bearer token the items are exactly the `Public` activities — no `Shared` and no `Private` row appears on any page, and the reported total counts the filtered set rather than the table (Decision #26)
-- [ ] **Signed-in visibility filter:** a `User` sees `Public` + `Shared` + their own `Private` and **no other user's `Private`**; an `Admin` sees everything (Decision #26)
-- [ ] Visibility is applied **in the query**, not by discarding rows from a materialised page. A filtered-out row must not consume a page slot — otherwise a page of 20 can return fewer than 20 visible items while more exist beyond it
-- [ ] **Detail visibility:** `GET /api/activities/{id}` returns 200 for a caller who may read the entry and **404 for one who may not** — a `Shared` entry to an anonymous caller, a `Private` entry to anyone but its owner and admins. 404 rather than 403, because existence itself is withheld (PRD "Authentication & authorization")
+- [ ] `GET /api/activity/{id}` returns 200 for a request carrying **no** bearer token, **for a `Public` entry**
+- [ ] **Detail visibility:** `GET /api/activity/{id}` returns 200 for a caller who may read the entry and **404 for one who may not** — a `Shared` entry to an anonymous caller, a `Private` entry to anyone but its owner and admins. 404 rather than 403, because existence itself is withheld (PRD "Authentication & authorization")
+- [ ] **Admin visibility:** an `Admin` reads everything, including entries no other caller may see (Decision #26). **Blocked, not skipped:** the branch reads a role, and no layer exposes one today — `IUserContextService` carries none, and a role's only source is the `users` row. It therefore lands with [09](09-permission-enforcement.md)'s permission work, and until then this criterion stays open and an admin reads what a user reads
 - [ ] Each list item exposes the activity's own fields — `Id`, `Title`, `Location`, `ActivityDate`, `Description`, `Type` — plus the cover image URL, the **media count**, and the **creator's display name** (Decision #30). `CreatedByUserId` is the one further field, and only for an authenticated caller (next criterion)
 - [ ] **No user id ever appears in an anonymous response** — not `CreatedByUserId`, not an uploader id. The creator is named by display name only; under the current key shape a user id *is* the Entra object id (PRD "Current state vs. target", Decision #30)
 - [ ] The anonymous payload carries no media id, blob path, SAS URL, content type, size, or file name. The **count is the only media-derived value permitted**
@@ -52,23 +52,35 @@ journal without signing in.
 - [ ] `Type` is present on every item as one of `Public` / `Shared` / `Private`, so a client renders the badge without a second request
 - [ ] The detail response exposes the same field set as a list item
 - [ ] An unknown activity id returns **404**, never 401 and never 500
-- [ ] A page beyond the last returns 200 with an empty item list
 - [ ] **The media count is gated by the same visibility rule as the entry itself** — it is a read of the media table, so a caller who may not read the activity never receives its count. It is a permitted disclosure, not a separate one
 - [ ] An activity whose `CoverImageBlobPath` is null is returned with a null/absent cover URL rather than being filtered out or erroring
 - [ ] The cover URL is a **plain public blob URL for a `Public` activity**, and a **short-lived SAS URL for a `Shared` or `Private`** one — whose cover lives in the private container (Decision #29). A test asserts which container each shape is derived from
 
 ## Tests (TDD)
 
-- Unit (`TrailBlaze.Service.Test`): pagination clamping across the boundary — `pageSize` of 0, 1, 20, 100, 101, 1000, and garbage input; page numbering at first/last/past-end page; ordering with same-date rows resolving on `CreatedOn`. **Hot spot (security / access control — must be test-first):** the visibility predicate as an allow/deny table over {anonymous, signed-in non-owner, owner, admin} × {`Public`, `Shared`, `Private`}, asserting that an anonymous caller never receives a `Shared` or `Private` row and that a signed-in caller never receives another user's `Private` row. RED first: this is the boundary that keeps non-public entries out of an unauthenticated response.
-- Unit (`TrailBlaze.Service.Test`) — **hot spot (information disclosure):** serialize the anonymous response model and assert the property set. No user id, no blob path, no SAS URL, no per-item media field; the count and the creator's display name **are** present. Asserted as a property set rather than a sample string so a later field addition fails the test instead of slipping through.
-- Integration (`TrailBlaze.Repository.Test`): the ordering + paging **+ visibility filter** query runs offline — the generated SQL (the skip/take paging, the `ActivityDate DESC, CreatedOn DESC` ordering, the soft-delete filter, and the `Type` predicate) is inspected with `ToQueryString()`, including a same-`ActivityDate` case whose tie-break must appear in the expected total order. Assert the `Type` predicate is in the SQL **before** the skip/take, which is what proves filtered rows cannot consume page slots ([testing-and-tdd.md](../testing-and-tdd.md)).
-- Integration (`TrailBlaze.Api.Test`): an end-to-end anonymous request with no `Authorization` header returning 200 and valid JSON; the same request returning no `Shared` or `Private` entry; a `Private` entry's detail returning 404 anonymously and under a second user's token, and 200 under its owner's; the serialized list item carrying no user id; `ActivityDate` emitting as `yyyy-MM-dd`.
+- Unit (`TrailBlaze.Service.Test`) — **hot spot (information disclosure — must be test-first):**
+  serialize the anonymous response model and assert the property set. No user id, no blob path, no SAS
+  URL, no per-item media field; the count and the creator's display name **are** present, and
+  `CreatedByUserId` is present for a signed-in caller. Asserted as a property set rather than a sample
+  string so a later field addition fails the test instead of slipping through. RED first: this is the
+  boundary that keeps a user id out of a response anyone can fetch.
+- Unit (`TrailBlaze.Service.Test`) — the detail read's visibility: a `Public` entry to a caller with no
+  token, a `Shared` one to a signed-in caller, a `Private` one to its owner, and **404** for each case
+  where the caller may not read it.
+- Integration (`TrailBlaze.Api.Test`): an end-to-end anonymous request with no `Authorization` header
+  for a `Public` entry's detail returning 200 and valid JSON; a `Private` entry's detail returning 404
+  anonymously and under a second user's token, and 200 under its owner's; the serialized list item
+  carrying no user id; `ActivityDate` emitting as `yyyy-MM-dd`.
+
+**Paging, ordering and the visibility filter are asserted in [04](04-activity-crud.md)'s tiers and are
+not restated here** — they already run, and a second copy of a test is a second thing to keep green.
+What this feature adds to the tiers is the payload's shape and the detail read's status code.
 
 ## Notes / non-goals
 
 - **No search and no content filtering** — pagination only, for v1 (PRD Decision #23). The visibility
   filter is not "filtering" in that sense: it is an access rule, not a caller-chosen query. There is
-  still no caller-selectable sort; date descending is the only order.
+  still no caller-selectable sort; newest entry first is the only order, and it is 04's.
 - **No media bytes, ever, in this payload** (PRD Decision #2). The **count** is metadata and is now
   permitted (Decision #30). The signed-in media surfaces are features 06 (metadata) and 07 (SAS URL);
   they are separate endpoints, and this feature must not grow a flag that inlines media into the
@@ -76,11 +88,12 @@ journal without signing in.
 - The feed is **one shared journal, scoped by visibility**: the list is filtered per caller on
   `activities.Type` (Decision #26). There is still no "my activities" variant — a caller's own
   entries appear in the same feed, not a separate one.
-- **This feature does apply the read half of the permission rule, and should no longer be described
-  as enforcing nothing.** What it does not do is mutation-side authorization: ownership of
-  edit/delete, and the retrofitting of the other routes, belong to
+- **The read half of the permission rule is in the code, and 04 shipped it with the list**; what this
+  feature adds to it is the 404-because-existence-is-withheld answer on the detail read. The admin
+  branch is still open, because it needs a role. Mutation-side authorization — ownership of
+  edit/delete, and the retrofitting of the other routes — belongs to
   [09-permission-enforcement](09-permission-enforcement.md), which owns the full matrix. The
-  visibility predicate lives in one shared place so the two features cannot drift apart.
+  visibility predicate lives in one shared place so the features cannot drift apart.
 - **This feature mints cover SAS URLs for non-public entries**, making it a second producer of SAS
   URLs alongside feature 07, which owns the media one. Stated plainly because it is a real widening
   of the SAS surface: the alternatives — omitting the cover for `Shared`/`Private` entries, or

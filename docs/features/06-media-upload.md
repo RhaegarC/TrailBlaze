@@ -32,7 +32,7 @@ the day actually looked like — including on an activity someone else logged, w
 
 ## Acceptance criteria
 
-- [ ] `POST /api/activities/{id}/media` accepts a multipart form upload and returns 201 on success
+- [ ] `POST /api/activity/{id}/media` accepts a multipart form upload and returns 201 on success
 - [ ] The upload is allowed to **any signed-in caller who can read the activity**, not only its
       creator — including a `User` uploading to a stranger's `Public` or `Shared` activity
       (Decision #27). The check is the visibility rule, so it is the same predicate feature 05
@@ -52,13 +52,13 @@ the day actually looked like — including on an activity someone else logged, w
 - [ ] The blob is written to the **private** container through `IStorageRepository`; this endpoint never writes to the public container
 - [ ] A rejection (bad type, oversize, count exceeded) leaves no blob and no row — no partial state
 - [ ] Blob bytes are stored unmodified, including video — the stored length and content hash match the uploaded file (Decision #15)
-- [ ] `GET /api/activities/{id}/media` returns metadata only (`Id`, `Kind`, `ContentType`, `SizeBytes`, `OriginalFileName`, `CreatedOn`, **`UploadedByUserId`**, and the **uploader's display name**) for a caller who can read the activity, and exposes no value that is directly fetchable without a SAS
+- [ ] `GET /api/activity/{id}/media` returns metadata only (`Id`, `Kind`, `ContentType`, `SizeBytes`, `OriginalFileName`, `CreatedOn`, **`UploadedByUserId`**, and the **uploader's display name**) for a caller who can read the activity, and exposes no value that is directly fetchable without a SAS
 - [ ] The uploader's display name is resolved by joining `users`, so the client can group and label items without a request per uploader — the field the detail view groups on is part of this response, not something the client assembles
-- [ ] `GET /api/activities/{id}/media` returns **404** to a caller who cannot read the activity, and **401** to an anonymous one, so the media surface cannot be used to probe for a `Private` entry's existence
+- [ ] `GET /api/activity/{id}/media` returns **404** to a caller who cannot read the activity, and **401** to an anonymous one, so the media surface cannot be used to probe for a `Private` entry's existence
 - [ ] `DELETE /api/media/{id}` deletes the blob and the row; an unknown id returns 404
 - [ ] Deletion is permitted to **three** principals and no others (Decision #27): the item's **uploader**, the **owner of the activity it belongs to**, and an **admin**. A fourth signed-in user gets 403 and an anonymous caller gets 401. All three permitted paths are asserted, not only the uploader's — the activity owner's right to curate their own entry is the one that is easy to leave untested
-- [ ] `DELETE /api/activities/{id}` cascades to that activity's media rows **regardless of uploader**, and the stored blobs are cleaned up — no foreign key exists, so this is work the delete path does rather than a constraint the schema enforces — an owner deleting their activity is never blocked by media someone else contributed
-- [ ] `GET /api/activities/{id}/media` against a non-existent activity returns 404
+- [ ] `DELETE /api/activity/{id}` cascades to that activity's media rows **regardless of uploader**, and the stored blobs are cleaned up — no foreign key exists, so this is work the delete path does rather than a constraint the schema enforces — an owner deleting their activity is never blocked by media someone else contributed
+- [ ] `GET /api/activity/{id}/media` against a non-existent activity returns 404
 
 ## Tests (TDD)
 

@@ -72,8 +72,9 @@ tests the filter selects) rather than the number.
    applying both.
 3. Add the `doc-assertion` test from the section above, and let [item 19](19-doc-indexes-drifted.md)
    own the numbers.
-4. If (2) is taken, the counts in [testing-and-tdd.md](../testing-and-tdd.md) and STANDARD §10 need
-   re-measuring in the same commit.
+4. If (2) is taken, the counts in
+   [00-mission-1-sprint.md](../features/00-mission-1-sprint.md) need re-measuring in the same commit,
+   and STANDARD §10's tier table restated if the traits changed.
 
 **Recommendation: (2) and (3), in that order.** A second trait is a small, honest change that makes
 the useful selection expressible; without it the only way to say "skip the database, run storage" is
@@ -92,5 +93,5 @@ to name a trait that means something else.
 - [ ] No document presents `Category!=Container` as the offline run
 - [ ] The tier that actually runs offline is describable without naming a filter that excludes it
 - [ ] A test asserts the claim, not the count
-- [ ] Counts in testing-and-tdd.md and STANDARD §10 re-measured if the traits changed
+- [ ] Counts in 00-mission-1-sprint.md, and STANDARD §10's tier table, re-measured if the traits changed
 - [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

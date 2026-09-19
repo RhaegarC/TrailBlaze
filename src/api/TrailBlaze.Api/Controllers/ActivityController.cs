@@ -6,31 +6,38 @@ using TrailBlaze.Interface.Service;
 using TrailBlaze.Model.Activity;
 
 /// <summary>
-/// One activity: create it, read it, edit it, remove it.
+/// One activity: page through them, create it, read it, edit it, remove it.
 /// </summary>
-/// <remarks>
-/// <para>
-/// <b><c>[Authorize]</c> is on the type, not on each action</b>, for the reason the user
-/// controller gives: a rule declared once cannot be forgotten by the next route added.
-/// </para>
-/// <para>
-/// <b>No route asks who is calling.</b> Ownership is decided in the service from the validated
-/// token and is feature 09's subject; adding the routes now would be a check here that a later
-/// feature has to move rather than a rule this one keeps.
-/// </para>
-/// <para>
-/// The list route is not here: reading many activities, and deciding which of them a caller may
-/// see, is feature 05's rule and is where its pagination and ordering belong.
-/// </para>
-/// </remarks>
 [ApiController]
 [Authorize]
-[Route("api/activities")]
-public class ActivityController(IActivityService activityService) : Controller
+[Route("api/[controller]")]
+public class ActivityController(IActivityService activityService) : ControllerBase
 {
     private readonly IActivityService _activityService = activityService;
 
-    /// <summary>Stores a new activity, attributed to the caller.</summary>
+    /// <summary>
+    /// One page of the activities the caller may read, newest first.
+    /// </summary>
+    /// <remarks>
+    /// The one route here reachable without a token; the visibility filter is what makes that safe.
+    /// </remarks>
+    /// <param name="page">Zero-based page index. Negative is read as the first page.</param>
+    /// <param name="pageSize">Rows per page. Defaults to 10, and is clamped to 100.</param>
+    /// <returns>The page, and the size of everything the caller may read.</returns>
+    [AllowAnonymous]
+    [HttpGet]
+    public async Task<IActionResult> List(int page = 0, int pageSize = 0)
+    {
+        ActivityPage result = await _activityService.GetPageAsync(page, pageSize);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Stores a new activity, attributed to the caller.
+    /// </summary>
+    /// <param name="request">The fields to store.</param>
+    /// <returns>The stored activity, the reasons the input was refused, or no caller.</returns>
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateActivityRequest request)
     {
@@ -46,7 +53,11 @@ public class ActivityController(IActivityService activityService) : Controller
         return CreatedAtAction(nameof(Get), new { id = outcome.Activity!.Id }, outcome.Activity);
     }
 
-    /// <summary>Reads one activity.</summary>
+    /// <summary>
+    /// Reads one activity.
+    /// </summary>
+    /// <param name="id">The activity's id.</param>
+    /// <returns>The activity, or not-found for an id that is unknown or already deleted.</returns>
     [HttpGet("{id}")]
     public async Task<IActionResult> Get(string id)
     {
@@ -55,7 +66,12 @@ public class ActivityController(IActivityService activityService) : Controller
         return Respond(outcome);
     }
 
-    /// <summary>Replaces the editable fields, including the type.</summary>
+    /// <summary>
+    /// Replaces the editable fields, including the type.
+    /// </summary>
+    /// <param name="id">The activity's id.</param>
+    /// <param name="request">The fields to store.</param>
+    /// <returns>The updated activity, the reasons the input was refused, or not-found.</returns>
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, [FromBody] UpdateActivityRequest request)
     {
@@ -64,7 +80,11 @@ public class ActivityController(IActivityService activityService) : Controller
         return Respond(outcome);
     }
 
-    /// <summary>Soft-deletes an activity. The row is retained; every read stops seeing it.</summary>
+    /// <summary>
+    /// Soft-deletes an activity. The row is retained; every read stops seeing it.
+    /// </summary>
+    /// <param name="id">The activity's id.</param>
+    /// <returns>No content, or not-found for an id that is unknown or already deleted.</returns>
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {
@@ -74,14 +94,14 @@ public class ActivityController(IActivityService activityService) : Controller
     }
 
     /// <summary>
-    /// Maps a service outcome onto HTTP, which is all this layer adds to it: the service
-    /// reports what happened and knows nothing about status codes.
+    /// Maps a service outcome onto HTTP.
     /// </summary>
     /// <remarks>
     /// <c>ValidationProblem</c> rather than a bare <c>BadRequest</c>, so the field-keyed errors
-    /// arrive in the same shape <c>[ApiController]</c> produces for a body that could not be
-    /// bound at all — one error format for a client rather than two.
+    /// arrive in the shape <c>[ApiController]</c> produces for a body that did not bind at all.
     /// </remarks>
+    /// <param name="outcome"></param>
+    /// <returns></returns>
     private IActionResult Respond(ActivityOutcome outcome) => outcome.Kind switch
     {
         ActivityOutcomeKind.Completed => Ok(outcome.Activity),

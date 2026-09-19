@@ -120,6 +120,38 @@ public sealed class ActivityModelTests
         Assert.Contains("IsDeleted", start < 0 ? string.Empty : sql[start..]);
     }
 
+    /// <summary>
+    /// A paged read orders, filters and pages inside the statement rather than after it.
+    /// </summary>
+    /// <remarks>
+    /// The filter has to reach the store with the page, not after it: a row the caller may not
+    /// see that arrives in the page and is discarded there has already consumed one of the
+    /// slots, so a page of ten can come back with fewer than ten visible rows while more exist.
+    /// This pins EF's translation of the shape the repository composes; that the store then
+    /// behaves that way is <c>ActivityPagingTests</c>'s claim.
+    /// </remarks>
+    [Fact]
+    public void A_paged_query_filters_orders_and_pages_in_one_statement()
+    {
+        using var offline = new OfflineContext();
+
+        string sql = offline.Context.Activities
+            .Where(activity => activity.Type == "Public")
+            .OrderByDescending(activity => activity.CreatedOn)
+            .ThenByDescending(activity => activity.Id)
+            .Skip(20)
+            .Take(10)
+            .ToQueryString();
+
+        Assert.Contains("ORDER BY", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("OFFSET", sql, StringComparison.OrdinalIgnoreCase);
+
+        int page = sql.IndexOf("OFFSET", StringComparison.OrdinalIgnoreCase);
+
+        Assert.True(page > sql.IndexOf("IsDeleted", StringComparison.OrdinalIgnoreCase));
+        Assert.True(page > sql.IndexOf("[Type]", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static IProperty PropertyOf(string propertyName)
     {
         using var offline = new OfflineContext();

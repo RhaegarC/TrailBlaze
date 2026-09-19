@@ -6,7 +6,7 @@ living reference (decisions log, canonical data model, permission table).
 ## Goal
 
 An activity journal that is public **by default rather than in principle**. Anyone browses the
-`Public` activities by date descending with their covers; signing in widens that to `Shared` entries
+`Public` activities, newest first, with their covers; signing in widens that to `Shared` entries
 and the caller's own `Private` ones, and reveals the images and videos each activity carries. One
 shared feed, populated by any signed-in user; the activity's `Type` decides who may read it and
 ownership decides who may edit or delete (Decisions #26/#27).
@@ -51,8 +51,8 @@ table](../PRD.md#current-state-vs-target) states capability rather than progress
 | 01 | [foundation](archive/01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations applied by the pipeline; `Dockerfile` for the ACA image; `IStorageRepository` abstraction; config for Azure Blob | archived — merged in PR #3. The in-memory storage fake it shipped was deleted on 2026-09-18 ([testing-and-tdd.md](../testing-and-tdd.md)) |
 | 02 | [entra-auth](archive/02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | archived — merged in PR #4, **tests deferred**, so unfinished: the profile slice is implemented and unproven ([item 12](../tech-debt/12-feature-02-tests-deferred.md)) |
 | 03 | [the role column](archive/03-admin-seeding.md) | 02 | `Role` stored on `users`, defaulting to `User` and closed to `User`/`Admin`; one admin set by hand; role readable by the authorization path | archived — merged in PR #12, and unlike 02 its tests exist. **The server-side role read the authorization path needs does not exist yet** — it was built and removed in review as unconsumed, and [09](09-permission-enforcement.md) adds it |
-| 04 | [activity-crud](04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. **`Type` is stored here, enforced in 05/09** | in progress — `feature/04-activity-crud` |
-| 05 | [public-activity-list](05-public-activity-list.md) | 04 | The read surface — paged, date descending, `pageSize` clamped. **Visibility-scoped**: anonymous sees `Public` only; a signed-in caller adds `Shared` and their own `Private`; an unreadable entry is a 404 | not started |
+| 04 | [activity-crud](04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. Plus the **anonymous paged list** — newest entry first, `pageSize` clamped, visibility-scoped. **Who may mutate is 09's; the payload and the detail read are 05's** | in progress — `feature/04-activity-crud` |
+| 05 | [public-activity-list](05-public-activity-list.md) | 04 | The read surface's payload and second read: the cover URL, the media count and the creator's display name on a list item; `GET /api/activity/{id}` applying the visibility rule as a **404**; an admin branch that is blocked on a readable role | not started |
 | 06 | [media-upload](06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 20 per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | not started |
 | 07 | [sas-delivery](07-sas-delivery.md) | 06 | `GET /api/media/{id}/url` mints a **short-lived SAS URL**, and **only** for an authenticated caller — rejected before any blob operation otherwise | not started |
 | 08 | [cover-images](08-cover-images.md) | 04 | Cover is a **separate upload** whose container **follows the activity's `Type`** — public `covers` for `Public`, private `media` otherwise; a `Type` change across that line **moves** the cover. Never derived from private media | not started |
@@ -70,15 +70,14 @@ table](../PRD.md#current-state-vs-target) states capability rather than progress
 
 - [x] Layered `TrailBlaze.*` backend solution builds; `dotnet test` green from `src/api/` **with a
       non-zero test count** — a green run over zero discovered tests does not count, and was the
-      state when this line was written. [testing-and-tdd.md](../testing-and-tdd.md) holds the
-      current counts, and is the only document that does
+      state when this line was written. The counts are below; a skipped test is not a passing one
 - [ ] Entra auth: backend validates bearer tokens; users auto-provisioned; exactly one admin
       — open on the token half, whose tests were deferred ([item 12](../tech-debt/12-feature-02-tests-deferred.md))
 - [ ] Self-service profile complete: the caller can edit display name, bio, theme and language and
       upload an avatar, on their own row only, with `Role` not writable through the profile route
 - [ ] Activity CRUD complete with validation (title, location, calendar-date `ActivityDate`) and
       `Type` required, defaulting to `Public`
-- [ ] Anonymous visitors can page the activity list, date descending; `pageSize` clamped; the list
+- [ ] Anonymous visitors can page the activity list, newest entry first; `pageSize` clamped; the list
       is **visibility-scoped**, not merely unauthenticated
 - [ ] Images and videos upload to the private container within the validation caps, to **any
       signed-in caller who can read the activity**, each item recording its uploader
@@ -92,6 +91,25 @@ table](../PRD.md#current-state-vs-target) states capability rather than progress
       visibility badges, the profile screen); the export's mock data replaced by real calls; E2E
       verified
 - [ ] Each backend feature merged to `develop` with its tests (RED → GREEN)
+
+## Current test counts
+
+**This table is the only place the counts are written down**, and it is a measurement rather than a
+derivation: each row is what a run printed, read off the summary as `Passed / Skipped / Total`. They
+were previously restated in the README, the PRD, STANDARD §10 and the test strategy, and went stale
+in all four whenever a feature added a test ([item 19](../tech-debt/19-doc-indexes-drifted.md) is the
+record of what that cost). Update them here and stop. How the tiers are shaped, and which one a new
+test belongs to, is [testing-and-tdd.md](../testing-and-tdd.md)'s subject, not this file's.
+
+| Project | Bare machine | With the containers |
+|---|---|---|
+| `TrailBlaze.Service.Test` | 53 / 0 / 53 | 53 / 0 / 53 |
+| `TrailBlaze.Repository.Test` | 42 / 44 / 86 | 86 / 0 / 86 |
+| `TrailBlaze.Api.Test` | 9 / 0 / 9 | 9 / 0 / 9 |
+| **All three** | **104 / 44 / 148** | **148 / 0 / 148** |
+
+Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
+the container tiers skip, and `Category=Container` is the only trait in the solution.
 
 ## Open items
 

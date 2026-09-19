@@ -41,7 +41,7 @@ git checkout -b feature/[number]-[feature-name]
 
 #### Phase 3: Write Tests First (RED)
 
-1. Create or update test files (in the matching layer's `*.Test` project under `src/api/`) based on acceptance criteria
+1. Create or update test files (in the matching layer's `*.Test` project under `src/api/`) based on acceptance criteria. **A test class and each test method carry a single-line `<summary>` and nothing more** — the reasoning behind a test belongs in the feature file or the PR body, not above the assertion.
 2. Write failing tests that define expected behavior — tiers per [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md): offline backend xUnit unit tests, a repository model tier that inspects generated SQL via `ToQueryString()`, and two **`Category=Container`** tiers in `TrailBlaze.Repository.Test` that run the real `AzureBlobStorageRepository` against Azurite and a real `TrailBlazeContext` against SQL Edge. **There is no `IStorageRepository` fake** — a storage behaviour is asserted against a live backend or not at all. Start the containers with `docker compose -f docker-compose.test.yml up -d` from `src/api/`; without them the container tiers **skip** (they never fail), and a skip is not a pass.
 3. Ensure tests fail (validate test correctness)
 4. Test command: `dotnet test` (from `src/api/`)

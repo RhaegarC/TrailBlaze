@@ -48,27 +48,27 @@ feature: their endpoints ship permissive and are brought under the matrix here.
       filter, or repository performs its own visibility comparison, ownership comparison or role
       test — verified by there being a single place the rule can change. Feature 05's read filter
       consults the same service rather than restating the predicate
-- [ ] `GET /api/activities` and `GET /api/activities/{id}` are the **only** endpoints in the API
+- [ ] `GET /api/activity` and `GET /api/activity/{id}` are the **only** endpoints in the API
       that anonymous callers may reach (Decisions #2/#13). The list returns 200 anonymously; the
       detail returns 200 anonymously **for a `Public` entry only**, and **404 for a `Shared` or
       `Private` one**
 - [ ] **The visibility gate applies to every non-read route.** A `Private` activity is unreachable
-      to a caller who is neither its owner nor an admin through `GET /api/activities/{id}/media`,
-      `GET /api/media/{id}/url`, `POST /api/activities/{id}/media` and
-      `POST /api/activities/{id}/cover` — each returns **404**, not 403, so none of them can be
+      to a caller who is neither its owner nor an admin through `GET /api/activity/{id}/media`,
+      `GET /api/media/{id}/url`, `POST /api/activity/{id}/media` and
+      `POST /api/activity/{id}/cover` — each returns **404**, not 403, so none of them can be
       used as a side door to confirm the entry exists. A `Shared` entry is reachable by any
       signed-in caller and not by an anonymous one
-- [ ] `GET /api/activities/{id}/media` and `GET /api/media/{id}/url` return **401 for anonymous**
+- [ ] `GET /api/activity/{id}/media` and `GET /api/media/{id}/url` return **401 for anonymous**
       and, for a signed-in caller, follow the activity's visibility — 200 if readable, 404 if not
-- [ ] `POST /api/activities` returns **401 for anonymous**, 201 for `User` and `Admin`
-- [ ] `PUT /api/activities/{id}` returns **401 anonymous / 200 owner / 403 authenticated
+- [ ] `POST /api/activity` returns **401 for anonymous**, 201 for `User` and `Admin`
+- [ ] `PUT /api/activity/{id}` returns **401 anonymous / 200 owner / 403 authenticated
       non-owner / 200 `Admin`**
-- [ ] `DELETE /api/activities/{id}` returns **401 anonymous / 204 owner / 403 authenticated
+- [ ] `DELETE /api/activity/{id}` returns **401 anonymous / 204 owner / 403 authenticated
       non-owner / 204 `Admin`**
-- [ ] `POST /api/activities/{id}/cover` returns **403 for an authenticated non-owner who can read
+- [ ] `POST /api/activity/{id}/cover` returns **403 for an authenticated non-owner who can read
       the activity** and succeeds for the owner and for `Admin` — an authenticated non-owner
       cannot reach cover mutation
-- [ ] `POST /api/activities/{id}/media` is **not** owner-only: it succeeds for **any signed-in
+- [ ] `POST /api/activity/{id}/media` is **not** owner-only: it succeeds for **any signed-in
       caller who can read the activity**, including a stranger on a `Public` or `Shared` entry
       (Decision #27). Encoding the older owner-only rule here is the single most likely way to
       regress this feature, so the criterion is stated as an allow rather than a denial
@@ -112,7 +112,7 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   limited to the two read operations, that every other anonymous cell denies, and that a
   `User`-role caller carrying an admin-shaped claim is denied admin override.
 - Unit (`TrailBlaze.Service.Test`) — **hot spot (the axis crossing)**: assert that
-  `POST /api/activities/{id}/media` **allows** a non-owner who can read the activity and
+  `POST /api/activity/{id}/media` **allows** a non-owner who can read the activity and
   **denies** one who cannot, and that `DELETE /api/media/{id}` allows the uploader *and* the
   activity owner *and* an admin. These two are written as explicit allow-tests precisely because
   the intuitive-but-wrong owner-only rule would pass every other test in this file.
@@ -136,7 +136,7 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   about the generated statement rather than about the row it selects
   ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Regression guard: a test asserting the anonymous-allowed route set is exactly
-  `GET /api/activities` and `GET /api/activities/{id}`, so a new endpoint added later without an
+  `GET /api/activity` and `GET /api/activity/{id}`, so a new endpoint added later without an
   explicit decision fails rather than silently defaulting open.
 - Regression guard: a test asserting that no route other than those two returns a **200 to an
   anonymous caller** for a non-`Public` activity. This is the guard that catches a future endpoint

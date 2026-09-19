@@ -70,8 +70,8 @@ Verified by hand against a running stack; each is observable in a browser.
       request
 - [ ] **Create**: the create form collects title, location, activity date, optional description,
       an optional cover, and the **visibility selector** (`Public`/`Shared`/`Private`), and a
-      successful submit posts to `POST /api/activities` (cover via
-      `POST /api/activities/{id}/cover`) with the chosen `Type`; the new activity appears in the
+      successful submit posts to `POST /api/activity` (cover via
+      `POST /api/activity/{id}/cover`) with the chosen `Type`; the new activity appears in the
       list with a badge matching what was chosen
 - [ ] **Upload media**: an image and a video can be attached from the UI to **any activity the
       signed-in user can read** — their own or another user's (Decision #27) — and then appear in
@@ -84,7 +84,7 @@ Verified by hand against a running stack; each is observable in a browser.
       user uploaded, and on every item for the activity's owner and for an `Admin`; a deletion
       goes through `DELETE /api/media/{id}` and the item is gone on reload
 - [ ] **Edit own**: an owned activity's edit form loads current values **including the visibility
-      selector**, saves via `PUT /api/activities/{id}`, and the change is visible on reload; an
+      selector**, saves via `PUT /api/activity/{id}`, and the change is visible on reload; an
       edit that moves the activity across the public line leaves its cover rendering correctly
       from wherever it now lives (Decision #29)
 - [ ] **Role gating**: edit and delete controls appear on the signed-in user's **own** activities
