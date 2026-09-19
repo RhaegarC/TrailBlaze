@@ -25,7 +25,7 @@ the day actually looked like — including on an activity someone else logged, w
 
 ## Dependencies
 
-- [04-activity-crud](04-activity-crud.md) (an activity exists to attach media to, and deleting one must take its media with it — service work, not a schema cascade: the model declares no foreign keys)
+- [04-activity-crud](archive/04-activity-crud.md) (an activity exists to attach media to, and deleting one must take its media with it — service work, not a schema cascade: the model declares no foreign keys)
 - [05-public-activity-list](05-public-activity-list.md) (the visibility predicate this feature consults to decide whether the caller may contribute)
 - [01-foundation](archive/01-foundation.md) (`IStorageRepository` abstraction; the in-memory fake that shipped with it was deleted on 2026-09-18, so storage is now exercised against a live account in `TrailBlaze.Repository.Test` — see [testing-and-tdd.md](../testing-and-tdd.md))
 - [02-entra-auth](archive/02-entra-auth.md) (the caller is authenticated; the endpoints are not anonymous)

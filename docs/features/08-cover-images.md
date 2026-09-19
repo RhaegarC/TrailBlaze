@@ -27,7 +27,7 @@ visitors see a picture beside it without any of the activity's private media bec
 
 ## Dependencies
 
-- [04-activity-crud](04-activity-crud.md) (the activity that owns `CoverImageBlobPath`)
+- [04-activity-crud](archive/04-activity-crud.md) (the activity that owns `CoverImageBlobPath`)
 - [05-public-activity-list](05-public-activity-list.md) (the list and detail responses that surface the cover URL to anonymous callers)
 - [01-foundation](archive/01-foundation.md) (`IStorageRepository` abstraction; the in-memory fake and its `Category=StorageIntegration` tag were deleted on 2026-09-18, and storage now runs against a live account in `TrailBlaze.Repository.Test` under `Category=Container`)
 

@@ -145,7 +145,7 @@ disappearing, and `sprint-status` warning that "all tests passing" is weaker tha
 
 | Thing | Why it is not here |
 |---|---|
-| The activity and media tables do not exist | Planned work with a home — [feature 04](../features/04-activity-crud.md) |
+| The activity and media tables do not exist | Planned work with a home — [feature 04](../features/archive/04-activity-crud.md) |
 | Everything in [docs/features/backlog.md](../features/backlog.md) | Deliberately deferred ideas, not divergences |
 | The PRD's "Out of scope / deferred" list | Decided against, not deferred |
 | `AGENTS.md` being byte-identical to `CLAUDE.md` | Deliberate dual-harness parity. Only the absence of a check is debt, and that is [19](19-doc-indexes-drifted.md) |

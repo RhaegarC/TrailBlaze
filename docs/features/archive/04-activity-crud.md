@@ -1,7 +1,13 @@
 # 04 — Activity CRUD
 
-Status: **In progress** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #10/#11/#12/#25/#26 + "API surface" and the `activities` data-model row.
+Status: **Archived** — merged to `develop` in PR #15 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Source: [PRD](../../PRD.md) — Decisions #10/#11/#12/#25/#26 + "API surface" and the `activities` data-model row.
+
+> **Archiving this one does not mean the slice is closed.** It shipped the CRUD mechanics and the
+> anonymous paged list; the payload a list item carries, the detail read and the admin branch of the
+> visibility rule are [05](../05-public-activity-list.md)'s, and who may mutate an entry is
+> [09](../09-permission-enforcement.md)'s. `develop` is not deployable until 09 lands — the
+> sequencing note in the sprint file states why.
 
 ## Summary
 
@@ -10,9 +16,9 @@ set is fixed: `Title`, `Location`, `ActivityDate` (a **calendar date — no time
 optional `Description`, optional `CoverImageBlobPath`, and `Type` — the **visibility**
 (`Public` | `Shared` | `Private`, Decision #26). `CreatedOn` is stamped server-side and is the
 list's sort key, newest entry first. This feature stores `Type` and applies the **read** half of the
-visibility rule to the list; **who may mutate an entry is feature [09](09-permission-enforcement.md)'s**,
+visibility rule to the list; **who may mutate an entry is feature [09](../09-permission-enforcement.md)'s**,
 and the detail read, the cover URL and the enriched payload are
-[05](05-public-activity-list.md)'s.
+[05](../05-public-activity-list.md)'s.
 
 Storing `Type` here rather than in feature 09 is deliberate: it is a column on the activity, so
 it belongs with the other columns. Feature 09 owns the *evaluation* of it on the mutation side.
@@ -24,14 +30,14 @@ where I went and when.
 
 ## Dependencies
 
-- [02-entra-auth](archive/02-entra-auth.md) (caller identity, for `CreatedByUserId` attribution)
+- [02-entra-auth](02-entra-auth.md) (caller identity, for `CreatedByUserId` attribution)
 
 ## Acceptance criteria
 
 - [x] `activities` matches the PRD data model. Its own columns are `Title`, `Location`,
       `ActivityDate` (`date`), `Description` (nullable), `Type` (`nvarchar(16)`), `CoverImageBlobPath`
       (nullable) and `CreatedByUserId` (the caller's id as a plain column — the model declares no
-      foreign keys, [item 23](../tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)); `Id` and the remaining audit and soft-delete
+      foreign keys, [item 23](../../tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)); `Id` and the remaining audit and soft-delete
       columns come from `EntityBase` (the PRD draws them once), so `IsDeleted` is present and the
       global query filter applies to this table
 - [x] Routes exist for `POST /api/activity`, `GET /api/activity/{id}`,
@@ -44,7 +50,7 @@ where I went and when.
       rather than assumed
 - [x] `PUT` may change `Type`; the new value is visible to the next read with no separate
       publish step. Crossing the public line is what triggers the cover move owned by feature
-      [08-cover-images](08-cover-images.md), so this route must not block or mask that transition
+      [08-cover-images](../08-cover-images.md), so this route must not block or mask that transition
 - [x] `POST` sets `CreatedByUserId` from the caller's provisioned `users.Id` and ignores any
       `CreatedByUserId` supplied in the request body
 - [x] `CreatedOn` is set server-side at insert and ignores any client-supplied value
@@ -94,7 +100,7 @@ The paged list, which is the first anonymous read in the product:
 **The admin branch of the visibility rule is not implemented here, and cannot be.** It reads a role,
 and `IUserContextService` carries none — a role has exactly one source, the `users` row, which is a
 store read this predicate does not perform. Reading it is part of the permission work
-[09](09-permission-enforcement.md) owns; until then an admin pages what a user pages. Asserted as
+[09](../09-permission-enforcement.md) owns; until then an admin pages what a user pages. Asserted as
 such rather than left to be discovered.
 
 **Ordering was changed on 2026-09-19, and the PRD changed with it.** Decision #10 originally made the
@@ -118,7 +124,7 @@ is not covered by any tier, and is called out rather than implied.**
   reflection, so "the service ignores a body-supplied creator" is a fact a reader can check rather
   than a check that could be deleted. Attribution itself is asserted against a purpose-built
   recording double for `IDbRepository` that answers no reads — see
-  [testing-and-tdd.md](../testing-and-tdd.md) for why that is not the deleted in-memory fake.
+  [testing-and-tdd.md](../../testing-and-tdd.md) for why that is not the deleted in-memory fake.
 - Model (`TrailBlaze.Repository.Test`) — offline, no container: the column lengths, the `date`
   column type, the `CK_Activities_Type` check constraint, the absence of any relationship on
   `CreatedByUserId`, and the soft-delete filter. These run on a machine with no Docker, which is
@@ -134,7 +140,7 @@ is not covered by any tier, and is called out rather than implied.**
   the service, so the answer is the **500** the unreachable store produces, and neither the 401 of an
   authorized-only route nor the 404 of a route that does not exist. **The host has no authentication
   scheme unless `TenantId` and `Audience` are configured**, and in that state an `[Authorize]` route
-  answers 500 — see [item 28](../tech-debt/28-unconfigured-auth-answers-500.md) — so these tests wire
+  answers 500 — see [item 28](../../tech-debt/28-unconfigured-auth-answers-500.md) — so these tests wire
   both.
 - Paging and visibility (`TrailBlaze.Service.Test`) — offline: the defaults, the 100 clamp, the
   fallback for a non-positive size, the saturating skip on a page past the end, the reported total,
@@ -157,7 +163,7 @@ is not covered by any tier, and is called out rather than implied.**
   `ActivityService` → `IDbRepository` → SQL Server end to end. The service's wiring is asserted
   against a recording double and the store's behaviour through direct repository calls; the seam
   *between* them is asserted by neither. This is the gap
-  [item 25](../tech-debt/25-service-test-tier-is-empty.md) records, now closed in part: the
+  [item 25](../../tech-debt/25-service-test-tier-is-empty.md) records, now closed in part: the
   request-decided claims run offline in this tier and the store outcomes run in the repository tier,
   with the seam the remaining cost.
 - The calendar-date assertions compare the raw `date` value, not a `DateTime` with a `Kind`, so the
@@ -167,8 +173,8 @@ is not covered by any tier, and is called out rather than implied.**
 
 - **This slice is not safe to deploy** — it builds the CRUD mechanics while every authenticated
   caller may still edit or delete anything, and feature **09** adds the ownership and admin rules.
-  See the sequencing note in [00-mission-1-sprint.md](00-mission-1-sprint.md).
-- **The list ships here; what [05](05-public-activity-list.md) still owns is the payload.** The
+  See the sequencing note in [00-mission-1-sprint.md](../00-mission-1-sprint.md).
+- **The list ships here; what [05](../05-public-activity-list.md) still owns is the payload.** The
   cover URL, the media count and the creator's display name are absent from a list item, the detail
   read `GET /api/activity/{id}` is still a plain 200 for any id, and the admin branch of the
   visibility rule is unread. No caller-selectable sort, no search, no filtering (Decision #23) — the
@@ -185,6 +191,6 @@ is not covered by any tier, and is called out rather than implied.**
   here.
 - **`Type` is stored, not enforced, in this slice.** `GET /api/activity/{id}` here returns the
   row for any id; hiding a `Shared` or `Private` entry from a caller who may not read it is the
-  read-filtering rule owned by [05-public-activity-list](05-public-activity-list.md) and
-  [09-permission-enforcement](09-permission-enforcement.md). Splitting it this way keeps the CRUD
+  read-filtering rule owned by [05-public-activity-list](../05-public-activity-list.md) and
+  [09-permission-enforcement](../09-permission-enforcement.md). Splitting it this way keeps the CRUD
   mechanics testable on their own, exactly as the ownership rules are split out.

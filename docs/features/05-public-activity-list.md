@@ -7,7 +7,7 @@ Source: [PRD](../PRD.md) — Decisions #2/#3/#10/#23/#25/#26/#29/#30 + "Media st
 
 The read surface's second half: the detail read, and the payload both reads carry.
 
-**The list route, its paging and its visibility filter ship in [04](04-activity-crud.md)**, because a
+**The list route, its paging and its visibility filter ship in [04](archive/04-activity-crud.md)**, because a
 list with no filter hands every caller every row — the paging and the rule deciding who sees what are
 one mechanism, and were built as one. What is left here is the second read and the response shape:
 `GET /api/activity/{id}`, which applies the same rule as a **404** rather than a filter, so an entry a
@@ -35,7 +35,7 @@ reads as entries rather than as anonymous rows.
 
 ## Dependencies
 
-- [04-activity-crud](04-activity-crud.md) (activities exist, with `Title`, `Location`, `ActivityDate`, optional `Description`)
+- [04-activity-crud](archive/04-activity-crud.md) (activities exist, with `Title`, `Location`, `ActivityDate`, optional `Description`)
 - [08-cover-images](08-cover-images.md) (populates `CoverImageBlobPath`; the list renders the cover URL this feature projects)
 
 ## Acceptance criteria
@@ -72,7 +72,7 @@ reads as entries rather than as anonymous rows.
   anonymously and under a second user's token, and 200 under its owner's; the serialized list item
   carrying no user id; `ActivityDate` emitting as `yyyy-MM-dd`.
 
-**Paging, ordering and the visibility filter are asserted in [04](04-activity-crud.md)'s tiers and are
+**Paging, ordering and the visibility filter are asserted in [04](archive/04-activity-crud.md)'s tiers and are
 not restated here** — they already run, and a second copy of a test is a second thing to keep green.
 What this feature adds to the tiers is the payload's shape and the detail read's status code.
 
