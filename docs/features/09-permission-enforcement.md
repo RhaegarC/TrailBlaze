@@ -34,7 +34,7 @@ the access the PRD grants them — and nothing more by default.
 
 ## Dependencies
 
-- [03-admin-seeding](03-admin-seeding.md) (`users.Role` stored and constrained; the admin is a row
+- [03-admin-seeding](archive/03-admin-seeding.md) (`users.Role` stored and constrained; the admin is a row
   someone sets by hand, so this feature must not assume one exists)
 - [04-activity-crud](04-activity-crud.md) (activities, their `CreatedByUserId`, and the routes this feature gates)
 
@@ -161,5 +161,10 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   and no way to publish one photo out of a `Private` entry.
 - No changes to the data model — ownership rides on `activities.CreatedByUserId` and visibility on
   `activities.Type`, both created by feature 04.
-- This feature does not add authentication itself; it consumes the identity and role that 02 and
-  03 established.
+- This feature does not add authentication itself; it consumes the identity that 02 established.
+  **It does have to add the role read.** 03 stored and constrained `users.Role`, and made it
+  unreachable from a claim or a request body, but the server-side read of it was built and removed
+  in review as unconsumed — `/user/me` answers the client's own question from the row, and nothing
+  asked on the server's behalf. The criterion above, reading the admin determination from the column,
+  is that read. It is this feature's first piece of work and it belongs in the authorization service
+  the criterion at the top of this list calls for, not in a service of its own.

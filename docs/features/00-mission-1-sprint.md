@@ -69,16 +69,19 @@ The repository was initialised from a generic layered .NET scaffold, which lande
   §10 makes a behaviour change without a test unfinished, so **02 is unfinished and 03 should not
   be treated as safe to build on until those tests exist** —
   [02-entra-auth.md](archive/02-entra-auth.md#testing-status) records the gap criterion by criterion.
-- **03 — done (2026-09-19).** The `Role` column is constrained to the closed set, defaulted to
-  `User` and backfilled by a migration applied against a populated database; the caller's role is
-  read from their own row and never from a claim. **The administrator is a row someone edits by
-  hand** — the startup seeder this feature was named for was removed on 2026-09-19, and with it the
-  two admin configuration keys, a hosted service and a failure mode it had already produced against
-  a real database. It left three divergences from its own spec and four decisions, all recorded in
-  [the feature file](03-admin-seeding.md#decisions) — the main ones being that the role is a service
-  of its own rather than a property on 02's identity abstraction (the alternative put data access in
-  the Api layer), and that elevating an account is an operator's decision rather than something the
-  application does to its own data at startup.
+- **03 — done and archived (merged to `develop` in PR #12).** The `Role` column is constrained to the
+  closed set, defaulted to `User` and backfilled by a migration applied against a populated database;
+  the role is served from the caller's own row and never from a claim. **The administrator is a row
+  someone edits by hand** — the startup seeder this feature was named for was removed on 2026-09-19,
+  and with it the two admin configuration keys, a hosted service and a failure mode it had already
+  produced against a real database. Two further things went in review: `ICallerRoleService`, which
+  nothing called because `/user/me` already answers the same question, and the service test tier's
+  repository reference, which existed only for that service's tests. It left four decisions and one
+  criterion explicitly not met as worded, all recorded in
+  [the feature file](archive/03-admin-seeding.md#decisions) — the main ones being that the role is
+  not on 02's identity abstraction (the alternative put data access in the Api layer), and that
+  elevating an account is an operator's decision rather than something the application does to its
+  own data at startup. **Unlike 02, this one is finished**: its tests exist.
 - **04–11 — not started.**
 - **The frontend export is a mock, and this matters for reading the rows above.** `src/web/` renders
   from hard-coded `MOCK_ACTIVITIES` / `MOCK_MEDIA`, holds `authRole` in `useState`, and issues no
@@ -97,7 +100,7 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 |---|---|---|---|---|
 | 01 | [foundation](archive/01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations applied by the pipeline; `Dockerfile` for the ACA image; `IStorageRepository` abstraction with a fake; config for Azure Blob | archived — the fake was deleted 2026-09-18 (see the note above) |
 | 02 | [entra-auth](archive/02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | archived — tests deferred |
-| 03 | [the role column](03-admin-seeding.md) | 02 | `Role` stored on `users`, defaulting to `User` and closed to `User`/`Admin`; one admin set by hand; role readable by the authorization path | **done** — `Role` non-null, defaulted, check-constrained and backfilled by migration; the admin is a row updated directly in the database, with no seeding path and no admin configuration key. The role is served by `/user/me` from the caller's own row, and no claim or payload can carry one. 7 new tests |
+| 03 | [the role column](archive/03-admin-seeding.md) | 02 | `Role` stored on `users`, defaulting to `User` and closed to `User`/`Admin`; one admin set by hand; role readable by the authorization path | **archived** — merged to `develop` in PR #12. `Role` non-null, defaulted, check-constrained and backfilled by migration; the admin is a row updated directly in the database, with no seeding path and no admin configuration key. The role is served by `/user/me` from the caller's own row, and no claim or payload can carry one. 7 new tests. **The server-side role read the authorization path will need does not exist yet** — feature 09 adds it |
 | 04 | [activity-crud](04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. **`Type` is stored here, enforced in 05/09** | not started |
 | 05 | [public-activity-list](05-public-activity-list.md) | 04 | The read surface — paged, date descending, `pageSize` clamped. **Visibility-scoped**: anonymous sees `Public` only; a signed-in caller adds `Shared` and their own `Private`; an unreadable entry is a 404 | not started |
 | 06 | [media-upload](06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 20 per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | not started |

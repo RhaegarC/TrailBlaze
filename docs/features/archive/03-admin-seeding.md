@@ -1,13 +1,13 @@
 # 03 — The role column, and the single admin
 
-Status: **Done (2026-09-19)** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #9/#21 + "Authentication & authorization" and the `users` data-model row.
+Status: **Archived** — merged to `develop` in PR #12 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Source: [PRD](../../PRD.md) — Decisions #9/#21 + "Authentication & authorization" and the `users` data-model row.
 
-> **The file keeps its name.** It was written as *admin seeding*, and feature numbers are identity
-> here rather than a description — the sprint file, the PRD, [item 25](../tech-debt/25-service-test-tier-is-empty.md)
-> and [feature 09](09-permission-enforcement.md) all link to this path — so the slug is left alone
-> and the heading above says what the feature now is. What changed, and why, is under
-> [Decisions](#decisions).
+> **The file keeps its name.** It was written as *admin seeding* and is archived under that slug;
+> feature numbers are identity here rather than a description, and the heading says what the feature
+> became. **Archiving this one does mean finished** — unlike 02, no criterion below is left unchecked
+> and unproven. The one that is not met as worded says so, and says why. What changed, and why, is
+> under [Decisions](#decisions).
 
 ## Summary
 
@@ -36,11 +36,11 @@ elevated rights exist without a grant screen, an invitation flow, or an applicat
 
 ## Dependencies
 
-- [02-entra-auth](archive/02-entra-auth.md) (`users` table and provisioning, caller identity abstraction).
+- [02-entra-auth](02-entra-auth.md) (`users` table and provisioning, caller identity abstraction).
   **The `users` key shape is settled** — `users.Id` *is* the Entra object id, and there is no
   `EntraObjectId` column — so the administrator is reached by whoever signs in with the object id
   on that row. Note that 02's profile tests were deferred
-  ([02-entra-auth.md](archive/02-entra-auth.md#testing-status)); the schema 03 builds on is migrated
+  ([02-entra-auth.md](02-entra-auth.md#testing-status)); the schema 03 builds on is migrated
   but its behaviour is not yet proven by tests.
 
 ## Acceptance criteria
@@ -52,7 +52,7 @@ elevated rights exist without a grant screen, an invitation flow, or an applicat
       `CK_Users_Role`, and `UserModelTests` asserts all four against the design-time model
 - [x] A migration backfills existing rows to `User` and tightens the column — applied by the
       deployment pipeline like every other migration, not at API startup (see
-      [01-foundation.md](archive/01-foundation.md) for why the startup path was removed).
+      [01-foundation.md](01-foundation.md) for why the startup path was removed).
       `20260919032941_ConstrainUserRole` hand-orders its three steps — backfill, `AlterColumn`,
       constraint — because each is refused by the state the one before it removes; verified against
       a populated database, not only an empty one. Applied by the pipeline, unchanged from 01:
@@ -143,7 +143,7 @@ wrong now. What was actually written, by tier:
   configuration mistake that this tier knows about and the composition root does not.
 
 What the tests still cannot speak to is deployment shape — one container is not several ACA
-replicas, and no test signs in through Entra. See [testing-and-tdd.md](../testing-and-tdd.md).
+replicas, and no test signs in through Entra. See [testing-and-tdd.md](../../testing-and-tdd.md).
 
 ## Decisions
 
@@ -180,7 +180,7 @@ originally said. Each is recorded here rather than only in code.
    privilege column that no one asked for. The role stays readable from the row, by way of the
    profile response; what this feature asserts is that it is readable from nowhere else.
 3. **The service test tier stays as `develop` has it, and this feature withdraws its earlier answer
-   to [tech-debt 25](../tech-debt/25-service-test-tier-is-empty.md).** As first written, this feature
+   to [tech-debt 25](../../tech-debt/25-service-test-tier-is-empty.md).** As first written, this feature
    gave `TrailBlaze.Service.Test` a `ProjectReference` to `TrailBlaze.Repository.Test` and four
    container tests with it, and recorded that decision against item 25's recommendation of the
    opposite split. Those four tests were `CallerRoleTests`, and they went with the service they
