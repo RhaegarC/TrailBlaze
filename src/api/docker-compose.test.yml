@@ -11,6 +11,12 @@
 #
 # A container started by hand on these ports cannot be adopted by compose, so `docker compose
 # down` (or `docker rm -f`) it first, or the port bind fails and this file looks broken.
+#
+# A developer's own SQL Edge container (README, "Running it locally") binds the same 1433, so it
+# and this stack exclude each other -- and while it holds the port, `dotnet test` reaches it. That
+# is safe rather than merely tolerated: the fixture creates and drops a database per collection
+# and never touches another database, so a test run leaves a dev database alone. It does mean the
+# two are not isolated, and stopping the dev container is what restores that.
 
 name: trailblaze-tests
 

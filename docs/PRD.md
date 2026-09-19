@@ -53,10 +53,20 @@ specified in [src/api/STANDARD.md](../src/api/STANDARD.md) §3 and §10, and enf
 Deployment: the API runs on **Azure Container Apps** from the image `src/api/Dockerfile` builds;
 the web app runs on **Azure Static Web Apps**, deployed by GitHub workflow. There is no
 `docker-compose.yml` — neither target consumes a multi-service local stack, so there is none.
-Azure SQL Database, Azure Blob and Entra ID are **real cloud resources** in every environment the
-*application* runs in, including development — the API is never pointed at a local stand-in.
+Azure SQL Database, Azure Blob and Entra ID are **real cloud resources** in every *deployed*
+environment — the API never points at a local stand-in where it runs.
 
-**The test tier is the one exception, and it is deliberate (Decisions #5 and #6).** `dotnet test`
+**Scoped 2026-09-19: the database half of that holds for deployed environments only, and a
+developer's `dotnet run` may point at a SQL Edge container on loopback.** The API is not deployed
+anywhere that can reach one, so this changes what a laptop exercises and not what a release does.
+The decision is recorded here rather than in a commit message because it narrows a claim this
+paragraph used to make without qualification, and it is bounded on purpose: the local database is
+a schema to develop against, not a substitute for the managed engine that ships, and the
+differences in version, collation and certificate are not covered by developing against it. Azure
+Blob and Entra ID stay real in every environment the application runs in — the local database is
+the whole of the exception. [STANDARD.md](../src/api/STANDARD.md) §6 carries the rules.
+
+**The test tier is the exception for tests, and it is deliberate (Decisions #5 and #6).** `dotnet test`
 runs against containers started by `src/api/docker-compose.test.yml` — SQL Edge and Azurite —
 because a test that asserts against a fake asserts about the fake. That file starts **no
 application process**; it is not the local multi-service stack the sentence above rules out.
