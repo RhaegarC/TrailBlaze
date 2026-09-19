@@ -12,7 +12,7 @@ withdrawn, and the reference with it.** The four tests were `CallerRoleTests`, a
 `ICallerRoleService`, which review removed on the grounds that `/user/me` already returns the
 caller's role and nothing needed a second way to ask. Reverting the `.csproj` was the remainder of
 that removal: a project reference taken to support tests that were then deleted is a leftover, not
-an answer. The reasoning is in [03-admin-seeding.md](../features/03-admin-seeding.md#decisions).
+an answer. The reasoning is in [03-admin-seeding.md](../features/archive/03-admin-seeding.md#decisions).
 
 **Fact 1 is closed.** `TrailBlaze.Service.Test` holds two tests in one file:
 `RoleComesFromTheRowTests` asserts by reflection that neither `IUserContextService` nor

@@ -522,7 +522,7 @@ Do not put stack traces or exception messages in a response body outside Develop
   grants the role — the admin is one row whose `Role` column someone set by hand — so an instance
   that is up, liveness-green and correct in every other respect simply has no admin in it until
   that statement is run. That is a deliberate trade rather than a gap; see
-  [03-admin-seeding.md § Decisions](../../docs/features/03-admin-seeding.md#decisions).
+  [03-admin-seeding.md § Decisions](../../docs/features/archive/03-admin-seeding.md#decisions).
 - `/openapi/v1.json` — the OpenAPI document, Development only.
 
 ### CORS

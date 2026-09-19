@@ -72,7 +72,7 @@ Nothing in the application seeds, promotes or writes that column. A deployment t
 statement starts and looks perfectly healthy with no administrator — the failure surfaces the first
 time an admin action is attempted, to the person who owns the credential, rather than as an
 application that rewrites a privilege column on its own at boot.
-[03-admin-seeding.md](docs/features/03-admin-seeding.md#decisions) records why the startup seeder
+[03-admin-seeding.md](docs/features/archive/03-admin-seeding.md#decisions) records why the startup seeder
 that used to do this was removed.
 
 **Or run against a local SQL Edge container** and skip the firewall rule entirely:

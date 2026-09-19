@@ -173,4 +173,5 @@ five do not repay an hour: [22](22-test-engine-is-a-retired-product.md) and
 anything now, and [23](23-foreign-keys-asserted-that-do-not-exist.md),
 [26](26-composition-root-never-opened-a-connection.md) and
 [27](27-container-filter-is-not-the-offline-run.md) are documentation and shape debt.
-[28](28-soft-deleted-admin-blocks-seeding.md) was filed alongside them and is gone — see above.
+Item 28 was filed alongside them and is gone — see above, and it is the one item here with no link
+because it is the one with no file.
