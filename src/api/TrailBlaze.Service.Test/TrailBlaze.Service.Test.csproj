@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.85" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +24,14 @@
     <ProjectReference Include="..\TrailBlaze.Interface\TrailBlaze.Interface.csproj" />
     <ProjectReference Include="..\TrailBlaze.Model\TrailBlaze.Model.csproj" />
     <ProjectReference Include="..\TrailBlaze.Service\TrailBlaze.Service.csproj" />
+    <!--
+      The container fixtures and FakeUserContext. TestSupport/ lives in the repository tier
+      because that tier needed an engine first, and this reference is the smallest way for a
+      second tier to reach it without a second copy of a fixture whose entire value is being
+      the single definition. A shared test-support project is the tidier arrangement and is
+      recorded as a follow-up rather than attempted inside a feature.
+    -->
+    <ProjectReference Include="..\TrailBlaze.Repository.Test\TrailBlaze.Repository.Test.csproj" />
   </ItemGroup>
 
 </Project>

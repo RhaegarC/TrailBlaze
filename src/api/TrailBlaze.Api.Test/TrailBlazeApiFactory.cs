@@ -23,8 +23,22 @@ using Microsoft.AspNetCore.Mvc.Testing;
 /// </para>
 /// <para>
 /// Nothing has to be removed from the service collection to keep this tier offline. Migrations
-/// are applied by the deployment pipeline rather than at startup, so booting the host touches
-/// no database at all — the context is resolved lazily and not until a request needs it.
+/// are applied by the deployment pipeline rather than at startup, so the context is resolved
+/// lazily and not until a request needs it.
+/// </para>
+/// <para>
+/// <b>One thing does reach for the database at startup, and it is why this string is still the
+/// right one.</b> Feature 03's admin seeder runs as a hosted service, so booting the host makes
+/// one attempt at the connection below — and it fails, every time, in milliseconds, because
+/// nothing listens on port 1. That is deliberate rather than tolerated: the seeder's failures
+/// are logged instead of fatal, so this factory is at once the tier's offline guarantee and the
+/// regression test for it. If a change ever makes a missing database stop the host, every test
+/// in this project goes red at once, which is the loudest available signal.
+/// </para>
+/// <para>
+/// The admin values are supplied for a different reason: absent admin configuration <em>is</em>
+/// fatal by design, so a factory that omitted them would fail to boot for a reason unrelated to
+/// whatever its test is about.
 /// </para>
 /// </remarks>
 internal sealed class TrailBlazeApiFactory : WebApplicationFactory<Program>
@@ -33,6 +47,10 @@ internal sealed class TrailBlazeApiFactory : WebApplicationFactory<Program>
     internal const string UnreachableConnection =
         "Server=127.0.0.1,1;Database=TrailBlaze;User Id=sa;"
         + "Password=NotARealPassword!1;TrustServerCertificate=True;Connect Timeout=1";
+
+    /// <summary>The administrator this factory configures: a well-formed Entra object id, so
+    /// nothing on the seeder's own path has cause to object to it.</summary>
+    internal const string AdminObjectId = "00000000-0000-0000-0000-0000000000ad";
 
     private readonly Dictionary<string, string?> _settings;
 
@@ -45,6 +63,8 @@ internal sealed class TrailBlazeApiFactory : WebApplicationFactory<Program>
             ["DbConnection"] = UnreachableConnection,
             ["BlobConnection"] = $"DefaultEndpointsProtocol=https;AccountName=trailblazetests;AccountKey={Convert.ToBase64String(new byte[32])};EndpointSuffix=core.windows.net",
             ["AllowedOrigins"] = "http://localhost",
+            ["AdminObjectId"] = AdminObjectId,
+            ["AdminDisplayName"] = "TrailBlaze Test Admin",
         };
 
         foreach ((string key, string? value) in settings ?? [])

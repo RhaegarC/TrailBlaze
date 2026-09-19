@@ -48,5 +48,7 @@ public sealed class CompositionRootTests
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUserService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUploadValidationService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUserContextService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAdminSeedingService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ICallerRoleService>());
     }
 }
