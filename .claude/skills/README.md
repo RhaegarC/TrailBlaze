@@ -1,18 +1,12 @@
 # Skills
 
-Project skills for Claude Code, auto-loaded from `.claude/skills/<name>/SKILL.md`.
+Two sets carry this directory's name, and only one of them is authored here.
 
-## User-invoked
+**Installed here by the tool:** `gitnexus-*`. `gitnexus analyze` writes them into
+`.claude/skills/` and recreates them on every run, so an edit here would not survive the next
+one. They are committed because the tool puts them in the repository, not because the project
+maintains them.
 
-Reachable only when you type them (Claude Code: `disable-model-invocation: true`; Codex: `policy.allow_implicit_invocation: false` in `agents/openai.yaml`).
-
-- **[grill-me](./grill-me/SKILL.md)** — Get relentlessly interviewed about a plan or design until every branch of the decision tree is resolved.
-- **[handoff](./handoff/SKILL.md)** — Compact the current conversation into a handoff document so another agent can continue the work.
-- **[teach](./teach/SKILL.md)** — Teach the user a new skill or concept over multiple sessions, using the current directory as a stateful teaching workspace.
-- **[writing-great-skills](./writing-great-skills/SKILL.md)** — Reference for writing and editing skills well: the vocabulary and principles that make a skill predictable.
-
-## Model-invoked
-
-Model- or user-reachable (rich trigger phrasing so the model can reach for them).
-
-- **[grilling](./grilling/SKILL.md)** — Interview the user relentlessly about a plan, decision, or idea until every branch of the decision tree is resolved.
+**Global, and reachable from every project:** `grill-me`, `grilling`, `handoff`, `teach`,
+`writing-great-skills`. These live in `~/.claude/skills/`, whose README indexes them, so that a
+new checkout does not need them copied in. They used to sit here; they were moved on 2026-09-19.
