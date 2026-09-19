@@ -16,6 +16,21 @@ public static class Constant
 
         public const string NoBlobConnection = "Blob storage connection not configured. Set the 'BlobConnection' configuration value.";
 
+        // The admin pair. Both are required for the same reason and it is not symmetry: a
+        // deployment with no administrator is unadministrable, nothing later in the run
+        // reports it, and the host that produced it looked healthy. A refusal at startup is
+        // the only point at which that is still cheap to fix.
+        public const string NoAdminObjectId =
+            "Administrator not configured. Set the 'AdminObjectId' configuration value to the Entra object id of the one administrator.";
+
+        public const string NoAdminDisplayName =
+            "Administrator not configured. Set the 'AdminDisplayName' configuration value to the name the administrator's row should carry.";
+
+        /// <summary>Composed from the bound rather than written out beside it, for the reason
+        /// the profile messages are: a length stated twice is a length that drifts.</summary>
+        public static readonly string AdminDisplayNameTooLong =
+            $"AdminDisplayName must be {UserProfile.DisplayNameLength} characters or fewer, the bound on the column it is stored in.";
+
         // Profile validation. Each of these is a rejection rather than a rewrite: this is
         // text a user typed, so shortening it silently would be losing their input, and the
         // alternative to rejecting it is storing something they did not write.
@@ -65,6 +80,16 @@ public static class Constant
         /// configured separately: the containers are the closed set in
         /// <see cref="StorageContainer"/>.</summary>
         public const string BlobConnection = "BlobConnection";
+
+        /// <summary>The Entra object id of the one administrator this deployment seeds. It is
+        /// the <c>users</c> key, so what is configured here is the identity the seed row
+        /// answers to — the administrator is reached by signing in as that object id, not by a
+        /// flag on any request.</summary>
+        public const string AdminObjectId = "AdminObjectId";
+
+        /// <summary>The display name stored on the seeded administrator's row, for the case
+        /// where the row does not exist yet. An existing row keeps its own.</summary>
+        public const string AdminDisplayName = "AdminDisplayName";
     }
 
     /// <summary>
@@ -125,6 +150,44 @@ public static class Constant
 
         /// <summary>Private. Activity media, reached only through a short-lived SAS URL.</summary>
         public const string Media = "media";
+    }
+
+    /// <summary>
+    /// The role column's closed set. Two values, and the smallness is the design: the PRD
+    /// seeds exactly one administrator and has no promotion screen, so a third value would be
+    /// a third authorization behaviour with no way to reach it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The set is enforced in three places, deliberately, and each covers a writer the others
+    /// cannot see. <c>User.Role</c> defaults to <see cref="User"/>, so a row inserted by code
+    /// that never mentions the column lands on the powerless value. The mapping composes a
+    /// check constraint from <see cref="All"/>, so the engine refuses anything else whatever
+    /// wrote it — a script, a support query, a future feature. And the fluent configuration
+    /// bounds the column, which catches the one failure the constraint would not: a value long
+    /// enough to be truncated into a different, valid-looking role.
+    /// </para>
+    /// <para>
+    /// The check constraint is composed from <see cref="All"/> rather than written out beside
+    /// it, so a value added here cannot leave a column still admitting only the old set. That
+    /// composition is not enough on its own: the constraint lives in the schema, so changing
+    /// this list requires a migration, and the repository tier asserts the SQL against a
+    /// literal so the omission is caught rather than shipped.
+    /// </para>
+    /// </remarks>
+    public static class UserRole
+    {
+        /// <summary>An ordinary signed-in person, and the default. Grants nothing beyond what
+        /// every authenticated caller may do.</summary>
+        public const string User = "User";
+
+        /// <summary>The one seeded administrator. Read by feature 09's override; nothing in
+        /// this feature acts on it.</summary>
+        public const string Admin = "Admin";
+
+        /// <summary>The values <c>User.Role</c> accepts, and the source of the constraint that
+        /// enforces them.</summary>
+        public static readonly string[] All = [User, Admin];
     }
 
     /// <summary>
