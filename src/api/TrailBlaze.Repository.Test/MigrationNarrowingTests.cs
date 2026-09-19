@@ -70,7 +70,7 @@ public sealed class MigrationNarrowingTests(TrailBlazeServerFixture server)
     [SkippableFact]
     public async Task A_narrowing_alter_fails_when_a_stored_value_no_longer_fits()
     {
-        await using TestDatabase database = await server.CreateDatabaseAsync();
+        await using TestDatabase database = await server.CreateScratchDatabaseAsync();
 
         Exception? thrown = await MigrateOverAsync(
             database, new string('x', Constant.UserProfile.DisplayNameLength + 100));
@@ -93,7 +93,7 @@ public sealed class MigrationNarrowingTests(TrailBlazeServerFixture server)
     [SkippableFact]
     public async Task The_same_narrowing_alter_succeeds_when_the_data_fits()
     {
-        await using TestDatabase database = await server.CreateDatabaseAsync();
+        await using TestDatabase database = await server.CreateScratchDatabaseAsync();
         string displayName = new('x', Constant.UserProfile.DisplayNameLength);
 
         Exception? thrown = await MigrateOverAsync(database, displayName);

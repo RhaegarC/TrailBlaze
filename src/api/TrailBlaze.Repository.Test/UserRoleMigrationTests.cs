@@ -44,7 +44,7 @@ public sealed class UserRoleMigrationTests(TrailBlazeServerFixture server)
     [SkippableFact]
     public async Task Rows_written_before_the_constraint_survive_it()
     {
-        await using TestDatabase database = await server.CreateDatabaseAsync();
+        await using TestDatabase database = await server.CreateScratchDatabaseAsync();
 
         await using ServiceProvider provider = TestPersistence.Build(
             database.ConnectionString, FakeUserContext.NoRequest());
@@ -92,7 +92,7 @@ public sealed class UserRoleMigrationTests(TrailBlazeServerFixture server)
     [SkippableFact]
     public async Task The_engine_refuses_a_role_outside_the_closed_set()
     {
-        await using TestDatabase database = await server.CreateDatabaseAsync();
+        await using TestDatabase database = await server.CreateScratchDatabaseAsync();
 
         await using ServiceProvider provider = TestPersistence.Build(
             database.ConnectionString, FakeUserContext.NoRequest());
@@ -130,7 +130,7 @@ public sealed class UserRoleMigrationTests(TrailBlazeServerFixture server)
     [SkippableFact]
     public async Task The_database_applies_the_user_default_itself()
     {
-        await using TestDatabase database = await server.CreateDatabaseAsync();
+        await using TestDatabase database = await server.CreateScratchDatabaseAsync();
 
         await using ServiceProvider provider = TestPersistence.Build(
             database.ConnectionString, FakeUserContext.NoRequest());

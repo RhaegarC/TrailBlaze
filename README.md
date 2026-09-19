@@ -104,9 +104,9 @@ default.
 
 The container is separate from the test tier's. `src/api/docker-compose.test.yml` starts its own
 SQL Edge for `dotnet test`, and both bind `127.0.0.1:1433`, so only one can run at a time. While
-the dev container holds the port, a test run reaches *it*; that is safe — the tier creates and
-drops a database per collection and never touches `TrailBlaze` — but stop the dev container to get
-the isolated stack back.
+the dev container holds the port, a test run reaches *it*; that is safe — the tier owns one
+database, `TrailBlazeTest`, and never touches `TrailBlaze` — but stop the dev container to get the
+isolated stack back.
 
 There is no `docker-compose.yml`, and none is wanted: the API is deployed to **Azure Container
 Apps** from the image `src/api/Dockerfile` builds, and the web app to **Azure Static Web Apps** by

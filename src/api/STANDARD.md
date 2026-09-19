@@ -414,10 +414,10 @@ then user-secrets, then environment variables, then command line. Later sources 
 
   **The container is not the test tier's, and the two contend for the same port.** Both bind
   `127.0.0.1:1433`, so only one can be up, and while the dev container holds the port a
-  `dotnet test` run reaches *it* — which is safe only because the tier creates and drops a
-  database per collection and never touches `TrailBlaze`. Stop the dev container to get the
-  isolated stack back. Do not point the test tier at the dev database deliberately: it drops
-  what it creates, and a schema in use is exactly what it has no reason to preserve.
+  `dotnet test` run reaches *it* — which is safe only because the tier owns one database,
+  `TrailBlazeTest`, and drops nothing outside it. Stop the dev container to get the isolated stack
+  back. Do not point the test tier at the dev database deliberately: that name is the only thing
+  bounding what it drops, and a schema in use is exactly what it has no reason to preserve.
 
   **What the exception costs** is that Azure SQL Edge is not Azure SQL Database. A behaviour
   depending on the managed engine's version, collation, or certificate is no longer exercised
