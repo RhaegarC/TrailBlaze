@@ -18,11 +18,10 @@ using TrailBlaze.Model.Profile;
 /// which is exactly why the guard is here rather than left to review.
 /// </para>
 /// <para>
-/// <b>What this is not.</b> It is not evidence that the role is read correctly, that seeding
-/// writes it, or that a signed-in user's row says what it should. Those are behaviours and they
-/// are asserted against an engine in <see cref="AdminSeedingTests"/> and
-/// <see cref="CallerRoleTests"/>. This file answers one question — where the value may come
-/// from — and answers it structurally.
+/// <b>What this is not.</b> It is not evidence that the role is read correctly, or that a
+/// signed-in user's row says what it should. Those are behaviours and they are asserted against
+/// an engine in <see cref="CallerRoleTests"/>. This file answers one question — where the value
+/// may come from — and answers it structurally.
 /// </para>
 /// </remarks>
 public sealed class RoleComesFromTheRowTests

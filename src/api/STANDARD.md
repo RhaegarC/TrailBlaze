@@ -383,12 +383,13 @@ then user-secrets, then environment variables, then command line. Later sources 
 - **A key the application cannot run without is enforced at the composition root**, by
   `RequireSetting`, which fails startup with a message naming the key. Whether "not configured"
   is a tolerable state is a per-key decision, and this is where it is made: `TenantId` and
-  `Audience` are allowed to be absent, while `DbConnection`, `BlobConnection`, `AllowedOrigins`,
-  `AdminObjectId` and `AdminDisplayName` are not. Declaring a key empty and requiring it are not in
-  conflict — the file states the key exists, and the root states what a missing value means.
-  `AdminDisplayName` is additionally checked against the length of the column it is stored in, so an
-  over-long one is a startup failure naming the setting rather than a write the database refuses
-  inside a code path whose failures are tolerated (`RequireAdminSeed`).
+  `Audience` are allowed to be absent, while `DbConnection`, `BlobConnection` and `AllowedOrigins`
+  are not. Declaring a key empty and requiring it are not in conflict — the file states the key
+  exists, and the root states what a missing value means. Requiring a key is for a setting the
+  application cannot work without, not for one whose absence an operator should notice: feature 03's
+  `AdminObjectId`/`AdminDisplayName` were both required, and both were removed on 2026-09-19 along
+  with the startup seeder that read them, because the administrator is a database row a person edits
+  rather than a configuration fact the host enforces.
 - **Credentials never go in the repository.** Not in `appsettings.json`, and never in
   `Properties/launchSettings.json` — that file is version-controlled, so anything in it is
   handed to every clone. Use user-secrets:
@@ -517,10 +518,11 @@ Do not put stack traces or exception messages in a response body outside Develop
   it stays correct while the database is unreachable. It is **not** a way to run the app with no
   database configured: `DbConnection` is required and the host refuses to start without it
   (§6). Liveness answers "is this process up", not "can it serve every route".
-  A green `/health` also does not mean the instance has an administrator: seeding runs in a hosted
-  service that survives an unreachable database, so a database failure longer than the seed's one
-  attempt leaves a process that is up, liveness-green, and has no admin in it. That trade is argued
-  in `AdminSeedingHostedService` and logged at error on every start it happens on.
+  A green `/health` also does not mean the instance has an administrator. Nothing in the application
+  grants the role — the admin is one row whose `Role` column someone set by hand — so an instance
+  that is up, liveness-green and correct in every other respect simply has no admin in it until
+  that statement is run. That is a deliberate trade rather than a gap; see
+  [03-admin-seeding.md § Decisions](../../docs/features/03-admin-seeding.md#decisions).
 - `/openapi/v1.json` — the OpenAPI document, Development only.
 
 ### CORS
@@ -565,8 +567,8 @@ each one catches a specific regression that had already happened once.
 > `azure-sql-edge` and `azure-storage-edge`, started by `docker-compose.test.yml` — and every test
 > that needs one is tagged `Category=Container` and **skips** when it cannot reach it.
 > `TrailBlaze.Api.Test` stays offline. `TrailBlaze.Service.Test` holds tests again as of feature 03:
-> `AdminSeedingTests` and `CallerRoleTests` are `Category=Container`, `RoleComesFromTheRowTests` is
-> offline, and the project references `TrailBlaze.Repository.Test` for `TestSupport/` — a test
+> `CallerRoleTests` is `Category=Container`, `RoleComesFromTheRowTests` is offline, and the project
+> references `TrailBlaze.Repository.Test` for `TestSupport/` — a test
 > project referencing a test project, which
 > [tech-debt 25](../../docs/tech-debt/25-service-test-tier-is-empty.md) records as the settled
 > answer to where a store-backed service assertion runs.

@@ -53,7 +53,8 @@ public sealed class UserRoleMigrationTests(TrailBlazeServerFixture server)
     /// place — and the check constraint then fails against a row the deploy never intended to
     /// keep, which stops the migration rather than the request that would have read it.
     /// <c>Admin</c> is the control: a legitimate value must survive untouched, or the backfill
-    /// would be silently demoting the one account the feature exists to create.
+    /// would silently demote the administrator — the one row whose <c>Role</c> is not the
+    /// default, and the one a backfill written carelessly would not think to spare.
     /// </remarks>
     [SkippableFact]
     public async Task Rows_written_before_the_constraint_survive_it()

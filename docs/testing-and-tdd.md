@@ -24,10 +24,10 @@ records the decision, including the recommendation it overrode.
 
 **Current state (2026-09-19).** Two containers back the suite — `azure-sql-edge` and
 `azure-storage-edge`, started by [`docker-compose.test.yml`](../src/api/docker-compose.test.yml) —
-and 76 tests are discovered: 60 in `TrailBlaze.Repository.Test`, 9 in `TrailBlaze.Service.Test`, 7 in
-`TrailBlaze.Api.Test`. **With the containers running all 76 pass. With nothing configured, 38 pass
-and 38 skip** — and that second number is the honest description of a bare machine, not a failure.
-Measured, not derived: the run reports `Failed: 0, Passed: 38, Skipped: 38, Total: 76` across the
+and 70 tests are discovered: 60 in `TrailBlaze.Repository.Test`, 6 in `TrailBlaze.Service.Test`, 4 in
+`TrailBlaze.Api.Test`. **With the containers running all 70 pass. With nothing configured, 35 pass
+and 35 skip** — and that second number is the honest description of a bare machine, not a failure.
+Measured, not derived: the run reports `Failed: 0, Passed: 35, Skipped: 35, Total: 70` across the
 three projects.
 
 **This paragraph is the only place those counts are written down, and that is deliberate.** They
@@ -40,9 +40,9 @@ is feature 02's — profile routes, avatar upload and upload validator. Those te
 deferred, and [item 12](tech-debt/12-feature-02-tests-deferred.md) tracks writing them and records
 why the gap is the dangerous kind: an untested guard everyone believes is tested is worse than one
 known to be untested. Feature 03 (2026-09-19) added the first coverage of product behaviour rather
-than of the foundation — the `Role` constraint and its backfill, and the seeding and role-resolution
-logic — so "the foundation is green" is no longer quite the whole story, but the profile slice still
-is not covered.
+than of the foundation — the `Role` constraint, its backfill, and the role-resolution logic — so
+"the foundation is green" is no longer quite the whole story, but the profile slice still is not
+covered.
 
 `TestSupport/` lives in `TrailBlaze.Repository.Test` and holds the container fixtures,
 `TestEnvironment`, and `FakeUserContext`. **There is no fake for storage and none for the
@@ -53,11 +53,13 @@ nothing has to be removed from the service collection to achieve that, because m
 applied by the deployment pipeline rather than at startup, and the context is not resolved until a
 request asks for it.
 
-Since feature 03 that is a claim the tier *defends* rather than one it simply enjoys. Seeding runs
-in a hosted service, so booting now makes one connection attempt that is expected to fail; it is
-caught and logged, and the host starts. The tier is therefore also the regression test for the
-offline property itself — if a future change made a database failure fatal to startup, `StartupTests`
-would go red on a machine with no container, which is the failure signal worth having.
+Between feature 03's first revision and 2026-09-19 that property was also tested by accident: the
+admin seeder ran at boot, so every test in the Api tier made one connection attempt that was
+expected to fail, and any change that made a database failure fatal to startup would have gone red
+on a machine with no container. **The seeder was removed the same day, and with it that signal** —
+nothing in the Api project reaches a store at all now, so the tier is offline by construction rather
+than by assertion. Nothing is lost that the tier still needs to catch: the host genuinely has no
+startup database work left to make fatal.
 
 ## Test tiers
 
@@ -70,10 +72,10 @@ would go red on a machine with no container, which is the failure signal worth h
 | Api host | The real pipeline through `WebApplicationFactory` with unreachable connection strings — a missing setting stops startup and the message names the key, and every registration in the composition root resolves | xUnit + `WebApplicationFactory` | Always — no database, deliberately |
 
 `Category=Container` is **the only trait in the solution**. That makes the two obvious filters easy
-to misread: `--filter "Category!=Container"` is not "the offline run", it is the 27 tests that touch
+to misread: `--filter "Category!=Container"` is not "the offline run", it is the 24 tests that touch
 *neither* container — which excludes the 11 storage tests, and those run on a bare machine too,
 because storage falls back to the emulator and needs no secret. The bare-machine run is plain
-`dotnet test`, which is 38 passed and 38 skipped.
+`dotnet test`, which is 35 passed and 35 skipped.
 
 ## What still runs offline, and why it is worth keeping
 

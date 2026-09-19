@@ -9,16 +9,18 @@ Feature 03 needed both halves of this item and so closed fact 1 and answered the
 **(a)** rather than the **(c)** recommended below. Recorded here rather than diverged from in
 silence; the reasoning is in [03-admin-seeding.md](../features/03-admin-seeding.md#decisions).
 
-**Fact 1 is closed.** `TrailBlaze.Service.Test` now holds nine tests in three files:
-`AdminSeedingTests` (3, container) and `CallerRoleTests` (4, container) cover the seeding decision and
-role resolution against a real database, and `RoleComesFromTheRowTests` (2, offline) asserts by
-reflection that the role has no other source. Measured after the change: 2 passed / 7 skipped / 9 ms
-offline, 9 passed / 1 s with the containers up.
+**Fact 1 is closed.** `TrailBlaze.Service.Test` now holds six tests in two files: `CallerRoleTests`
+(4, container) covers role resolution against a real database, and `RoleComesFromTheRowTests`
+(2, offline) asserts by reflection that the role has no other source. Measured after the change:
+2 passed / 4 skipped / 9 ms offline, 6 passed / 937 ms with the containers up. *(An earlier revision
+of this block counted nine, three of them in an `AdminSeedingTests` file. Feature 03's startup
+seeder was removed the same day, and that file with it — see
+[03-admin-seeding.md](../features/03-admin-seeding.md#decisions).)*
 
 **Decision: (a) — the service tier took the repository reference.** The recommendation below
-preferred (c) and rested on a cost that the measurement above does not show: 1 s for nine
+preferred (c) and rested on a cost that the measurement above does not show: 937 ms for six
 container-backed tests is not a tier "slow to the point of changing how the tier is used", and the
-offline run is unchanged for anyone without containers, because the seven store-backed tests skip
+offline run is unchanged for anyone without containers, because the four store-backed tests skip
 rather than fail. Against that, (c)'s own drawback is the one that decided it — the assertions that
 matter here are security ones ("the caller's role comes from the row, never the token", "no caller
 without a row is granted one"), and (c) would have filed them as the repository's behaviour, which
@@ -31,7 +33,7 @@ exercises — then applies without an exception.
 the `DbContext` or the storage implementation in production code; it reaches the *fixtures*, which is
 the smallest thing that works. The cost is that a test project now references another test project,
 which is the arrangement this item's related [item 16](16-unreferenced-scaffolding.md) would object
-to if it had no consumer; it has nine. A shared `TestSupport` project is the tidier shape and is
+to if it had no consumer; it has six. A shared `TestSupport` project is the tidier shape and is
 left as a follow-up rather than attempted inside a feature.
 
 **Still open, and what it still owns.** The four spec bullets in the table above are unaffected —

@@ -48,8 +48,10 @@ Recorded at [02-entra-auth.md#testing-status](../features/archive/02-entra-auth.
 **An untested guard that everyone believes is tested is worse than one known to be untested**, which
 is the feature file's own reasoning and is right. `Role` is not writable through the profile route
 because a *property is absent from a DTO* — a shape no compiler, no schema, and no existing test
-observes. The failure mode is a user promoting themselves to admin, silently and permanently, which
-also defeats feature 03's seeding entirely.
+observes. The failure mode is a user promoting themselves to admin, silently and permanently — and
+since feature 03 made the `users` row the only source of privilege, such a promotion would survive
+every later check the app makes. That the `Role` half of the absence is now asserted is recorded in
+the update above.
 
 **It is a live baseline, not a historical gap.** `develop` carries this code. Features 03 and
 following build on the `users` table and the profile slice, so their tests will assume behaviour that

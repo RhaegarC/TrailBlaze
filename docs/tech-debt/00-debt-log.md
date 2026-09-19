@@ -24,9 +24,12 @@ things they were hiding became visible the first time the tests touched a real o
 one commit is the honest record of a single afternoon's evidence, and each one carries its own
 `Source` line naming the date.
 
-[28](28-soft-deleted-admin-blocks-seeding.md) arrived on 2026-09-19, from verifying feature 03's
-seeder against a populated database. It is latent rather than live — nothing in the product deletes a
-user yet — and its row says so.
+Item 28 was filed on 2026-09-19 and **deleted the same day.** It described a soft-deleted row
+blocking feature 03's admin seeder from inserting, found by running the seeder against a populated
+database. The seeder itself was then removed — the administrator is a row someone edits by hand, not
+something the application writes at startup — so the defect went with the code that owned it, and
+its number is spent. Files are deleted rather than reused: its `Source` line named a seeder that no
+longer exists, and an item describing behaviour the product cannot reach is not debt.
 
 | # | Debt (file) | Kind | Impact | Area | Discharges via | Status |
 |---|---|---|---|---|---|---|
@@ -51,10 +54,10 @@ user yet — and its row says so.
 | 25 | [`TrailBlaze.Service.Test` has no tests, and no way to host the ones it needs](25-service-test-tier-is-empty.md) | test-gap | friction | Tests | features 06/08 (in part) | open (narrowed by 03) |
 | 26 | [The composition root has never opened a connection](26-composition-root-never-opened-a-connection.md) | test-gap | friction | Api | — (orphaned) | open |
 | 27 | [`Category!=Container` is not the offline run](27-container-filter-is-not-the-offline-run.md) | docs | cosmetic | Docs | — (orphaned) | open |
-| 28 | [A soft-deleted row blocks the configured admin from being seeded](28-soft-deleted-admin-blocks-seeding.md) | correctness | friction | Seeding | — (orphaned) | open |
 
 Rows are ordered by number, which for 01–12 is §12 order and for 13+ is filing order. The queue
-order is a judgement, not a column — see "Where to start" at the bottom.
+order is a judgement, not a column — see "Where to start" at the bottom. **A deleted item leaves a
+hole**: 28 has no row because it has no file, and the next item filed takes 29.
 
 ## Kind
 
@@ -170,5 +173,4 @@ five do not repay an hour: [22](22-test-engine-is-a-retired-product.md) and
 anything now, and [23](23-foreign-keys-asserted-that-do-not-exist.md),
 [26](26-composition-root-never-opened-a-connection.md) and
 [27](27-container-filter-is-not-the-offline-run.md) are documentation and shape debt.
-**[28](28-soft-deleted-admin-blocks-seeding.md)** is the same shape: real, verified, and unreachable
-until something deletes a user, which no feature does yet.
+[28](28-soft-deleted-admin-blocks-seeding.md) was filed alongside them and is gone — see above.

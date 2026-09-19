@@ -23,7 +23,7 @@ decides who may *edit* an entry rather than who may read it.
 | Backend | ASP.NET Core 10, layered `Api / Interface / Model / Repository / Service`, each with a sibling xUnit project |
 | Database | **Azure SQL Database** via EF Core (`Microsoft.EntityFrameworkCore.SqlServer`; migrations applied by the deployment pipeline) |
 | Media | Azure Blob Storage — a **public** container for cover images, a **private** one for activity media, reached via short-lived SAS URLs |
-| Identity | Entra ID (bearer tokens; users auto-provisioned; one admin seeded) |
+| Identity | Entra ID (bearer tokens; users auto-provisioned on first sign-in; one admin, set by hand in the database) |
 | Frontend | React 19 + Vite + TypeScript + Tailwind, exported from **Figma Make** |
 | Hosting | API → **Azure Container Apps** (the `src/api/Dockerfile` image); web → **Azure Static Web Apps** by GitHub workflow |
 | Local run | `dotnet run` from `src/api/TrailBlaze.Api`, settings from user-secrets |
@@ -50,25 +50,30 @@ place the test counts are written down.
 ## Running it locally
 
 The API refuses to start without its required settings (`DbConnection`, `BlobConnection`,
-`AllowedOrigins`, and the two administrator settings below), so there is no zero-configuration boot.
-Locally they come from user-secrets — never from `appsettings.json` or `launchSettings.json`, which
-are version-controlled:
+`AllowedOrigins`), so there is no zero-configuration boot. Locally they come from user-secrets —
+never from `appsettings.json` or `launchSettings.json`, which are version-controlled:
 
 ```bash
 cd src/api/TrailBlaze.Api
 dotnet user-secrets set "DbConnection" "Server=tcp:<server>.database.windows.net,1433;Initial Catalog=TrailBlaze;User ID=<user>;Password=<password>;Encrypt=True;TrustServerCertificate=False"
 dotnet user-secrets set "BlobConnection" "<azure storage account connection string>"
-dotnet user-secrets set "AdminObjectId" "<the Entra object id of the administrator>"
-dotnet user-secrets set "AdminDisplayName" "<the name that account shows as>"
 dotnet run
 ```
 
-**The two administrator settings are refused if absent, and that is deliberate.** The first boot
-seeds one `users` row for `AdminObjectId` with `Role = Admin`; a deployment that started without one
-would be a deployment nobody could administer, and it would look perfectly healthy. The seeding is
-idempotent — every later start finds the row and writes nothing — and it does **not** fail the host
-when the database is unreachable, which is a separate trade argued in
-[AdminSeedingHostedService](src/api/TrailBlaze.Api/AdminSeedingHostedService.cs).
+**The administrator is a database row, not a setting.** Every user the app provisions lands on
+`Role = User`; to make one an admin, sign in and hit `GET /user/me` once so the row exists (the
+app provisions it on first sight of your object id), then update it directly:
+
+```sql
+UPDATE Users SET Role = 'Admin' WHERE Id = '<the Entra object id>';
+```
+
+Nothing in the application seeds, promotes or writes that column. A deployment that never runs this
+statement starts and looks perfectly healthy with no administrator — the failure surfaces the first
+time an admin action is attempted, to the person who owns the credential, rather than as an
+application that rewrites a privilege column on its own at boot.
+[03-admin-seeding.md](docs/features/03-admin-seeding.md#decisions) records why the startup seeder
+that used to do this was removed.
 
 **Or run against a local SQL Edge container** and skip the firewall rule entirely:
 
@@ -153,7 +158,7 @@ pointed somewhere else would migrate the wrong database and report success.
    engine, the **migration set actually applying**, the fluent bounds reaching the schema, storage
    routing including a minted SAS the server accepts, and the host's startup rules. Feature 03 added
    the first product coverage — the `Role` constraint and its backfill against a real engine, and the
-   seeding and role-resolution logic — so the store-backed *service* tier now exists. Feature 02's
+   role-resolution logic — so the store-backed *service* tier now exists. Feature 02's
    slice — the profile routes, avatar upload and upload validator — is still **not** covered: its
    tests were deliberately deferred, and
    [item 12](docs/tech-debt/12-feature-02-tests-deferred.md) tracks writing them. "Green" here means

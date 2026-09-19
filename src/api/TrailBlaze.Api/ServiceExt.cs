@@ -6,7 +6,6 @@ using TrailBlaze.Interface.Infrastructure;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
-using TrailBlaze.Model.Admin;
 using TrailBlaze.Repository;
 using TrailBlaze.Service;
 
@@ -27,15 +26,11 @@ internal static class ServiceExt
     /// that resolve their own settings.</param>
     /// <param name="dbConnection">Resolved by the composition root from configuration.</param>
     /// <param name="blobConnection">Resolved by the composition root from configuration.</param>
-    /// <param name="adminSeed">Resolved by the composition root from configuration. A value
-    /// rather than two strings because the pair is what the rule is about — see
-    /// <see cref="AdminSeed"/>.</param>
     public static IServiceCollection RegistService(
         this IServiceCollection services,
         IConfiguration configuration,
         string dbConnection,
-        string blobConnection,
-        AdminSeed adminSeed)
+        string blobConnection)
     {
         // Register persistence (DbContext + repositories)
         services.AddRepositoryPersistence(dbConnection);
@@ -54,14 +49,6 @@ internal static class ServiceExt
         // separately from IUserContextService because it is the one identity question that has
         // to reach the database — see ICallerRoleService.
         services.AddScoped<ICallerRoleService, CallerRoleService>();
-
-        // Seeding the configured administrator. The service is scoped like the context it
-        // writes through; the hosted service that calls it is a singleton and opens a scope of
-        // its own per run, which is why both are registered rather than the hosted service
-        // resolving the seeder from its own constructor.
-        services.AddSingleton(adminSeed);
-        services.AddScoped<IAdminSeedingService, AdminSeedingService>();
-        services.AddHostedService<AdminSeedingHostedService>();
 
         // Stateless, but registered rather than static so the upload rules have one home the
         // routes depend on through injection: if a cap ever needs to come from configuration
@@ -106,45 +93,6 @@ internal static class ServiceExt
         }
 
         return value;
-    }
-
-    /// <summary>Reads the administrator this deployment seeds, and refuses to start without
-    /// one.</summary>
-    /// <remarks>
-    /// <para>
-    /// Three checks rather than the one <see cref="RequireSetting"/> performs, and the third is
-    /// the interesting one. A display name longer than <c>users.DisplayName</c> would be refused
-    /// by the column, but the refusal would land inside the seeder — whose failures are logged
-    /// rather than fatal, so that a database which is merely unreachable does not crash-loop a
-    /// replica. An over-long name is not that: it is a configuration mistake, and left alone it
-    /// would be swallowed by the tolerance built for a different problem, producing a healthy
-    /// boot with no administrator and one error line. Checking it here keeps that tolerance
-    /// narrow.
-    /// </para>
-    /// <para>
-    /// Both values are required rather than defaulted. "No administrator configured" is a state
-    /// an operator would have to discover by being locked out, and a default object id would be
-    /// a default administrator — an account nobody chose.
-    /// </para>
-    /// </remarks>
-    /// <param name="configuration">Configuration to read from.</param>
-    /// <returns>The configured administrator, never blank and never too long for its
-    /// column.</returns>
-    /// <exception cref="InvalidOperationException">A value is missing, blank, or longer than
-    /// the column it is stored in.</exception>
-    public static AdminSeed RequireAdminSeed(this IConfiguration configuration)
-    {
-        string entraObjectId = configuration.RequireSetting(
-            Constant.ConfigKey.AdminObjectId, Constant.Message.NoAdminObjectId);
-        string displayName = configuration.RequireSetting(
-            Constant.ConfigKey.AdminDisplayName, Constant.Message.NoAdminDisplayName);
-
-        if (displayName.Length > Constant.UserProfile.DisplayNameLength)
-        {
-            throw new InvalidOperationException(Constant.Message.AdminDisplayNameTooLong);
-        }
-
-        return new AdminSeed(entraObjectId, displayName);
     }
 
     /// <summary>Registers Entra ID bearer-token authentication. The scheme is wired only

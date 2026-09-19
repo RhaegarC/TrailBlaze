@@ -14,7 +14,10 @@ Ask, of anything that starts up, writes, or holds state:
   starts no application process and is not deployed anywhere.)
 - **How many of it runs?** A design correct on one instance can be wrong on many. Migrations
   applied by an `IHostedService` at startup were correct until ACA ran several replicas, which race
-  each other over the same DDL. The same reasoning applies to feature 03's startup admin seeding.
+  each other over the same DDL. Feature 03's startup admin seeder was the second instance of the
+  same reasoning and was removed in 2026-09-19 for it — any write an application performs at boot is
+  a write every replica performs at boot, and the more security-relevant the column, the worse the
+  race.
 - **What does it reach over the network?** Azure SQL Database is managed and has no local
   stand-in, so "it works on my machine" was never an available fallback — the connection string,
   the firewall, and the database's existence are all prerequisites rather than things the app

@@ -1,6 +1,5 @@
 using TrailBlaze.Api;
 using TrailBlaze.Model;
-using TrailBlaze.Model.Admin;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,27 +27,13 @@ string dbConnection = builder.Configuration.RequireSetting(
 string blobConnection = builder.Configuration.RequireSetting(
     Constant.ConfigKey.BlobConnection, Constant.Message.NoBlobConnection);
 
-// The administrator is read here for the same reason, and it is the one setting whose absence
-// is a security state rather than a broken feature: a deployment that starts without one is a
-// deployment nobody can administer, and it would look perfectly healthy. So it stops the host,
-// naming the key, exactly as a missing connection string does.
-//
-// Note what is deliberately NOT read here: anything about the database being reachable. Seeding
-// runs in a hosted service and survives a database it cannot reach -- see
-// AdminSeedingHostedService, which argues that trade in full.
-AdminSeed adminSeed = builder.Configuration.RequireAdminSeed();
-
-builder.Services.RegistService(builder.Configuration, dbConnection, blobConnection, adminSeed);
+builder.Services.RegistService(builder.Configuration, dbConnection, blobConnection);
 
 // Migrations are deliberately NOT applied here. Azure Container Apps runs several replicas, and
 // replicas migrating concurrently on startup race each other over the same DDL -- one wins, the
 // other gets "there is already an object named ..." or deadlocks, intermittently and only at
 // deploy time. The deployment pipeline applies them with `dotnet ef database update` before the
 // new revision takes traffic, so exactly one writer ever touches the schema.
-//
-// Seeding the administrator is not the same kind of write and does happen here: it is idempotent
-// by construction, it inserts at most one row, and a replica that skipped it would be a replica
-// with no administrator. See AdminSeedingService for why concurrent runs converge.
 
 var app = builder.Build();
 

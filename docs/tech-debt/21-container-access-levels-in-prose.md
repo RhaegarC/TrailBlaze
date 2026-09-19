@@ -79,9 +79,10 @@ Those prove the *intent* is achievable, not that any deployment realises it.
      boot failure, and fits the reading of `RequireSetting` that a missing prerequisite should be
      loud. It is a deployment-shape change and needs the replicas question asked
      ([codereview.md](../../.claude/rules/codereview.md)).
-   - *(c)* **The API sets them at startup** → rejected on the same grounds as feature 03's startup
-     admin seeding: several ACA replicas race, and an application silently rewriting a security
-     setting is the side effect this item exists to complain about.
+   - *(c)* **The API sets them at startup** → rejected on the grounds feature 03's startup admin
+     seeder was removed for on 2026-09-19, one feature after this item was written: several ACA
+     replicas race, and an application silently rewriting a security setting on its own is the side
+     effect this item exists to complain about.
 2. Whichever is chosen, the levels must become a **value in code** — a single map from container to
    level that `CreatePublicUrl`'s callers, any startup check, and the test fixture all read. Today
    three of those four places either guess or repeat the prose.

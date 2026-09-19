@@ -77,9 +77,9 @@ public sealed class CallerRoleTests(TrailBlazeDatabaseFixture fixture)
     /// </summary>
     /// <remarks>
     /// Anonymous and unauthenticated are the same answer here, and the same answer as a missing
-    /// row. There is deliberately no fallback to anything — not to a default role, not to the
-    /// seeded administrator — because a value returned when the caller could not be established
-    /// is a value returned to whoever asked.
+    /// row. There is deliberately no fallback to anything — not to a default role, not to any
+    /// privileged one — because a value returned when the caller could not be established is a
+    /// value returned to whoever asked.
     /// </remarks>
     [SkippableFact]
     public async Task A_caller_with_no_identity_has_no_role()

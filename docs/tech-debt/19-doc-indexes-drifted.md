@@ -8,8 +8,8 @@ Source: found 2026-09-17 (not a §12 item) · Discharges via: — (orphaned) · 
 **The test count now has one home, which is the durable half of this item's argument.** The number
 was restated in five documents — README, [testing-and-tdd.md](../testing-and-tdd.md), the PRD's
 current-state table, the sprint file and STANDARD §10 — and every addition of a test meant five hand
-edits. The count moved **31 → 42 → 59 → 76 in three days**, which is the drift this item predicted
-when it said the fix that lasts is the one that stops the number mattering.
+edits. The count moved **31 → 42 → 59 → 76 → 70 in three days**, which is the drift this item
+predicted when it said the fix that lasts is the one that stops the number mattering.
 
 So that fix was made rather than the number corrected a fourth time:
 
