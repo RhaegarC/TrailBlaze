@@ -29,7 +29,8 @@ where I went and when.
 
 - [ ] `activities` matches the PRD data model. Its own columns are `Title`, `Location`,
       `ActivityDate` (`date`), `Description` (nullable), `Type` (`nvarchar(16)`), `CoverImageBlobPath`
-      (nullable) and `CreatedByUserId` FK → `users.Id`; `Id` and the remaining audit and soft-delete
+      (nullable) and `CreatedByUserId` (the caller's id as a plain column — the model declares no
+      foreign keys, [item 23](../tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)); `Id` and the remaining audit and soft-delete
       columns come from `EntityBase` (the PRD draws them once), so `IsDeleted` is present and the
       global query filter applies to this table
 - [ ] Routes exist for `POST /api/activities`, `GET /api/activities/{id}`,
@@ -75,11 +76,14 @@ where I went and when.
   `Description` normalised to null, an invalid calendar date rejected. Also that `CreatedByUserId`
   is taken from the caller even when the payload supplies a different id, and that `CreatedOn` is
   server-assigned rather than echoed from the request.
-- Integration (`TrailBlaze.Repository.Test`): the query is exercised through the `DbContext` with no
-  database — the save interception stamps `CreatedOn` before any connection opens, the `ActivityDate`
-  mapping to a time-less `date` column and the FK to `users.Id` are asserted from the EF model, and
-  the same-day ordering is inspected with `ToQueryString()`. The cascade to media rows is a mapping
-  assertion (exercised properly once 06 exists) ([testing-and-tdd.md](../testing-and-tdd.md)).
+- Integration (`TrailBlaze.Repository.Test`) — **container-backed**: the save interception stamps
+  `CreatedOn` against a real row rather than the change tracker, the `ActivityDate` mapping to a
+  time-less `date` column is asserted from the EF model, and the same-day ordering is inspected with
+  `ToQueryString()` where the claim is about the generated statement
+  ([testing-and-tdd.md](../testing-and-tdd.md)). **There is no FK to `users.Id` and no cascade to
+  media rows to assert** — the model declares no relationships, so removing an activity's media is
+  work the delete path does, tested when 06 exists
+  ([item 23](../tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)).
 - Integration (`TrailBlaze.Api.Test`): create → read → update → delete round-trip; 404 for unknown
   ids on read/update/delete; 400 with field detail on an invalid payload and the table unchanged
   afterwards.
@@ -88,12 +92,9 @@ where I went and when.
 
 ## Notes / non-goals
 
-- **This slice is not safe to deploy.** Features 04–08 build the CRUD and media mechanics while
-  every authenticated caller may still edit or delete anything. Feature **09** imposes the
-  ownership and admin rules; until it merges, `develop` is not a usable environment
-  (see the sequencing note in [00-mission-1-sprint.md](00-mission-1-sprint.md)). This is a
-  build-order choice — the mechanics stay independently testable and 09 states the whole permission
-  matrix as its own criteria — not an oversight.
+- **This slice is not safe to deploy** — it builds the CRUD mechanics while every authenticated
+  caller may still edit or delete anything, and feature **09** adds the ownership and admin rules.
+  See the sequencing note in [00-mission-1-sprint.md](00-mission-1-sprint.md).
 - No `GET /api/activities` list, paging, or sorting endpoint — that is 05, which clamps `pageSize`
   server-side.
 - No cover upload: the column exists, nothing but feature 08 writes it.

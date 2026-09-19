@@ -1,6 +1,6 @@
 # 12 — Feature 02's behaviour shipped without the tests §10 requires
 
-Status: **open (narrowed by feature 03)** · Kind: test-gap · Impact: blocks · Area: Tests
+Status: **Open** · Kind: test-gap · Impact: blocks · Area: Tests
 Source: STANDARD §12.12 · Discharges via: 11 (in part) · Opened: 2026-09-17 · Last verified: 2026-09-19
 
 ## Update — 2026-09-19 (feature 03)

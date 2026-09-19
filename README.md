@@ -10,8 +10,8 @@ decides who may *edit* an entry rather than who may read it.
 
 | Document | What it holds |
 |---|---|
-| [docs/PRD.md](docs/PRD.md) | The product definition — 30 logged decisions, the canonical data model, the permission matrix, and the API surface |
-| [docs/features/00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) | The 11-feature ladder, dependency order, and the Definition of Done |
+| [docs/PRD.md](docs/PRD.md) | The product definition — the decisions log, the canonical data model, the permission matrix, and the API surface |
+| [docs/features/00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) | The feature ladder, dependency order, each feature's status, and the Definition of Done |
 | [docs/testing-and-tdd.md](docs/testing-and-tdd.md) | Test tiers and the RED → GREEN → refactor discipline |
 | [docs/tech-debt/00-debt-log.md](docs/tech-debt/00-debt-log.md) | Known divergences between the code and the standard, and who owns each |
 | [docs/features/backlog.md](docs/features/backlog.md) | Ideas that are *not* yet features |
@@ -39,6 +39,7 @@ The workflow lives in `.claude/` and runs on slash commands:
 /add-test NN          # RED only — write the missing tests
 /list-features        # every feature with its priority and status
 /sprint-status        # progress, DoD, branches, open PRs
+/doc-assert           # check the docs' links, indexes and status markers
 /archive NN           # after the PR merges
 ```
 
@@ -151,23 +152,15 @@ pointed somewhere else would migrate the wrong database and report success.
 
 1. **The suite is real but shallow.** `dotnet test` from `src/api/` is green either way: with the two
    test containers running everything passes, and with nothing configured the container-backed tests
-   **skip** rather than fail — they are reported rather than hidden. The counts live in
-   [testing-and-tdd.md](docs/testing-and-tdd.md#the-container-tier), which is their only home, because
-   a number copied into five documents is a number that goes stale in five places. What is
-   covered is the foundation: the audit interceptor, the soft-delete filter executed against the
-   engine, the **migration set actually applying**, the fluent bounds reaching the schema, storage
-   routing including a minted SAS the server accepts, and the host's startup rules. Feature 03 added
-   the first product coverage — the `Role` constraint and its backfill against a real engine, and the
-   role-resolution logic — so the store-backed *service* tier now exists. Feature 02's
-   slice — the profile routes, avatar upload and upload validator — is still **not** covered: its
-   tests were deliberately deferred, and
-   [item 12](docs/tech-debt/12-feature-02-tests-deferred.md) tracks writing them. "Green" here means
-   the foundation is green.
-2. **`develop` is not deployable until feature 09 merges.** Features 04–08 build the CRUD and
-   media mechanics while every signed-in user can still write anything; 09 imposes the ownership
-   and admin rules. See the sequencing note in the sprint file.
+   **skip** rather than fail — reported rather than hidden, and a skip is not a pass. What is covered,
+   what is not, and every count are in
+   [testing-and-tdd.md](docs/testing-and-tdd.md), which is their only home. Feature
+   02's slice — the profile routes, avatar upload and upload validator — is **not** covered, because
+   its tests were deliberately deferred ([item 12](docs/tech-debt/12-feature-02-tests-deferred.md)).
+   "Green" here means the foundation is green.
+2. **`develop` is not deployable until feature 09 merges.** 09 imposes the ownership and admin
+   rules; [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) is where the rule and the
+   sequencing behind it live.
 3. **Azure Blob is real in every environment**, tests included — there is no `IStorageRepository`
-   fake, so nothing stands in for the real implementation. The `Category=Container` storage tier runs
-   the real `AzureBlobStorageRepository` against the **Azurite emulator by default**, which needs no
-   credentials, and against a real account when `TRAILBLAZE_STORAGE_CONNECTION` names one. It skips
-   when nothing answers.
+   fake, so nothing stands in for the real implementation. [testing-and-tdd.md](docs/testing-and-tdd.md)
+   states what that costs and what it buys.

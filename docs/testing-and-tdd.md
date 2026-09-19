@@ -95,6 +95,14 @@ keys — `AuditLog` is deliberately not an `EntityBase`, and nothing else declar
 there is nothing to cascade, and the row was describing a property the schema does not have. It is
 removed rather than satisfied by inventing a test for a behaviour that does not exist.
 
+**A second withdrawal came with the containers, and it was a real loss.** The old offline repository
+tier pointed EF at an unreachable port and asserted that every save *failed* — a tripwire that
+proved the tier had not silently stopped testing. It worked because save interception runs before a
+connection opens. But that is an EF ordering guarantee rather than a TrailBlaze behaviour, and it is
+unobservable against a live server, so nothing asserts it now and nothing should. The tripwire's job
+is done instead by the skip, which is louder and has its own failure mode
+([STANDARD.md](../src/api/STANDARD.md) §10).
+
 ## The container tier
 
 ### Skipping, not failing
@@ -209,7 +217,7 @@ From `src/api/`:
 docker compose -f docker-compose.test.yml up -d    # reads MSSQL_SA_PASSWORD from .env
 dotnet test                                        # everything runnable here
 dotnet test --filter "Category=Container"          # the container tiers alone
-dotnet test --filter "Category!=Container"         # the 20 tests touching neither container
+dotnet test --filter "Category!=Container"         # the tests touching neither container
 docker compose -f docker-compose.test.yml down
 ```
 

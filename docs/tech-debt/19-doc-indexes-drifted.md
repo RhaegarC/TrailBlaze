@@ -1,6 +1,6 @@
 # 19 — Documentation indexes have drifted from what they index
 
-Status: **open (partly discharged by feature 03)** · Kind: docs · Impact: cosmetic · Area: Docs
+Status: **Open** · Kind: docs · Impact: cosmetic · Area: Docs
 Source: found 2026-09-17 (not a §12 item) · Discharges via: — (orphaned) · Opened: 2026-09-17 · Last verified: 2026-09-19
 
 ## Update — 2026-09-19 (feature 03)
@@ -30,6 +30,36 @@ for the same reason, and its 2026-09-19 note was rewritten to stop asserting new
 **This item does not close on that.** Step 3 below — the command-list `doc-assertion`, which is the
 one part that catches drift rather than preventing it — was not written.
 
+## Update — 2026-09-19 (the de-duplication pass)
+
+**The single-home treatment was applied to every volatile fact, not just the test count, and the
+assertion was finally written.** This item predicted the pattern; the count fix demonstrated it on
+one fact. Everything else that moved together every feature had the same shape:
+
+| Fact | Had | Now |
+|---|---|---|
+| Feature status | the sprint file's narrative section, its table, each feature file's `Status:` line, the PRD's current-state table | the sprint table. A feature file's `Status:` line is a lifecycle marker its own location decides; the PRD states capability |
+| Debt item state | the register's `Status` column **and** `STANDARD.md` §12's mirrored table | the register. §12 is a pointer, and an item file's `Status:` line is a lifecycle marker |
+| Test counts and tiers | `testing-and-tdd.md` plus `.claude/commands/sprint-status.md`, which had gone stale | `testing-and-tdd.md`; the command reads them from there |
+| "There is no CI" | §11's note and §13's checklist, which required a green CI job that does not exist | §11's note; §13 no longer contradicts it |
+| "`develop` is not deployable until 09" | five documents, each phrasing it differently | the sprint file's sequencing note; the rest point at it |
+| Counts as prose | README's "30 logged decisions" and "11-feature ladder" | neither; an index says what a document holds, which is true at any length |
+
+**`scripts/doc-assert.py` is step 3, and it is bigger than the command-list assertion this item
+proposed.** It asserts eight invariants, each one a real defect found in this repository: every
+relative link resolves (the item-28 break), no live count outside the strategy doc, no CI
+requirement while there is no CI, the sprint table covers the feature set, the register is complete
+and points at real files, status lines match their location, no document states a feature's status
+outside the sprint table, and the README lists every command — the last being the narrow assertion
+this item named first. Run it with `/doc-assert`; [STANDARD.md](../../src/api/STANDARD.md) §13
+carries it in the PR checklist.
+
+**Two things stay open, and neither is this item's.** §13's template-job line is corrected here, but
+item [11](11-no-ci-pipeline.md) still owns whether a pipeline exists to run any of it; the README
+user-secrets sentence is item [17](17-allowedorigins-duplicated.md)'s. `CLAUDE.md`/`AGENTS.md` are
+still generated and still stale (step 5). What this item was *for* — nothing watches the indexes —
+is now false.
+
 ## What the debt is
 
 The documents that *index* other documents no longer describe them. Five verified instances:
@@ -41,15 +71,15 @@ The documents that *index* other documents no longer describe them. Five verifie
 | [README.md:47-49](../../README.md#L47-L49) | required settings come from user-secrets, "never from `appsettings.json` or `launchSettings.json`" | `AllowedOrigins` is in **both** — see item [17](17-allowedorigins-duplicated.md) |
 | [README.md:86](../../README.md#L86) | the suite "runs 31 tests across the three tiers, 30 of them by default" | `dotnet test` reports **42 runnable, 41 passing, 1 skipped** |
 | [README.md:11-16](../../README.md#L11-L16) | the "Start here" table | has no row for `docs/tech-debt/`, which this register creates |
-| [STANDARD.md](../../src/api/STANDARD.md) §13 | "CI's template job stays green" | there is no CI at all, and no template job — item [11](11-no-ci-pipeline.md) |
+| [STANDARD.md](../../src/api/STANDARD.md) §13 | held the PR checklist to a green template job | there is no CI at all, and no template job — item [11](11-no-ci-pipeline.md) |
 
-**Status as of 2026-09-18: four of the six are fixed, and two are not.**
+**Status as of 2026-09-19: five of the six are fixed, and one is not.**
 
 | Instances | State |
 |---|---|
 | the decision count, the command list, the Start-here table, the test count | **fixed** — corrected in the PR that ran the suite against containers, which touched README for other reasons |
+| §13's template job | **fixed 2026-09-19** — the line requires a green `dotnet test` with the containers up, and says plainly that CI would hold it too and does not exist |
 | the user-secrets sentence | **open**, and owned by item [17](17-allowedorigins-duplicated.md) |
-| §13's template job | **open**, and owned by item [11](11-no-ci-pipeline.md) |
 
 This item is therefore no longer "the README has drifted" so much as "nothing keeps it from drifting
 again", which is the `doc-assertion` in the Testability section and the reason it stays open after
@@ -135,8 +165,10 @@ asserted either, being generated.
    awaiting the config decision.
 2. ~~**Add the `docs/tech-debt/` row** to the Start-here table.~~ **Done** — the row exists at
    [README.md:16](../../README.md#L16).
-3. **Write the command-list `doc-assertion`.** Still the item's durable half, and now the only part
-   of it that outlives the next test.
+3. ~~**Write the command-list `doc-assertion`.**~~ **Done 2026-09-19** — and it grew into
+   `scripts/doc-assert.py`, which asserts that one plus seven more — and an eighth since, the
+   FK/cascade claim filed as item [23](23-foreign-keys-asserted-that-do-not-exist.md). See the update
+   above.
 4. ~~**Settle the test count** by running `dotnet test`.~~ **Done, and it did not stay settled** —
    the number went 42 → 59 → 76. Recording it was still right; treating it as the deliverable was
    not, and the count is now written in one document only (see the update above).
@@ -152,16 +184,18 @@ asserted either, being generated.
 - **`docs/features/backlog.md` and `docs/testing-and-tdd.md` were not found to have drifted**, design
   and test-tier content being less countable than an index. Their absence from this item is a
   checked result, not an omission.
-- **A link checker is not proposed.** The relative-link mistakes this project has made were made
-  once, were caught in review, and a checker needs a runner — which is item
-  [11](11-no-ci-pipeline.md). Revisit after 11.
+- **A link checker was proposed, and built.** This item argued the relative-link mistakes were made
+  once and caught in review, and that a checker needed a runner — which is item
+  [11](11-no-ci-pipeline.md). That was wrong on both counts: the item-28 break reached `develop`
+  through review, and a stdlib-only Python script needs no runner. `scripts/doc-assert.py` carries
+  it now, and is the artefact to wire into CI unchanged when 11 closes.
 
 ## Close checklist
 
 - [x] README's decision count, command list, Start-here table and test count are accurate (2026-09-18)
 - [ ] README's user-secrets sentence is accurate, or item [17](17-allowedorigins-duplicated.md) says why not
-- [ ] §13's "CI's template job" line corrected or removed
-- [ ] A `doc-assertion` test fails when a command is added and README is not updated
-- [ ] The test count was settled by running `dotnet test`, and the number in README matches
+- [x] §13's "CI's template job" line corrected or removed (2026-09-19)
+- [x] A `doc-assertion` test fails when a command is added and README is not updated (2026-09-19)
+- [x] The test count has one home and README points at it, so there is no number in README to match
 - [ ] `CLAUDE.md`/`AGENTS.md` counts refreshed by `analyze`, in their own commit
 - [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

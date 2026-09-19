@@ -87,19 +87,21 @@ some work the ladder attributes to features 01–02 already exists:
 | `GET /health` and an OpenAPI document (development only) | `Program.cs` |
 | Application-assigned GUID keys, soft delete, and the append-only audit trail | `EntityBase`, `AuditSaveChangesInterceptor`, `AuditLog` |
 
-**Not yet built.** These are the real gaps:
+**Where the code stands against it.** The rows state what the product offers today, not how
+far along its feature is — a feature's own progress lives in the
+[sprint file](features/00-mission-1-sprint.md#feature-breakdown), which is its only home.
 
 | Area | Target (this document) | Code today | Closes in |
 |---|---|---|---|
-| Database engine | **Azure SQL Server** | **done** — `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated on SQL Server | feature 01 |
-| API hosting | ACA from a container image | **done** — `src/api/Dockerfile` builds the image, `.dockerignore` keeps local build output out of the context. No `docker-compose.yml`: neither target needs a local multi-service stack | feature 01 |
+| Database engine | **Azure SQL Server** | SQL Server through EF Core (`Microsoft.EntityFrameworkCore.SqlServer`); migrations and snapshot generated against it | feature 01 |
+| API hosting | ACA from a container image | `src/api/Dockerfile` builds the image; no `docker-compose.yml`, because neither target consumes a local multi-service stack | feature 01 |
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
-| Test harness | xUnit per layer, container-backed tiers ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; a run with the containers up passes everything, and a run without them skips the container-backed tiers rather than failing. `TrailBlaze.Service.Test` is no longer empty — the role-source assertions live there, offline ([25-service-test-tier-is-empty.md](tech-debt/25-service-test-tier-is-empty.md)). The counts are in [testing-and-tdd.md](testing-and-tdd.md) and nowhere else | feature 01 |
-| Blob abstraction | `IStorageRepository`, three containers, no fake | **done** — `IStorageRepository` in `TrailBlaze.Interface` and the single Azure adapter in `TrailBlaze.Repository`. The storage tier runs that adapter against Azurite, so nothing stands in for it | feature 01 |
+| Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers, the filters and every count are in [testing-and-tdd.md](testing-and-tdd.md) | feature 01 |
+| Blob abstraction | `IStorageRepository`, three containers, no fake | `IStorageRepository` in `TrailBlaze.Interface`, one Azure adapter in `TrailBlaze.Repository`, exercised by the storage tier against Azurite | feature 01 |
 | Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
-| Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | **done** — all five exist, bounded to the lengths in the data model. The narrowing `ALTER COLUMN` lives in `AddUserProfileColumns`, which is applied to the local development database (2026-09-19) and to no Azure SQL Database, because no deployed environment exists yet ([feature 11](features/11-e2e-verification.md)). What it does to a populated table is asserted in `MigrationNarrowingTests`, not assumed | feature 02 |
-| Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | **done** — all four profile routes exist and return DTOs; the behaviour behind them is implemented but **not yet covered by tests** (see [02-entra-auth.md](features/archive/02-entra-auth.md#testing-status)) | feature 02 |
-| Administrator | one admin, set by hand; role read from the row, never from a claim | **done** — `users.Role` is not null, defaults to `User`, and is check-constrained to the closed set. The admin is one row whose `Role` column reads `Admin`, updated directly in the database: **nothing in the application seeds, promotes or writes it** — see [03-admin-seeding.md](features/archive/03-admin-seeding.md#decisions) for why the startup seeder this row originally described was removed. `/user/me` returns the caller's own `Role` from their row; no request payload or token claim carries one, and `RoleComesFromTheRowTests` asserts both absences. **The server-side read that feature 09 will authorize against does not exist yet** — it was built and removed in review as unconsumed | feature 03 |
+| Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | all five exist, bounded to the lengths in the data model | feature 02 |
+| Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | all four routes exist and return DTOs, and are **untested** ([02-entra-auth.md](features/archive/02-entra-auth.md#testing-status)) | feature 02 |
+| Administrator | one admin, set by hand; role read from the row, never from a claim | `users.Role` is not null, defaults to `User`, and is check-constrained to the closed set. Nothing in the application seeds, promotes or writes it — [03-admin-seeding.md](features/archive/03-admin-seeding.md#decisions) records why | feature 03 |
 | Frontend integration | the Figma export wired to the API (feature 10) | the export is committed but is **entirely mock data** — no API call, no MSAL, the role hard-coded to `user` and upload controls inert. It is design intent, not a working client | feature 10 |
 
 **The key shape is settled: `users.Id` is the Entra object id.** This document originally proposed

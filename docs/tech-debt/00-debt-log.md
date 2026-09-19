@@ -13,9 +13,10 @@ audit columns were unmaintained for months after the interceptor started maintai
 **Numbering is identity, not priority.** Numbers 01–12 are the former §12 items, in §12 order, and
 they never change. New items take the next free number — check `archive/` too, since archived
 numbers are spent. Reprioritising reorders the rows below and never renames a file; that matters
-because STANDARD §12's mapping table, the PRD, feature files and merged PR bodies all link to these
-names. Features number by priority because a scan reads the number
-(`/next` picks the lowest); nothing scans this folder, so there is nothing to encode.
+because the PRD, feature files and merged PR bodies all link to these names, and each item's own
+`Source:` line records which §12 number it used to be. Features number by priority because a scan
+reads the number (`/next` picks the lowest); nothing scans this folder, so there is nothing to
+encode.
 
 Items 21–27 arrived together, on 2026-09-18, from one change: running the suite against real
 containers. That is not a convention breaking — it is what the change was for. A fake storage
@@ -45,11 +46,11 @@ longer exists, and an item describing behaviour the product cannot reach is not 
 | 16 | [Unreferenced forward-looking scaffolding](16-unreferenced-scaffolding.md) | hygiene | friction | Persistence | features 06/07/08 (in part) | open |
 | 17 | [`AllowedOrigins` is declared twice](17-allowedorigins-duplicated.md) | correctness | silent-wrong | Config | — (orphaned) | open |
 | 18 | [Tracked settings carry another repo's permissions](18-claude-settings-cross-repo.md) | hygiene | friction | Workflow | — (orphaned) | open |
-| 19 | [Documentation indexes have drifted](19-doc-indexes-drifted.md) | docs | cosmetic | Docs | — (orphaned) | open (partly discharged by 03) |
+| 19 | [Documentation indexes have drifted](19-doc-indexes-drifted.md) | docs | cosmetic | Docs | — (orphaned) | open — the indexes are now de-duplicated and asserted by `scripts/doc-assert.py`; two instances remain, owned by 11 and 17 |
 | 20 | [`LastModifiedOn` is left at its sentinel on insert](20-lastmodified-unset-on-insert.md) | correctness | silent-wrong | Audit | — (orphaned) | open |
 | 21 | [The public/private container set exists only in prose](21-container-access-levels-in-prose.md) | capability | silent-wrong | Storage | — (orphaned) | open |
 | 22 | [The test tier's database engine is a retired product](22-test-engine-is-a-retired-product.md) | correctness | friction | Tests | — (orphaned) | open |
-| 23 | [Feature specs assert foreign keys the model does not have](23-foreign-keys-asserted-that-do-not-exist.md) | docs | friction | Model | features 04/06 (in part) | open |
+| 23 | [Documentation asserts foreign keys the model does not have](23-foreign-keys-asserted-that-do-not-exist.md) | docs | friction | Model | features 04/06 (in part) | open — the four feature-spec statements are corrected (2026-09-19); the PRD's own `FK →` labels and its "cascades media" note remain |
 | 24 | [Every write method returns the entry count, not the rows named](24-write-methods-return-entry-count.md) | correctness | silent-wrong | Persistence | — (orphaned) | open |
 | 25 | [`TrailBlaze.Service.Test` has no tests, and no way to host the ones it needs](25-service-test-tier-is-empty.md) | test-gap | friction | Tests | features 06/08 (in part) | open (narrowed by 03) |
 | 26 | [The composition root has never opened a connection](26-composition-root-never-opened-a-connection.md) | test-gap | friction | Api | — (orphaned) | open |
