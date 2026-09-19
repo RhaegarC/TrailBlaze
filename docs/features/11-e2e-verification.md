@@ -70,7 +70,7 @@ the app assumes, or whether the real tenant issues the token the API validates.
       absent from it
 - [ ] **Private is owner-and-admin only**: a `Private` activity is absent from a second signed-in
       non-owner's list and its detail returns **404**, while the same URL renders for its owner
-      and for the seeded admin
+      and for the admin
 - [ ] **Media visible**: signed in, the activity's images and videos render in the app from
       **short-lived SAS URLs**, and an expired SAS stops rendering while a freshly minted one
       works
@@ -100,7 +100,8 @@ the app assumes, or whether the real tenant issues the token the API validates.
 - [ ] **Second user refused**: a second signed-in, non-admin user is refused with **403** when
       attempting to edit, delete, or replace the cover of the first user's activity, while still
       being able to read it and — if it is readable — add media to it (Decision #27)
-- [ ] **Admin override**: the seeded admin, signed in, successfully edits and deletes another
+- [ ] **Admin override**: the admin — the `users` row whose `Role` was set to `Admin` by hand, since
+      nothing in the application grants it — signs in and successfully edits and deletes another
       user's activity, including one the admin is not the owner of and that is `Private`
 - [ ] **Delete cascades**: deleting an activity removes its media rows **and** the underlying blobs
       from the private container, plus its cover blob from whichever container holds it (`covers`

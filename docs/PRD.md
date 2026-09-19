@@ -94,11 +94,12 @@ some work the ladder attributes to features 01–02 already exists:
 | Database engine | **Azure SQL Server** | **done** — `Microsoft.EntityFrameworkCore.SqlServer`; migrations and snapshot regenerated on SQL Server | feature 01 |
 | API hosting | ACA from a container image | **done** — `src/api/Dockerfile` builds the image, `.dockerignore` keeps local build output out of the context. No `docker-compose.yml`: neither target needs a local multi-service stack | feature 01 |
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
-| Test harness | xUnit per layer, container-backed tiers ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; `dotnet test` discovers 59 tests, of which 31 pass and 28 skip on a machine with no containers, and all 59 pass with them up. `TrailBlaze.Service.Test` holds no tests yet | feature 01 |
+| Test harness | xUnit per layer, container-backed tiers ([testing-and-tdd.md](testing-and-tdd.md)) | **done** — the three `*.Test` projects reference the layer each exercises; a run with the containers up passes everything, and a run without them skips the container-backed tiers rather than failing. `TrailBlaze.Service.Test` is no longer empty — the role-source assertions live there, offline ([25-service-test-tier-is-empty.md](tech-debt/25-service-test-tier-is-empty.md)). The counts are in [testing-and-tdd.md](testing-and-tdd.md) and nowhere else | feature 01 |
 | Blob abstraction | `IStorageRepository`, three containers, no fake | **done** — `IStorageRepository` in `TrailBlaze.Interface` and the single Azure adapter in `TrailBlaze.Repository`. The storage tier runs that adapter against Azurite, so nothing stands in for it | feature 01 |
 | Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
-| Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | **done** — all five exist, bounded to the lengths in the data model. The migration that narrows `Role`/`DisplayName`/`Description` has not been applied to any database yet | feature 02 |
+| Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | **done** — all five exist, bounded to the lengths in the data model. The narrowing `ALTER COLUMN` lives in `AddUserProfileColumns`, which is applied to the local development database (2026-09-19) and to no Azure SQL Database, because no deployed environment exists yet ([feature 11](features/11-e2e-verification.md)). What it does to a populated table is asserted in `MigrationNarrowingTests`, not assumed | feature 02 |
 | Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | **done** — all four profile routes exist and return DTOs; the behaviour behind them is implemented but **not yet covered by tests** (see [02-entra-auth.md](features/archive/02-entra-auth.md#testing-status)) | feature 02 |
+| Administrator | one admin, set by hand; role read from the row, never from a claim | **done** — `users.Role` is not null, defaults to `User`, and is check-constrained to the closed set. The admin is one row whose `Role` column reads `Admin`, updated directly in the database: **nothing in the application seeds, promotes or writes it** — see [03-admin-seeding.md](features/03-admin-seeding.md#decisions) for why the startup seeder this row originally described was removed. `/user/me` returns the caller's own `Role` from their row; no request payload or token claim carries one, and `RoleComesFromTheRowTests` asserts both absences. **The server-side read that feature 09 will authorize against does not exist yet** — it was built and removed in review as unconsumed | feature 03 |
 | Frontend integration | the Figma export wired to the API (feature 10) | the export is committed but is **entirely mock data** — no API call, no MSAL, the role hard-coded to `user` and upload controls inert. It is design intent, not a working client | feature 10 |
 
 **The key shape is settled: `users.Id` is the Entra object id.** This document originally proposed
@@ -224,7 +225,7 @@ erDiagram
 | `users` | `Id` | string | PK; **the Entra `oid` claim** — see "Current state vs. target" |
 | | `Email` | nvarchar(320) | from the token |
 | | `DisplayName` | nvarchar(200) | from the token, then edited on the profile screen |
-| | `Role` | nvarchar(16) | `User` \| `Admin` |
+| | `Role` | nvarchar(16) | **not null**, default `User`; `CK_Users_Role` admits only `User` \| `Admin` |
 | | `Description` | nvarchar(500) | nullable; the profile **bio**, user-edited |
 | | `AvatarBlobPath` | nvarchar(512) | nullable; **public** `avatars` container |
 | | `PreferredTheme` | nvarchar(16) | `Dark` \| `Light`; default `Dark`; presentation only |
@@ -272,8 +273,13 @@ the same PR. `docs/PRD.md#data-model` (this section) is the canonical reference.
 
 Entra ID issues the bearer token; the API validates it and auto-provisions a `users` row on
 first sight of a new `oid`. Role comes from the `Role` column, not from a token claim alone —
-the platform issues the token, the database decides the privilege. Exactly one admin is seeded
-at startup.
+the platform issues the token, the database decides the privilege. The admin is one row with
+`Role` set to `Admin`, written by hand against the deployed database — **there is no seeding
+path, no admin configuration key, and no endpoint that grants the role**, so the only writer of
+`Admin` is whoever operates the deployment. Elevated rights therefore exist without an
+application that rewrites a privilege column on its own, at the cost of one guarantee the
+database cannot give: a deployment with no administrator starts and looks healthy. That failure
+is visible the first time an admin action is attempted rather than silent.
 
 Authorization has two independent axes, and keeping them apart is what makes the matrix readable:
 **visibility** (`activities.Type`) decides who may *read* an entry; **ownership**

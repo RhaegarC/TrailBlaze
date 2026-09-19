@@ -24,6 +24,13 @@ things they were hiding became visible the first time the tests touched a real o
 one commit is the honest record of a single afternoon's evidence, and each one carries its own
 `Source` line naming the date.
 
+Item 28 was filed on 2026-09-19 and **deleted the same day.** It described a soft-deleted row
+blocking feature 03's admin seeder from inserting, found by running the seeder against a populated
+database. The seeder itself was then removed — the administrator is a row someone edits by hand, not
+something the application writes at startup — so the defect went with the code that owned it, and
+its number is spent. Files are deleted rather than reused: its `Source` line named a seeder that no
+longer exists, and an item describing behaviour the product cannot reach is not debt.
+
 | # | Debt (file) | Kind | Impact | Area | Discharges via | Status |
 |---|---|---|---|---|---|---|
 | 02 | [`DeleteAsync` does N round trips, untransacted](02-deleteasync-n-round-trips.md) | correctness | silent-wrong | Persistence | — (orphaned) | open |
@@ -31,25 +38,26 @@ one commit is the honest record of a single afternoon's evidence, and each one c
 | 05 | [A soft delete is recorded as `"Modified"`](05-soft-delete-recorded-as-modified.md) | correctness | silent-wrong | Audit | — (orphaned) | open |
 | 07 | [The `.http` file requests `/weatherforecast/`](07-http-file-requests-weatherforecast.md) | hygiene | cosmetic | Api | — (orphaned) | open |
 | 11 | [There is no CI or deployment pipeline](11-no-ci-pipeline.md) | capability | blocks | Workflow | — (orphaned) | open |
-| 12 | [Feature 02's tests were deferred](12-feature-02-tests-deferred.md) | test-gap | blocks | Tests | 11 (in part) | open |
+| 12 | [Feature 02's tests were deferred](12-feature-02-tests-deferred.md) | test-gap | blocks | Tests | 11 (in part) | open (narrowed by 03) |
 | 13 | [`DescriptionTooLong` hardcodes `500`](13-description-too-long-hardcoded.md) | hygiene | friction | Model | — (orphaned) | open |
 | 14 | [The warning-free build is unenforced](14-warning-free-build-unenforced.md) | process | friction | Build | — (orphaned) | open |
 | 15 | [The web app cannot call the API](15-web-app-cannot-call-the-api.md) | capability | blocks | Web | **feature 10** | open |
 | 16 | [Unreferenced forward-looking scaffolding](16-unreferenced-scaffolding.md) | hygiene | friction | Persistence | features 06/07/08 (in part) | open |
 | 17 | [`AllowedOrigins` is declared twice](17-allowedorigins-duplicated.md) | correctness | silent-wrong | Config | — (orphaned) | open |
 | 18 | [Tracked settings carry another repo's permissions](18-claude-settings-cross-repo.md) | hygiene | friction | Workflow | — (orphaned) | open |
-| 19 | [Documentation indexes have drifted](19-doc-indexes-drifted.md) | docs | cosmetic | Docs | — (orphaned) | open |
+| 19 | [Documentation indexes have drifted](19-doc-indexes-drifted.md) | docs | cosmetic | Docs | — (orphaned) | open (partly discharged by 03) |
 | 20 | [`LastModifiedOn` is left at its sentinel on insert](20-lastmodified-unset-on-insert.md) | correctness | silent-wrong | Audit | — (orphaned) | open |
 | 21 | [The public/private container set exists only in prose](21-container-access-levels-in-prose.md) | capability | silent-wrong | Storage | — (orphaned) | open |
 | 22 | [The test tier's database engine is a retired product](22-test-engine-is-a-retired-product.md) | correctness | friction | Tests | — (orphaned) | open |
 | 23 | [Feature specs assert foreign keys the model does not have](23-foreign-keys-asserted-that-do-not-exist.md) | docs | friction | Model | features 04/06 (in part) | open |
 | 24 | [Every write method returns the entry count, not the rows named](24-write-methods-return-entry-count.md) | correctness | silent-wrong | Persistence | — (orphaned) | open |
-| 25 | [`TrailBlaze.Service.Test` has no tests, and no way to host the ones it needs](25-service-test-tier-is-empty.md) | test-gap | friction | Tests | features 06/08 (in part) | open |
+| 25 | [`TrailBlaze.Service.Test` has no tests, and no way to host the ones it needs](25-service-test-tier-is-empty.md) | test-gap | friction | Tests | features 06/08 (in part) | open (narrowed by 03) |
 | 26 | [The composition root has never opened a connection](26-composition-root-never-opened-a-connection.md) | test-gap | friction | Api | — (orphaned) | open |
 | 27 | [`Category!=Container` is not the offline run](27-container-filter-is-not-the-offline-run.md) | docs | cosmetic | Docs | — (orphaned) | open |
 
 Rows are ordered by number, which for 01–12 is §12 order and for 13+ is filing order. The queue
-order is a judgement, not a column — see "Where to start" at the bottom.
+order is a judgement, not a column — see "Where to start" at the bottom. **A deleted item leaves a
+hole**: 28 has no row because it has no file, and the next item filed takes 29.
 
 ## Kind
 
@@ -165,3 +173,4 @@ five do not repay an hour: [22](22-test-engine-is-a-retired-product.md) and
 anything now, and [23](23-foreign-keys-asserted-that-do-not-exist.md),
 [26](26-composition-root-never-opened-a-connection.md) and
 [27](27-container-filter-is-not-the-offline-run.md) are documentation and shape debt.
+[28](28-soft-deleted-admin-blocks-seeding.md) was filed alongside them and is gone — see above.

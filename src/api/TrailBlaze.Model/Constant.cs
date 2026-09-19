@@ -127,6 +127,20 @@ public static class Constant
         public const string Media = "media";
     }
 
+    /// <summary>The values <c>User.Role</c> accepts. Changing this list needs a migration, and
+    /// <c>CK_Users_Role</c> is composed from it.</summary>
+    public static class UserRole
+    {
+        /// <summary>An ordinary signed-in person, and the default.</summary>
+        public const string User = "User";
+
+        /// <summary>The administrator, granted by setting the row's <c>Role</c> column by hand.</summary>
+        public const string Admin = "Admin";
+
+        /// <summary>The values <c>User.Role</c> accepts.</summary>
+        public static readonly string[] All = [User, Admin];
+    }
+
     /// <summary>
     /// The two presentation preferences a profile carries, and the values each accepts. A
     /// closed set rather than free text: both columns are non-nullable with a default, so a

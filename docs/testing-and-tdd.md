@@ -14,18 +14,36 @@ The API is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBla
 xUnit test project (`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`,
 `TrailBlaze.Service.Test`). New tests go in the project matching the layer they exercise.
 
-**Current state (2026-09-18).** Two containers back the suite — `azure-sql-edge` and
-`azure-storage-edge`, started by [`docker-compose.test.yml`](../src/api/docker-compose.test.yml) —
-and 59 tests are discovered: 55 in `TrailBlaze.Repository.Test`, 4 in `TrailBlaze.Api.Test`, and
-none in `TrailBlaze.Service.Test`. **With the containers running all 59 pass. With nothing
-configured, 31 pass and 28 skip** — and that second number is the honest description of a bare
-machine, not a failure.
+**The case that looked like an exception was claimed and then unclaimed.** Feature 03 first answered
+it by giving `TrailBlaze.Service.Test` a `ProjectReference` to `TrailBlaze.Repository.Test` so four
+store-backed service tests could run there; the service they tested was removed in review, the tests
+went with it, and the reference was reverted rather than left behind. So the rule stands as written
+and **the case it does not cover is still open** — a test whose subject is service-layer logic but
+which needs a store. [Item 25](tech-debt/25-service-test-tier-is-empty.md) owns that question, still
+recommends splitting by claim kind, and now records feature 03 as a decision that was taken and
+withdrawn rather than one that settled it.
 
-**But the count is not the coverage.** The one product slice that has shipped — feature 02's profile
-routes, avatar upload and upload validator — has no tests at all; they were deliberately deferred.
-[Item 12](tech-debt/12-feature-02-tests-deferred.md) tracks writing them, and records why the gap is
-the dangerous kind: an untested guard everyone believes is tested is worse than one known to be
-untested. Read these numbers as "the foundation is green".
+**Current state (2026-09-19).** Two containers back the suite — `azure-sql-edge` and
+`azure-storage-edge`, started by [`docker-compose.test.yml`](../src/api/docker-compose.test.yml) —
+and 66 tests are discovered: 60 in `TrailBlaze.Repository.Test`, 2 in `TrailBlaze.Service.Test`, 4 in
+`TrailBlaze.Api.Test`. **With the containers running all 66 pass. With nothing configured, 35 pass
+and 31 skip** — and that second number is the honest description of a bare machine, not a failure.
+Measured, not derived: the run reports `Failed: 0, Passed: 35, Skipped: 31, Total: 66` across the
+three projects.
+
+**This paragraph is the only place those counts are written down, and that is deliberate.** They
+were previously restated in the README, the PRD, the sprint file and STANDARD §10, and went stale in
+all four whenever a feature added a test. If you are here to update them, update them here and stop —
+[item 19](tech-debt/19-doc-indexes-drifted.md) is the record of what the duplication cost.
+
+**But the count is not the coverage.** The one product slice that has shipped and is still untested
+is feature 02's — profile routes, avatar upload and upload validator. Those tests were deliberately
+deferred, and [item 12](tech-debt/12-feature-02-tests-deferred.md) tracks writing them and records
+why the gap is the dangerous kind: an untested guard everyone believes is tested is worse than one
+known to be untested. Feature 03 (2026-09-19) added the first coverage of product behaviour rather
+than of the foundation — the `Role` constraint, its backfill, and the two reflection assertions that
+a role has no source but the row — so "the foundation is green" is no longer quite the whole story,
+but the profile slice still is not covered.
 
 `TestSupport/` lives in `TrailBlaze.Repository.Test` and holds the container fixtures,
 `TestEnvironment`, and `FakeUserContext`. **There is no fake for storage and none for the
@@ -36,20 +54,29 @@ nothing has to be removed from the service collection to achieve that, because m
 applied by the deployment pipeline rather than at startup, and the context is not resolved until a
 request asks for it.
 
+Between feature 03's first revision and 2026-09-19 that property was also tested by accident: the
+admin seeder ran at boot, so every test in the Api tier made one connection attempt that was
+expected to fail, and any change that made a database failure fatal to startup would have gone red
+on a machine with no container. **The seeder was removed the same day, and with it that signal** —
+nothing in the Api project reaches a store at all now, so the tier is offline by construction rather
+than by assertion. Nothing is lost that the tier still needs to catch: the host genuinely has no
+startup database work left to make fatal.
+
 ## Test tiers
 
 | Tier | Scope | Tooling | Runs |
 |---|---|---|---|
-| Backend unit | Upload validation, SAS policy construction, pagination clamping, and ownership/permission evaluation once feature 09 lands | xUnit | Always — fast, offline |
+| Backend unit | Upload validation, SAS policy construction, pagination clamping, ownership/permission evaluation once feature 09 lands, and reflection assertions that a value has no second source (`RoleComesFromTheRowTests`) | xUnit | Always — fast, offline |
 | Repository model | EF Core's *model* and its *generated SQL* — keys, column types and lengths, soft-delete predicates read through `ToQueryString()` | xUnit + EF Core | Always — offline, opens no connection |
-| Database | The real engine: the migration set applies, the fluent bounds reached `INFORMATION_SCHEMA`, a duplicate key collides, the soft-delete filter executes, audit JSON round-trips, a narrowing `ALTER COLUMN` is refused | xUnit + SQL Edge | **`Category=Container`** — skips when unreachable |
+| Database | The real engine: the migration set applies, the fluent bounds reached `INFORMATION_SCHEMA`, a duplicate key collides, the soft-delete filter executes, audit JSON round-trips, a narrowing `ALTER COLUMN` is refused, a check constraint refuses a value outside its set, a default fills itself in | xUnit + SQL Edge | **`Category=Container`** — skips when unreachable |
 | Storage | The real `AzureBlobStorageRepository`: upload, content-type round-trip, a minted SAS that the server accepts, public/private routing, a move | xUnit + Azure SDK | **`Category=Container`** — skips when unreachable |
+| Api host | The real pipeline through `WebApplicationFactory` with unreachable connection strings — a missing setting stops startup and the message names the key, and every registration in the composition root resolves | xUnit + `WebApplicationFactory` | Always — no database, deliberately |
 
 `Category=Container` is **the only trait in the solution**. That makes the two obvious filters easy
-to misread: `--filter "Category!=Container"` is not "the offline run", it is the 20 tests that touch
+to misread: `--filter "Category!=Container"` is not "the offline run", it is the 24 tests that touch
 *neither* container — which excludes the 11 storage tests, and those run on a bare machine too,
 because storage falls back to the emulator and needs no secret. The bare-machine run is plain
-`dotnet test`, which is 31 passed and 28 skipped.
+`dotnet test`, which is 35 passed and 31 skipped.
 
 ## What still runs offline, and why it is worth keeping
 

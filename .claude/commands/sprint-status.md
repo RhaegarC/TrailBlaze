@@ -8,7 +8,7 @@ Produce a concise sprint status report for TrailBlaze:
    (not started / in progress / archived), based on file locations and git state.
 2. **Sprint DoD** — check the Definition of Done items in
    `docs/features/00-mission-1-sprint.md` against what is actually complete (layered solution
-   builds green? Entra auth + auto-provisioning + admin seeded? activity CRUD with validation?
+   builds green? Entra auth + auto-provisioning + an admin row? activity CRUD with validation?
    anonymous paged list? private media upload within caps? SAS delivery authenticated-only?
    public covers? ownership + admin rules enforced? Figma app integrated? E2E verified?). Show
    checked vs. unchecked.

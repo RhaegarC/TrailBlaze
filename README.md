@@ -23,7 +23,7 @@ decides who may *edit* an entry rather than who may read it.
 | Backend | ASP.NET Core 10, layered `Api / Interface / Model / Repository / Service`, each with a sibling xUnit project |
 | Database | **Azure SQL Database** via EF Core (`Microsoft.EntityFrameworkCore.SqlServer`; migrations applied by the deployment pipeline) |
 | Media | Azure Blob Storage — a **public** container for cover images, a **private** one for activity media, reached via short-lived SAS URLs |
-| Identity | Entra ID (bearer tokens; users auto-provisioned; one admin seeded) |
+| Identity | Entra ID (bearer tokens; users auto-provisioned on first sign-in; one admin, set by hand in the database) |
 | Frontend | React 19 + Vite + TypeScript + Tailwind, exported from **Figma Make** |
 | Hosting | API → **Azure Container Apps** (the `src/api/Dockerfile` image); web → **Azure Static Web Apps** by GitHub workflow |
 | Local run | `dotnet run` from `src/api/TrailBlaze.Api`, settings from user-secrets |
@@ -43,8 +43,9 @@ The workflow lives in `.claude/` and runs on slash commands:
 ```
 
 Backend tests run from `src/api/` with `dotnet test`. Two containers back the database and storage
-tiers — start them with `docker compose -f docker-compose.test.yml up -d` first, or those 28 tests
-**skip** rather than fail. See [testing-and-tdd.md](docs/testing-and-tdd.md).
+tiers — start them with `docker compose -f docker-compose.test.yml up -d` first, or those tests
+**skip** rather than fail. See [testing-and-tdd.md](docs/testing-and-tdd.md), which is also the only
+place the test counts are written down.
 
 ## Running it locally
 
@@ -58,6 +59,21 @@ dotnet user-secrets set "DbConnection" "Server=tcp:<server>.database.windows.net
 dotnet user-secrets set "BlobConnection" "<azure storage account connection string>"
 dotnet run
 ```
+
+**The administrator is a database row, not a setting.** Every user the app provisions lands on
+`Role = User`; to make one an admin, sign in and hit `GET /user/me` once so the row exists (the
+app provisions it on first sight of your object id), then update it directly:
+
+```sql
+UPDATE Users SET Role = 'Admin' WHERE Id = '<the Entra object id>';
+```
+
+Nothing in the application seeds, promotes or writes that column. A deployment that never runs this
+statement starts and looks perfectly healthy with no administrator — the failure surfaces the first
+time an admin action is attempted, to the person who owns the credential, rather than as an
+application that rewrites a privilege column on its own at boot.
+[03-admin-seeding.md](docs/features/03-admin-seeding.md#decisions) records why the startup seeder
+that used to do this was removed.
 
 **Or run against a local SQL Edge container** and skip the firewall rule entirely:
 
@@ -133,14 +149,18 @@ pointed somewhere else would migrate the wrong database and report success.
 
 ## Three things to know before you start
 
-1. **The suite is real but shallow.** `dotnet test` from `src/api/` discovers 59 tests. With the two
-   test containers running, all 59 pass; with nothing configured, **31 pass and 28 skip** — the
-   skips are the database tier, and they are reported rather than hidden. What is covered is the
-   foundation: the audit interceptor, the soft-delete filter executed against the engine, the
-   **migration set actually applying**, the fluent bounds reaching the schema, storage routing
-   including a minted SAS the server accepts, and the host's startup rules. The one product slice
-   that has shipped — feature 02's profile routes, avatar upload and upload validator — is **not**
-   covered: its tests were deliberately deferred, and
+1. **The suite is real but shallow.** `dotnet test` from `src/api/` is green either way: with the two
+   test containers running everything passes, and with nothing configured the container-backed tests
+   **skip** rather than fail — they are reported rather than hidden. The counts live in
+   [testing-and-tdd.md](docs/testing-and-tdd.md#the-container-tier), which is their only home, because
+   a number copied into five documents is a number that goes stale in five places. What is
+   covered is the foundation: the audit interceptor, the soft-delete filter executed against the
+   engine, the **migration set actually applying**, the fluent bounds reaching the schema, storage
+   routing including a minted SAS the server accepts, and the host's startup rules. Feature 03 added
+   the first product coverage — the `Role` constraint and its backfill against a real engine, and the
+   role-resolution logic — so the store-backed *service* tier now exists. Feature 02's
+   slice — the profile routes, avatar upload and upload validator — is still **not** covered: its
+   tests were deliberately deferred, and
    [item 12](docs/tech-debt/12-feature-02-tests-deferred.md) tracks writing them. "Green" here means
    the foundation is green.
 2. **`develop` is not deployable until feature 09 merges.** Features 04–08 build the CRUD and

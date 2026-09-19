@@ -383,9 +383,13 @@ then user-secrets, then environment variables, then command line. Later sources 
 - **A key the application cannot run without is enforced at the composition root**, by
   `RequireSetting`, which fails startup with a message naming the key. Whether "not configured"
   is a tolerable state is a per-key decision, and this is where it is made: `TenantId` and
-  `Audience` are allowed to be absent, while `DbConnection`, `BlobConnection` and
-  `AllowedOrigins` are not. Declaring a key empty and requiring it are not in conflict — the
-  file states the key exists, and the root states what a missing value means.
+  `Audience` are allowed to be absent, while `DbConnection`, `BlobConnection` and `AllowedOrigins`
+  are not. Declaring a key empty and requiring it are not in conflict — the file states the key
+  exists, and the root states what a missing value means. Requiring a key is for a setting the
+  application cannot work without, not for one whose absence an operator should notice: feature 03's
+  `AdminObjectId`/`AdminDisplayName` were both required, and both were removed on 2026-09-19 along
+  with the startup seeder that read them, because the administrator is a database row a person edits
+  rather than a configuration fact the host enforces.
 - **Credentials never go in the repository.** Not in `appsettings.json`, and never in
   `Properties/launchSettings.json` — that file is version-controlled, so anything in it is
   handed to every clone. Use user-secrets:
@@ -514,6 +518,11 @@ Do not put stack traces or exception messages in a response body outside Develop
   it stays correct while the database is unreachable. It is **not** a way to run the app with no
   database configured: `DbConnection` is required and the host refuses to start without it
   (§6). Liveness answers "is this process up", not "can it serve every route".
+  A green `/health` also does not mean the instance has an administrator. Nothing in the application
+  grants the role — the admin is one row whose `Role` column someone set by hand — so an instance
+  that is up, liveness-green and correct in every other respect simply has no admin in it until
+  that statement is run. That is a deliberate trade rather than a gap; see
+  [03-admin-seeding.md § Decisions](../../docs/features/03-admin-seeding.md#decisions).
 - `/openapi/v1.json` — the OpenAPI document, Development only.
 
 ### CORS
@@ -554,12 +563,15 @@ Tests live in the per-layer `*.Test` projects (section 1) and run with `dotnet t
 change without a test is not finished**; where tests exist in this solution, they exist because
 each one catches a specific regression that had already happened once.
 
-> **State as of 2026-09-18:** `TrailBlaze.Repository.Test` runs against two containers —
+> **State as of 2026-09-19:** `TrailBlaze.Repository.Test` runs against two containers —
 > `azure-sql-edge` and `azure-storage-edge`, started by `docker-compose.test.yml` — and every test
 > that needs one is tagged `Category=Container` and **skips** when it cannot reach it.
-> `TrailBlaze.Api.Test` stays offline. `TrailBlaze.Service.Test` holds **no test files**: its
-> storage fake was deleted along with the rest of the fakes, and its real tests arrive with
-> features 06 and 08.
+> `TrailBlaze.Api.Test` stays offline. `TrailBlaze.Service.Test` holds tests again as of feature 03,
+> and they are offline too: `RoleComesFromTheRowTests`, two reflection assertions that a role has no
+> source but the row. The project has no container test and no reference to another test project —
+> the one it briefly had, for a service deleted in review, went with it
+> ([tech-debt 25](../../docs/tech-debt/25-service-test-tier-is-empty.md) still asks where a
+> store-backed service assertion runs, and feature 03 turned out not to need the answer).
 
 ### Two tiers, and which one runs when
 
@@ -578,10 +590,15 @@ dotnet test --filter "Category!=Container"         # the tests touching neither 
 **`Category=Container` is the only trait in the solution, and the two filters are not
 complements.** `Category!=Container` selects the tests that touch *neither* container — it is not
 "the offline run", because it also drops the storage tier, which runs whenever a storage endpoint
-answers, configured or not. With nothing configured at all the solution reports **31 passed, 28
-skipped** out of 59 — 27 and 28 of those in `TrailBlaze.Repository.Test`, plus 4 in
-`TrailBlaze.Api.Test`. The storage tests still run against the emulator fallback (storage needs no
-secret by design), so the 28 skips are the database tier and only it. Verified against this branch.
+answers, configured or not. The storage tests run against the emulator fallback (storage needs no
+secret by design), so a run with nothing configured passes the storage tier and the offline tier and
+**skips the database tier and only it**. Measured, not derived.
+
+**What that run prints is written down in one place — [testing-and-tdd.md](../../docs/testing-and-tdd.md) —
+and no count belongs here.** A number restated in four documents goes stale in four, and it did:
+it moved 31 → 42 → 59 → 76 in three days, each move a hand edit
+([item 19](../../docs/tech-debt/19-doc-indexes-drifted.md)). This section keeps the claim, which is
+what a reader needs; the strategy doc keeps the measurement, which is what has to be re-run.
 
 ### The database tier
 
@@ -734,7 +751,7 @@ never change — so a reference to "§12.N" written before the move still resolv
 | 12.9 `DbConnection` is accepted empty | [09 — `DbConnection` was accepted empty](../../docs/tech-debt/archive/09-dbconnection-accepted-empty.md) | archived — feature 01, PR #3 |
 | 12.10 Namespaces are block-scoped | [10 — Namespaces were block-scoped](../../docs/tech-debt/archive/10-block-scoped-namespaces.md) | archived — 2026-09-16 |
 | 12.11 §11 describes a CI workflow that was not built | [11 — There is no CI or deployment pipeline](../../docs/tech-debt/11-no-ci-pipeline.md) | open |
-| 12.12 Feature 02's tests were deferred | [12 — Feature 02's behaviour shipped without the tests §10 requires](../../docs/tech-debt/12-feature-02-tests-deferred.md) | open |
+| 12.12 Feature 02's tests were deferred | [12 — Feature 02's behaviour shipped without the tests §10 requires](../../docs/tech-debt/12-feature-02-tests-deferred.md) | open — narrowed by feature 03, which wrote the `Role` reflection guard |
 
 ### Two things the old list got wrong
 

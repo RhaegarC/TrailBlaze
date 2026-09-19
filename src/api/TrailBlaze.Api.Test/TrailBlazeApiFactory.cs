@@ -23,8 +23,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 /// </para>
 /// <para>
 /// Nothing has to be removed from the service collection to keep this tier offline. Migrations
-/// are applied by the deployment pipeline rather than at startup, so booting the host touches
-/// no database at all — the context is resolved lazily and not until a request needs it.
+/// are applied by the deployment pipeline rather than at startup, and nothing else runs at boot,
+/// so the context is resolved lazily and not until a request needs it.
 /// </para>
 /// </remarks>
 internal sealed class TrailBlazeApiFactory : WebApplicationFactory<Program>

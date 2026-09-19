@@ -52,7 +52,7 @@ The repository was initialised from a generic layered .NET scaffold, which lande
   consumes a local multi-service stack. Still absent: **no CI pipeline**, which 01 does not claim
   and which is now the only path either component has to production.
   **Superseded in part (2026-09-18).** The counts and the storage fake above are historical: the
-  suite is now 59 tests, and the fake is deleted — storage and the database run against containers
+  suite has grown since, and the fake is deleted — storage and the database run against containers
   started by `src/api/docker-compose.test.yml`. `docker-compose.yml` is still absent, and that is
   unchanged; the test-scoped file starts no application process and is not deployed.
 - **02 — implemented and archived (merged to `develop` in PR #4), but its tests are deferred, so it
@@ -69,7 +69,17 @@ The repository was initialised from a generic layered .NET scaffold, which lande
   §10 makes a behaviour change without a test unfinished, so **02 is unfinished and 03 should not
   be treated as safe to build on until those tests exist** —
   [02-entra-auth.md](archive/02-entra-auth.md#testing-status) records the gap criterion by criterion.
-- **03–11 — not started.**
+- **03 — done (2026-09-19).** The `Role` column is constrained to the closed set, defaulted to
+  `User` and backfilled by a migration applied against a populated database; the caller's role is
+  read from their own row and never from a claim. **The administrator is a row someone edits by
+  hand** — the startup seeder this feature was named for was removed on 2026-09-19, and with it the
+  two admin configuration keys, a hosted service and a failure mode it had already produced against
+  a real database. It left three divergences from its own spec and four decisions, all recorded in
+  [the feature file](03-admin-seeding.md#decisions) — the main ones being that the role is a service
+  of its own rather than a property on 02's identity abstraction (the alternative put data access in
+  the Api layer), and that elevating an account is an operator's decision rather than something the
+  application does to its own data at startup.
+- **04–11 — not started.**
 - **The frontend export is a mock, and this matters for reading the rows above.** `src/web/` renders
   from hard-coded `MOCK_ACTIVITIES` / `MOCK_MEDIA`, holds `authRole` in `useState`, and issues no
   `fetch` and no MSAL call. The profile screen, the visibility `Type` selector, the grouped media
@@ -87,7 +97,7 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 |---|---|---|---|---|
 | 01 | [foundation](archive/01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations applied by the pipeline; `Dockerfile` for the ACA image; `IStorageRepository` abstraction with a fake; config for Azure Blob | archived — the fake was deleted 2026-09-18 (see the note above) |
 | 02 | [entra-auth](archive/02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | archived — tests deferred |
-| 03 | [admin-seeding](03-admin-seeding.md) | 02 | `Role` stored on `users`; exactly one admin seeded from configuration at startup; role readable by the authorization path | not started |
+| 03 | [the role column](03-admin-seeding.md) | 02 | `Role` stored on `users`, defaulting to `User` and closed to `User`/`Admin`; one admin set by hand; role readable by the authorization path | **done** — `Role` non-null, defaulted, check-constrained and backfilled by migration; the admin is a row updated directly in the database, with no seeding path and no admin configuration key. The role is served by `/user/me` from the caller's own row, and no claim or payload can carry one. 7 new tests |
 | 04 | [activity-crud](04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. **`Type` is stored here, enforced in 05/09** | not started |
 | 05 | [public-activity-list](05-public-activity-list.md) | 04 | The read surface — paged, date descending, `pageSize` clamped. **Visibility-scoped**: anonymous sees `Public` only; a signed-in caller adds `Shared` and their own `Private`; an unreadable entry is a 404 | not started |
 | 06 | [media-upload](06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 20 per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | not started |
@@ -105,10 +115,14 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 
 ## Definition of Done (checked by `/sprint-status`)
 
-- [ ] Layered `TrailBlaze.*` backend solution builds; `dotnet test` green from `src/api/` **with a
-      non-zero test count** — a green run over zero discovered tests does not count, and is the
-      state today
-- [ ] Entra auth: backend validates bearer tokens; users auto-provisioned; exactly one admin seeded
+- [x] Layered `TrailBlaze.*` backend solution builds; `dotnet test` green from `src/api/` **with a
+      non-zero test count** — a green run over zero discovered tests does not count, and was the
+      state when this line was written. [testing-and-tdd.md](../testing-and-tdd.md) holds the
+      current counts, and is the only document that does
+- [ ] Entra auth: backend validates bearer tokens; users auto-provisioned; exactly one admin
+      — **the admin half is done** (feature 03), as a row an operator edits by hand rather than a
+      seeding path; the line stays open on the token half, whose tests were deferred by 02
+      ([item 12](../tech-debt/12-feature-02-tests-deferred.md))
 - [ ] Self-service profile complete: the caller can edit display name, bio, theme and language and
       upload an avatar, on their own row only, with `Role` not writable through the profile route
 - [ ] Activity CRUD complete with validation (title, location, calendar-date `ActivityDate`) and

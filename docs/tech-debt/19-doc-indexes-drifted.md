@@ -1,7 +1,34 @@
 # 19 — Documentation indexes have drifted from what they index
 
-Status: **open** · Kind: docs · Impact: cosmetic · Area: Docs
-Source: found 2026-09-17 (not a §12 item) · Discharges via: — (orphaned) · Opened: 2026-09-17 · Last verified: 2026-09-18
+Status: **open (partly discharged by feature 03)** · Kind: docs · Impact: cosmetic · Area: Docs
+Source: found 2026-09-17 (not a §12 item) · Discharges via: — (orphaned) · Opened: 2026-09-17 · Last verified: 2026-09-19
+
+## Update — 2026-09-19 (feature 03)
+
+**The test count now has one home, which is the durable half of this item's argument.** The number
+was restated in five documents — README, [testing-and-tdd.md](../testing-and-tdd.md), the PRD's
+current-state table, the sprint file and STANDARD §10 — and every addition of a test meant five hand
+edits. The count moved **31 → 42 → 59 → 76 → 70 in three days**, which is the drift this item
+predicted when it said the fix that lasts is the one that stops the number mattering.
+
+So that fix was made rather than the number corrected a fourth time:
+
+| Document | Before | Now |
+|---|---|---|
+| [testing-and-tdd.md](../testing-and-tdd.md) | one of five copies | **the only copy** — and it says so, so the next editor stops there |
+| [README.md](../../README.md) | "discovers 76 tests … 38 pass and 38 skip" | states which tiers run when, and links |
+| [PRD.md](../PRD.md) current-state table | same counts | states the container property, points at the strategy doc |
+| [00-mission-1-sprint.md](../features/00-mission-1-sprint.md) | same counts, twice | the DoD line points at the strategy doc |
+| [STANDARD.md](../../src/api/STANDARD.md) §10 | same counts, with a per-project split | keeps the *claim* (which tier runs when, and that the skips are the database tier only) and says explicitly that no count belongs there |
+
+**The distinction that makes this correct rather than a deletion.** Dated measurements stay — a
+"Checked 2026-09-18" line in this register is a record of what was observed then, and rewriting it
+would be falsifying evidence. What moved is the *live* claim: the number a reader consults to check
+today's run. [Item 27](27-container-filter-is-not-the-offline-run.md)'s dated table keeps its counts
+for the same reason, and its 2026-09-19 note was rewritten to stop asserting new ones.
+
+**This item does not close on that.** Step 3 below — the command-list `doc-assertion`, which is the
+one part that catches drift rather than preventing it — was not written.
 
 ## What the debt is
 
@@ -111,8 +138,8 @@ asserted either, being generated.
 3. **Write the command-list `doc-assertion`.** Still the item's durable half, and now the only part
    of it that outlives the next test.
 4. ~~**Settle the test count** by running `dotnet test`.~~ **Done, and it did not stay settled** —
-   the number went 42 → 59 in a day. Recording it was still right; treating it as the deliverable was
-   not.
+   the number went 42 → 59 → 76. Recording it was still right; treating it as the deliverable was
+   not, and the count is now written in one document only (see the update above).
 5. **Refresh `CLAUDE.md`/`AGENTS.md` counts** by running `analyze` without `--index-only`, on its own
    commit, and never by editing inside the markers.
 

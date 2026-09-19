@@ -34,7 +34,8 @@ the access the PRD grants them — and nothing more by default.
 
 ## Dependencies
 
-- [03-admin-seeding](03-admin-seeding.md) (`users.Role` stored and seeded; the admin identity exists)
+- [03-admin-seeding](03-admin-seeding.md) (`users.Role` stored and constrained; the admin is a row
+  someone sets by hand, so this feature must not assume one exists)
 - [04-activity-crud](04-activity-crud.md) (activities, their `CreatedByUserId`, and the routes this feature gates)
 
 Features 05–08 (public list, media upload, SAS delivery, cover images) are **retrofitted** by this

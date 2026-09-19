@@ -97,8 +97,8 @@ Verified by hand against a running stack; each is observable in a browser.
       fresh session; the avatar uploads via `POST /user/me/avatar` into the **public** `avatars`
       container and renders from the plain URL that comes back, and `DELETE /user/me/avatar` clears
       it
-- [ ] **Admin override**: signing in as the seeded admin, another user's activity can be edited
-      and deleted from the UI and the change persists
+- [ ] **Admin override**: signing in as the admin (the row whose `Role` reads `Admin`), another
+      user's activity can be edited and deleted from the UI and the change persists
 - [ ] A UI action the caller is not permitted to perform results in the API's 401/403 being shown
       as a refusal — not a silent no-op and not a crash — and the app does not present the action
       as having succeeded; a **404** on a read it may not make surfaces as not-found instead, and

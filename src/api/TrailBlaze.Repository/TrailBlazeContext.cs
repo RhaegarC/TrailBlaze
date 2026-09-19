@@ -8,6 +8,9 @@ using System.Linq.Expressions;
 
 public class TrailBlazeContext(DbContextOptions<TrailBlazeContext> options) : DbContext(options)
 {
+    /// <summary>The name the engine knows the role's check constraint by.</summary>
+    private const string RoleConstraintName = "CK_Users_Role";
+
     public DbSet<AuditLog> AuditLogs { get; set; }
     public DbSet<User> Users { get; set; }
 
@@ -41,10 +44,20 @@ public class TrailBlazeContext(DbContextOptions<TrailBlazeContext> options) : Db
             entity.Property(user => user.Description).HasMaxLength(Constant.UserProfile.DescriptionLength);
             entity.Property(user => user.AvatarBlobPath).HasMaxLength(Constant.UserProfile.AvatarBlobPathLength);
 
-            // Role is bounded here but not yet constrained to User/Admin: the closed set and
-            // its non-nullable default are feature 03's, which is also where anything reads
-            // it. Bounding it now keeps the length out of that feature's diff.
-            entity.Property(user => user.Role).HasMaxLength(Constant.UserProfile.RoleLength);
+            // Role is non-nullable with a default of User, because a reader deciding what an
+            // absent role means would be deciding what it grants.
+            entity.Property(user => user.Role)
+                .HasMaxLength(Constant.UserProfile.RoleLength)
+                .HasDefaultValue(Constant.UserRole.User)
+                .IsRequired();
+
+            // The closed set is enforced by the engine, not only by this app: otherwise
+            // 'Adminn' stores successfully and is then recognized by nothing. Composed from
+            // Constant.UserRole.All, though moving that set still needs a migration.
+            entity.ToTable(table => table.HasCheckConstraint(
+                RoleConstraintName,
+                $"[{nameof(User.Role)}] IN "
+                + $"({string.Join(", ", Constant.UserRole.All.Select(role => $"'{role}'"))})"));
 
             // Non-nullable with a database default, so a row inserted by a path that does
             // not know about preferences still lands on a usable value and every reader can

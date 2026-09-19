@@ -15,7 +15,9 @@ public sealed class User : EntityBase
 {
     public string? DisplayName { get; set; }
 
-    public string? Role { get; set; }
+    /// <summary><c>User</c> or <c>Admin</c>. Defaults to <c>User</c>, and is set by hand in the
+    /// database rather than by anything in the application.</summary>
+    public string Role { get; set; } = Constant.UserRole.User;
 
     /// <summary>The profile bio. Nullable, and normalised so that whitespace-only is null.</summary>
     public string? Description { get; set; }
