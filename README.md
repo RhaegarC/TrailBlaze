@@ -55,24 +55,68 @@ never from `appsettings.json` or `launchSettings.json`, which are version-contro
 ```bash
 cd src/api/TrailBlaze.Api
 dotnet user-secrets set "DbConnection" "Server=tcp:<server>.database.windows.net,1433;Initial Catalog=TrailBlaze;User ID=<user>;Password=<password>;Encrypt=True;TrustServerCertificate=False"
-dotnet user-secrets set "BlobConnection" "<azure storage connection string>"
+dotnet user-secrets set "BlobConnection" "<azure storage account connection string>"
 dotnet run
 ```
+
+**Or run against a local SQL Edge container** and skip the firewall rule entirely:
+
+```bash
+docker run -d --name tb-azure-sql-edge \
+  -e ACCEPT_EULA=1 -e MSSQL_SA_PASSWORD=<a strong password> \
+  -p 127.0.0.1:1433:1433 \
+  -v <a host directory>:/var/opt/mssql/data \
+  --shm-size 1g \
+  mcr.microsoft.com/azure-sql-edge
+
+cd src/api
+DbConnection="Server=127.0.0.1,1433;Database=TrailBlaze;User Id=sa;Password=<the same password>;Encrypt=True;TrustServerCertificate=True" \
+  dotnet ef database update --project TrailBlaze.Repository
+
+cd TrailBlaze.Api
+dotnet user-secrets set "DbConnection" "Server=127.0.0.1,1433;Database=TrailBlaze;User Id=sa;Password=<the same password>;Encrypt=True;TrustServerCertificate=True"
+```
+
+Note the differences from the Azure string, and that each is deliberate: the host is `127.0.0.1`
+rather than a real server, and it carries `TrustServerCertificate=True` because SQL Edge serves a
+self-signed certificate. Both are part of a **loopback-only exception** — [STANDARD.md](src/api/STANDARD.md)
+§6 states it, and states that the keyword must never reach a string that names a real server. The
+`-v` mount is what makes the database survive a container recreate; without it, `docker rm` takes
+the schema with it. `--shm-size 1g` is not optional either: the engine fails opaquely on the 64 MB
+default.
+
+The container is separate from the test tier's. `src/api/docker-compose.test.yml` starts its own
+SQL Edge for `dotnet test`, and both bind `127.0.0.1:1433`, so only one can run at a time. While
+the dev container holds the port, a test run reaches *it*; that is safe — the tier creates and
+drops a database per collection and never touches `TrailBlaze` — but stop the dev container to get
+the isolated stack back.
 
 There is no `docker-compose.yml`, and none is wanted: the API is deployed to **Azure Container
 Apps** from the image `src/api/Dockerfile` builds, and the web app to **Azure Static Web Apps** by
 its own workflow, and neither consumes a local multi-service stack. `src/api/docker-compose.test.yml`
 is not a local stack — it starts **no application process**, only the two containers the test tier
-talks to, and it is documented in [testing-and-tdd.md](docs/testing-and-tdd.md).
+talks to, and it is documented in [testing-and-tdd.md](docs/testing-and-tdd.md). The command above
+is a `docker run` rather than a compose service for the same reason: nothing in the deployment
+reads it, so there is no stack for compose to describe.
 
-Three things to arrange before the first run, all of them outside the app:
+Against a real server, three things to arrange before the first run, all of them outside the app:
 
-- the database must **already exist** — the pipeline migrates the schema, and neither the API nor
-  `dotnet ef` creates the database itself;
+- the database must **already exist** — this is what the pipeline does rather than an engine
+  limit, and the distinction matters: `dotnet ef database update` *does* create the database when
+  it is absent, which is why the container instructions above need no `CREATE DATABASE` step. A
+  deployed environment's database is provisioned deliberately, not as a side effect of a
+  migration;
 - the SQL Server's firewall must allow the address you connect from;
 - the `covers`, `avatars` and `media` containers must exist in your Azure Storage account — the API
   reads and writes blobs but never provisions containers, so the first upload otherwise fails with
   `ContainerNotFound`.
+
+Against the local container the first two do not apply: there is no firewall rule to add, and the
+command above creates the database. The third still does — a local database does not stand in for
+storage, and `BlobConnection` is required at startup either way, so point it at a real account or
+at an Azurite container of your own. Nothing in this repository starts one for the application;
+the Azurite in `docker-compose.test.yml` belongs to the test tier, which is why it has no volume
+and drops the blobs it writes.
 
 **Schema changes are not applied by the API.** Migrations run in the deployment pipeline, before a
 new revision takes traffic — Azure Container Apps runs several replicas, and replicas migrating
