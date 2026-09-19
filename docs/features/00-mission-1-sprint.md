@@ -37,70 +37,20 @@ sharper statement than it used to be, since until 09 lands a `Private` activity 
 private. `develop` should not be treated as a usable environment until 09 is merged. If that trade
 is unwelcome, move 09 to run immediately after 04.
 
-### Where the code actually stands (2026-09-17)
-
-The repository was initialised from a generic layered .NET scaffold, which landed parts of 01 and
-02 early. Read the `Status` column above with that in mind:
-
-- **01 — implemented and archived (merged to `develop` in PR #3).** Both gating items are closed: the three `*.Test`
-  projects reference the layer each exercises and `dotnet test` discovers 42 tests (41 passing, the
-  tagged storage-integration one skipping without credentials), and the provider is now
-  **SQL Server** with the migrations and snapshot regenerated. `IStorageRepository` with its
-  in-memory fake, a `Dockerfile` building the image ACA deploys, and startup validation of the
-  required settings are in place too. There is deliberately no `docker-compose.yml` — the API goes
-  to Azure Container Apps and the web app to Azure Static Web Apps by GitHub workflow, so neither
-  consumes a local multi-service stack. Still absent: **no CI pipeline**, which 01 does not claim
-  and which is now the only path either component has to production.
-  **Superseded in part (2026-09-18).** The counts and the storage fake above are historical: the
-  suite has grown since, and the fake is deleted — storage and the database run against containers
-  started by `src/api/docker-compose.test.yml`. `docker-compose.yml` is still absent, and that is
-  unchanged; the test-scoped file starts no application process and is not deployed.
-- **02 — implemented and archived (merged to `develop` in PR #4), but its tests are deferred, so it
-  is still unfinished.** All the work is in
-  place: the key shape is settled as `users.Id = oid` (the PRD's surrogate proposal was rejected
-  and the PRD now matches the code), provisioning writes one row per object id, token
-  claims are shortened to their column lengths, the email claim is captured, and the profile slice
-  (Decision #28) is implemented — four profile routes returning DTOs, the five new `users` columns
-  behind a migration, a shared upload validator, and avatar storage in the public container.
-  **What is missing is proof.** The tests the feature specifies were deliberately not written, so
-  archiving 02 moved its doc, it did not close its gap — including the reflection test that guards
-  `Role` from being self-assignable and the
-  storage-tier assertion that an avatar is genuinely public-read. [STANDARD.md](../../src/api/STANDARD.md)
-  §10 makes a behaviour change without a test unfinished, so **02 is unfinished and 03 should not
-  be treated as safe to build on until those tests exist** —
-  [02-entra-auth.md](archive/02-entra-auth.md#testing-status) records the gap criterion by criterion.
-- **03 — done and archived (merged to `develop` in PR #12).** The `Role` column is constrained to the
-  closed set, defaulted to `User` and backfilled by a migration applied against a populated database;
-  the role is served from the caller's own row and never from a claim. **The administrator is a row
-  someone edits by hand** — the startup seeder this feature was named for was removed on 2026-09-19,
-  and with it the two admin configuration keys, a hosted service and a failure mode it had already
-  produced against a real database. Two further things went in review: `ICallerRoleService`, which
-  nothing called because `/user/me` already answers the same question, and the service test tier's
-  repository reference, which existed only for that service's tests. It left four decisions and one
-  criterion explicitly not met as worded, all recorded in
-  [the feature file](archive/03-admin-seeding.md#decisions) — the main ones being that the role is
-  not on 02's identity abstraction (the alternative put data access in the Api layer), and that
-  elevating an account is an operator's decision rather than something the application does to its
-  own data at startup. **Unlike 02, this one is finished**: its tests exist.
-- **04–11 — not started.**
-- **The frontend export is a mock, and this matters for reading the rows above.** `src/web/` renders
-  from hard-coded `MOCK_ACTIVITIES` / `MOCK_MEDIA`, holds `authRole` in `useState`, and issues no
-  `fetch` and no MSAL call. The profile screen, the visibility `Type` selector, the grouped media
-  view and the banner `+` all exist as **UI only** — they are the design intent the PRD has now
-  absorbed, not a description of working software. Feature 10 is where they become real, and until
-  then nothing in `src/web/` should be cited as evidence that a backend feature exists.
-
-The full accounting is in the PRD's [Current state vs. target](../PRD.md#current-state-vs-target).
-
 ## Feature breakdown
 
 Number = priority (lowest first = next to implement); file = `docs/features/NN-name.md`.
 
+**This table is the only place a feature's status is written down.** The `Status` column owns
+progress and the summary cell owns what the slice is; a feature's own file states its lifecycle and
+nothing more, and the PRD's [current-state
+table](../PRD.md#current-state-vs-target) states capability rather than progress.
+
 | # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
 |---|---|---|---|---|
-| 01 | [foundation](archive/01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations applied by the pipeline; `Dockerfile` for the ACA image; `IStorageRepository` abstraction with a fake; config for Azure Blob | archived — the fake was deleted 2026-09-18 (see the note above) |
-| 02 | [entra-auth](archive/02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | archived — tests deferred |
-| 03 | [the role column](archive/03-admin-seeding.md) | 02 | `Role` stored on `users`, defaulting to `User` and closed to `User`/`Admin`; one admin set by hand; role readable by the authorization path | **archived** — merged to `develop` in PR #12. `Role` non-null, defaulted, check-constrained and backfilled by migration; the admin is a row updated directly in the database, with no seeding path and no admin configuration key. The role is served by `/user/me` from the caller's own row, and no claim or payload can carry one. 7 new tests. **The server-side role read the authorization path will need does not exist yet** — feature 09 adds it |
+| 01 | [foundation](archive/01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations applied by the pipeline; `Dockerfile` for the ACA image; `IStorageRepository` abstraction; config for Azure Blob | archived — merged in PR #3. The in-memory storage fake it shipped was deleted on 2026-09-18 ([testing-and-tdd.md](../testing-and-tdd.md)) |
+| 02 | [entra-auth](archive/02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | archived — merged in PR #4, **tests deferred**, so unfinished: the profile slice is implemented and unproven ([item 12](../tech-debt/12-feature-02-tests-deferred.md)) |
+| 03 | [the role column](archive/03-admin-seeding.md) | 02 | `Role` stored on `users`, defaulting to `User` and closed to `User`/`Admin`; one admin set by hand; role readable by the authorization path | archived — merged in PR #12, and unlike 02 its tests exist. **The server-side role read the authorization path needs does not exist yet** — it was built and removed in review as unconsumed, and [09](09-permission-enforcement.md) adds it |
 | 04 | [activity-crud](04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. **`Type` is stored here, enforced in 05/09** | not started |
 | 05 | [public-activity-list](05-public-activity-list.md) | 04 | The read surface — paged, date descending, `pageSize` clamped. **Visibility-scoped**: anonymous sees `Public` only; a signed-in caller adds `Shared` and their own `Private`; an unreadable entry is a 404 | not started |
 | 06 | [media-upload](06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 20 per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | not started |
@@ -123,9 +73,7 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
       state when this line was written. [testing-and-tdd.md](../testing-and-tdd.md) holds the
       current counts, and is the only document that does
 - [ ] Entra auth: backend validates bearer tokens; users auto-provisioned; exactly one admin
-      — **the admin half is done** (feature 03), as a row an operator edits by hand rather than a
-      seeding path; the line stays open on the token half, whose tests were deferred by 02
-      ([item 12](../tech-debt/12-feature-02-tests-deferred.md))
+      — open on the token half, whose tests were deferred ([item 12](../tech-debt/12-feature-02-tests-deferred.md))
 - [ ] Self-service profile complete: the caller can edit display name, bio, theme and language and
       upload an avatar, on their own row only, with `Role` not writable through the profile route
 - [ ] Activity CRUD complete with validation (title, location, calendar-date `ActivityDate`) and
@@ -147,13 +95,10 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 
 ## Open items
 
-- **Figma export defects, not export timing.** The export exists in `src/web/` (it is a mock — see
-  "Where the code actually stands"), so feature 10 is no longer blocked on its *arrival*. It is
-  blocked on the export being **fixed in Figma Make and re-exported**: the banner `+` navigates to
-  the create screen whatever the current view, `authRole` is hard-coded so every role-gated
-  affordance is decorative, and the "upload media" label has no behaviour behind it.
-  **[Item 15](../tech-debt/15-web-app-cannot-call-the-api.md) owns that list** — including which
-  defects are re-export fixes rather than doc gaps. This file no longer restates them.
+- **Figma export defects, not export timing.** The export exists in `src/web/`, so feature 10 is no
+  longer blocked on its *arrival* — it is blocked on the export being **fixed in Figma Make and
+  re-exported**. [Item 15](../tech-debt/15-web-app-cannot-call-the-api.md) owns that defect list,
+  including which entries are re-export fixes rather than doc gaps; this file does not restate them.
 - **Azure credentials in CI** — **re-stamped 2026-09-18, and the gap is narrower than this said.**
   The storage tier no longer needs credentials at all: it runs the real `AzureBlobStorageRepository`
   against the Azurite container, which carries no secret, so CI proves the blob implementation

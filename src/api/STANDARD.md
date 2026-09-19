@@ -414,10 +414,10 @@ then user-secrets, then environment variables, then command line. Later sources 
 
   **The container is not the test tier's, and the two contend for the same port.** Both bind
   `127.0.0.1:1433`, so only one can be up, and while the dev container holds the port a
-  `dotnet test` run reaches *it* — which is safe only because the tier creates and drops a
-  database per collection and never touches `TrailBlaze`. Stop the dev container to get the
-  isolated stack back. Do not point the test tier at the dev database deliberately: it drops
-  what it creates, and a schema in use is exactly what it has no reason to preserve.
+  `dotnet test` run reaches *it* — which is safe only because the tier owns one database,
+  `TrailBlazeTest`, and drops nothing outside it. Stop the dev container to get the isolated stack
+  back. Do not point the test tier at the dev database deliberately: that name is the only thing
+  bounding what it drops, and a schema in use is exactly what it has no reason to preserve.
 
   **What the exception costs** is that Azure SQL Edge is not Azure SQL Database. A behaviour
   depending on the managed engine's version, collation, or certificate is no longer exercised
@@ -566,12 +566,9 @@ each one catches a specific regression that had already happened once.
 > **State as of 2026-09-19:** `TrailBlaze.Repository.Test` runs against two containers —
 > `azure-sql-edge` and `azure-storage-edge`, started by `docker-compose.test.yml` — and every test
 > that needs one is tagged `Category=Container` and **skips** when it cannot reach it.
-> `TrailBlaze.Api.Test` stays offline. `TrailBlaze.Service.Test` holds tests again as of feature 03,
-> and they are offline too: `RoleComesFromTheRowTests`, two reflection assertions that a role has no
-> source but the row. The project has no container test and no reference to another test project —
-> the one it briefly had, for a service deleted in review, went with it
-> ([tech-debt 25](../../docs/tech-debt/25-service-test-tier-is-empty.md) still asks where a
-> store-backed service assertion runs, and feature 03 turned out not to need the answer).
+> `TrailBlaze.Api.Test` stays offline. `TrailBlaze.Service.Test` holds offline reflection
+> assertions and nothing else; where a service-layer claim that needs a store runs is still open
+> ([tech-debt 25](../../docs/tech-debt/25-service-test-tier-is-empty.md)).
 
 ### Two tiers, and which one runs when
 
@@ -580,95 +577,16 @@ each one catches a specific regression that had already happened once.
 | **Offline** | nothing | always runs |
 | **`Category=Container`** | `azure-sql-edge`, `azure-storage-edge` | skips — never fails — when unreachable |
 
-```bash
-docker compose -f docker-compose.test.yml up -d    # from src/api; reads MSSQL_SA_PASSWORD from .env
-dotnet test                                        # everything runnable
-dotnet test --filter "Category=Container"          # the container tier alone
-dotnet test --filter "Category!=Container"         # the tests touching neither container
-```
+`Category=Container` is **the only trait in the solution**, and `Category!=Container` is **not** "the
+offline run": it drops the storage tier, which runs on a bare machine too, because storage falls
+back to the emulator and needs no secret.
 
-**`Category=Container` is the only trait in the solution, and the two filters are not
-complements.** `Category!=Container` selects the tests that touch *neither* container — it is not
-"the offline run", because it also drops the storage tier, which runs whenever a storage endpoint
-answers, configured or not. The storage tests run against the emulator fallback (storage needs no
-secret by design), so a run with nothing configured passes the storage tier and the offline tier and
-**skips the database tier and only it**. Measured, not derived.
-
-**What that run prints is written down in one place — [testing-and-tdd.md](../../docs/testing-and-tdd.md) —
-and no count belongs here.** A number restated in four documents goes stale in four, and it did:
-it moved 31 → 42 → 59 → 76 in three days, each move a hand edit
-([item 19](../../docs/tech-debt/19-doc-indexes-drifted.md)). This section keeps the claim, which is
-what a reader needs; the strategy doc keeps the measurement, which is what has to be re-run.
-
-### The database tier
-
-**`Migrate()`, never `EnsureCreated()`.** `EnsureCreated` builds the schema from the model and
-bypasses `Migrations/` entirely, so a broken migration stays broken and the test still passes — a
-test that cannot fail. It also forecloses `Migrate()` permanently: an `EnsureCreated` database has
-no `__EFMigrationsHistory`, so a later `Migrate()` tries to create tables that already exist.
-
-Each test class gets **one database of its own**, created and migrated in a fixture, dropped on
-dispose. Not one shared database, and not a transaction rolled back per test: a read-back through
-the *same* context hits EF's change tracker rather than the database, and a genuine second context
-needs a second connection in the same transaction, which needs MSDTC — absent from a Linux SQL Edge
-container. Row-level cleanup was the other candidate and is worse: this repo has no hard delete
-(`IDbRepository.DeleteAsync` is a *soft* delete), so it would mean raw SQL ordered by foreign key,
-extended by every future feature, rotting silently.
-
-A test that must build its own schema — `MigrationNarrowingTests` drives the schema to an earlier
-migration by hand — gets a database per *test* through `TrailBlazeServerFixture`, because a
-database cannot be returned to an earlier migration once anything has taken it to head.
-
-**Where the skip boundary is.** Not reaching the configured server skips; the container is simply
-not running. Everything past that is a failure, deliberately — a migration that will not apply
-against a real engine is the exact bug this tier exists to find, and degrading it to a skip would
-hide the one thing it was built for.
-
-`FakeUserContext` stands in for the HTTP-backed implementation; set the caller you want to test —
-authenticated, anonymous, or no request at all.
-
-### `Skip.IfNot` works by throwing, and that trips three things
-
-```csharp
-[SkippableFact]                                  // NOT [Fact]
-public async Task A_soft_deleted_row_disappears()
-{
-    Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
-    ...
-}
-```
-
-1. **Under a plain `[Fact]` it fails the test.** `Skip.IfNot` throws `SkipException`, and only
-   `[SkippableFact]`/`[SkippableTheory]`'s runner converts that into a skip. Under `[Fact]` it is
-   an exception like any other — twelve tests went red with nothing configured before this was
-   understood.
-2. **Inside anything that catches, the skip is swallowed.** `Record.ExceptionAsync` and
-   `Assert.ThrowsAsync` catch everything, including the `SkipException`, which then comes back as
-   the exception under test; the test fails reporting the skip message as its *expected* value.
-   Resolve the fixture's client or repository **before** the recorder, never inside it.
-3. **Only the fixtures skip for you.** Branching on `IsAvailable` by hand is how a test ends up
-   either not skipping or skipping for a reason it never states.
-
-### What the container tier cost: one lost claim, and one that got stronger
-
-The old offline repository tier pointed EF at an unreachable port and asserted every save
-*failed*. It worked because save interception runs before a connection opens, so the staged audit
-rows were readable with no database at all.
-
-- **Lost, and not worth mourning.** That harness proved *EF runs interception before it opens a
-  connection*. That is an EF ordering guarantee, not a TrailBlaze behaviour, and it is unobservable
-  against a live server. Nothing asserts it now, and nothing should.
-- **Stronger, not merely equivalent.** The old tier read the audit rows out of the change tracker
-  that had just written them, so "the row was recorded" meant "the interceptor staged something".
-  The tier reads them back through a fresh scope, so every assertion is a round trip: SQL Server
-  accepted the write and the row is on disk.
-- **The tripwire is gone, and that is the real loss.** The old harness asserted that the save
-  *failed*, as a signal that the tier had not silently stopped testing. That job is now done by
-  the skip — which is louder, and has its own failure mode, described above.
-
-Queries can be inspected without executing them using `ToQueryString()`, which builds the SQL and
-stops. `SoftDeleteFilterTests` still does exactly that; `SoftDeleteExecutionTests` is the container
-tier that complements it, because a generated predicate and an applied one are different claims.
+**How to write a test in either tier, how the containers are isolated, and what a run prints are all
+in [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md), which is their only home. No count
+belongs here.** A number restated in four documents goes stale in four, and it did, repeatedly — the
+record is [item 19](../../docs/tech-debt/19-doc-indexes-drifted.md). This section keeps the claim,
+which is what a reviewer needs; the strategy doc keeps the measurement, which is what has to be
+re-run.
 
 ### Rules
 
@@ -722,62 +640,18 @@ project names must keep that job green.**
 
 ## 12. Where the code and this standard do not yet agree
 
-**This list now lives in [docs/tech-debt/](../../docs/tech-debt/00-debt-log.md).**
+**That list is [docs/tech-debt/](../../docs/tech-debt/00-debt-log.md), and this section holds no
+copy of it.**
 
-It moved because it had drifted, and the drift is worth recording rather than quietly repairing.
-Item 1 below spent months asserting that the audit columns were unmaintained — after
-`AuditSaveChangesInterceptor` had started maintaining them. A document whose whole purpose is to be
-trustworthy about exactly that was wrong about it, and nothing noticed, because nothing checked.
-The register's first act was to re-verify every item against the code before filing it, and the same
-false claim was found in [PRD.md](../../docs/PRD.md) line 160.
+The register's table is the only statement of what is open and what has closed; a section here that
+mirrored its Status column was a second home for the same fact, and the two duly disagreed. **File
+debt there** — not in a feature file, and not as a passing note in a pull request either. A claim
+recorded in two places is a claim that will disagree with itself.
 
-**File debt there, not here.** Not in a feature file, and not as a passing note in a pull request
-either. A claim recorded in two places is a claim that will disagree with itself; that is the defect
-this move cures, and re-creating a second list here would restore it.
-
-Numbers **01–12** in the register are the former items of this section, in the same order, and they
-never change — so a reference to "§12.N" written before the move still resolves.
-
-| Was | Now | State |
-|---|---|---|
-| 12.1 Audit columns are not maintained | [01 — Audit columns had two writers](../../docs/tech-debt/archive/01-audit-columns-have-two-writers.md) | archived — a verified close, PR #8; the claim was false — see below |
-| 12.2 `DeleteAsync` issues one `FindAsync` per id | [02 — `DeleteAsync` does N round trips, untransacted](../../docs/tech-debt/02-deleteasync-n-round-trips.md) | open |
-| 12.3 Migrations were Npgsql-shaped | [03 — Migrations were Npgsql-shaped](../../docs/tech-debt/archive/03-migrations-npgsql-shaped.md) | archived — feature 01, PR #3 |
-| 12.4 `UserController` diverges from the route convention | [04 — `UserController` violates the route convention](../../docs/tech-debt/04-usercontroller-route-convention.md) | open |
-| 12.5 A soft delete is recorded as `"Modified"` | [05 — A soft delete is recorded as `"Modified"`](../../docs/tech-debt/05-soft-delete-recorded-as-modified.md) | open |
-| 12.6 Timestamps are inconsistent | [06 — Timestamp types were inconsistent](../../docs/tech-debt/archive/06-timestamp-types-inconsistent.md) | archived — a facet of 01, no change of its own |
-| 12.7 `TrailBlaze.Api.http` requests `/weatherforecast/` | [07 — The `.http` file requests `/weatherforecast/`](../../docs/tech-debt/07-http-file-requests-weatherforecast.md) | open |
-| 12.8 `SampleTemplate/placeholder.txt` | [08 — `SampleTemplate/placeholder.txt`](../../docs/tech-debt/archive/08-sampletemplate-placeholder.md) | archived — the template is not here |
-| 12.9 `DbConnection` is accepted empty | [09 — `DbConnection` was accepted empty](../../docs/tech-debt/archive/09-dbconnection-accepted-empty.md) | archived — feature 01, PR #3 |
-| 12.10 Namespaces are block-scoped | [10 — Namespaces were block-scoped](../../docs/tech-debt/archive/10-block-scoped-namespaces.md) | archived — 2026-09-16 |
-| 12.11 §11 describes a CI workflow that was not built | [11 — There is no CI or deployment pipeline](../../docs/tech-debt/11-no-ci-pipeline.md) | open |
-| 12.12 Feature 02's tests were deferred | [12 — Feature 02's behaviour shipped without the tests §10 requires](../../docs/tech-debt/12-feature-02-tests-deferred.md) | open — narrowed by feature 03, which wrote the `Role` reflection guard |
-
-### Two things the old list got wrong
-
-Both are the same failure — a claim about the code that no longer matched the code — and both were
-found by re-checking rather than by reading. They are recorded here because a reader who remembers
-the old wording should know which half of it to discard.
-
-- **12.1 was false, and the truth is narrower.** The columns are maintained — `AuditTests` proves it
-  — though not uniformly: the interceptor stamps `CreatedOn`/`CreatedBy` on `Added` and
-  `LastModifiedOn`/`LastModifiedBy` on `Modified`, so a row that has never been updated keeps its
-  sentinel `LastModifiedOn` outright (item
-  [20](../../docs/tech-debt/20-lastmodified-unset-on-insert.md)). What was actually wrong was that
-  there were **two writers** — `DatabaseRepository.DeleteAsync` set `LastModifiedOn` and
-  `LastModifiedBy = "sys"`, and the interceptor overwrote both on the same save, so the repository's
-  writes were dead. Not "unmaintained columns" but "a dead writer", which is
-  [item 01](../../docs/tech-debt/archive/01-audit-columns-have-two-writers.md), and that dead writer
-  is now deleted.
-- **12.6's type claim was right and §3's was wrong.** The columns are `DateTimeOffset`; §3 called
-  them `DateTime` and added a second claim that they were not yet maintained. §3 is corrected in the
-  same pull request as this pointer.
-
-Four items (12.3, 12.8, 12.9, 12.10) had already resolved before the move, and two more (12.1, 12.6)
-have resolved since; all six carry their history in `archive/`. Item 12.10 in particular is kept
-rather than deleted: it is the clearest example in this
-repository of a divergence that stayed open because it was deferred as mechanical — and it widened
-meanwhile, because feature 01's new files copied the style that was there.
+The register's numbers **01–12** are this section's former items, in the same order, and they never
+change — so a reference to "§12.N" written before the move still resolves. Each item's `Source:`
+line carries the number it used to be; what those twelve said, and which of them were simply wrong,
+is in the item files.
 
 
 ---
@@ -794,6 +668,12 @@ meanwhile, because feature 01's new files copied the style that was there.
 - [ ] New endpoints carry `[Authorize]`, or the reason they do not is stated.
 - [ ] Tests cover the behaviour, and any test asserting on generated SQL was confirmed to fail
       when the thing under test is removed.
-- [ ] `dotnet build` and `dotnet test` pass, and CI's template job stays green.
+- [ ] `dotnet build` and `dotnet test` pass. (`dotnet test` with nothing configured **skips** the
+      container tiers rather than failing them, so a green run on a bare machine is a skip, not a
+      pass — run §10's commands with the containers up before calling the suite green.) CI would
+      hold this too, and there is none yet — [item 11](../../docs/tech-debt/11-no-ci-pipeline.md).
+- [ ] `python3 scripts/doc-assert.py` passes. It asserts the documentation's invariants — links
+      resolve, volatile facts have one home, the indexes cover what they index, status lines match
+      their location — and none of that is visible in a diff.
 - [ ] Any rule above that had to be worked around is updated in this document, in the same
       pull request.

@@ -14,9 +14,9 @@
 #
 # A developer's own SQL Edge container (README, "Running it locally") binds the same 1433, so it
 # and this stack exclude each other -- and while it holds the port, `dotnet test` reaches it. That
-# is safe rather than merely tolerated: the fixture creates and drops a database per collection
-# and never touches another database, so a test run leaves a dev database alone. It does mean the
-# two are not isolated, and stopping the dev container is what restores that.
+# is safe rather than merely tolerated: the tier owns one database, `TrailBlazeTest`, and drops
+# nothing outside it, so a test run leaves a dev database alone. It does mean the two are not
+# isolated, and stopping the dev container is what restores that.
 
 name: trailblaze-tests
 
@@ -36,6 +36,8 @@ services:
       - "127.0.0.1:1433:1433"
     # The engine needs more than the 64 MB default /dev/shm, and fails opaquely without it.
     shm_size: 1gb
+    # No volume, on purpose: the database a run keeps for inspection (docs/testing-and-tdd.md)
+    # lives and dies with the container, so `up` always starts from an empty engine.
 
   azure-storage-edge:
     image: mcr.microsoft.com/azure-storage/azurite:3.37.0

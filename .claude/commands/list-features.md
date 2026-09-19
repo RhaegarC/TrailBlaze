@@ -19,7 +19,6 @@ Determine status from:
 Present as a **table sorted by number**, then a one-line "next up" recommendation
 (the lowest-numbered feature that is not started and not in progress).
 
-**Flag the deployability gap explicitly.** Features 04–08 ship permissive — any authenticated
-user can edit anything until 09 lands. If the table shows anything from 04–08 merged while 09 is
-still not started, say so plainly: `develop` is not safe to deploy in that state. Do not let the
-table imply otherwise.
+**Flag the deployability gap explicitly.** If 09 is not merged, `develop` is not safe to deploy —
+the sequencing note at the top of `docs/features/00-mission-1-sprint.md` states the rule. Say so
+plainly rather than letting the table imply otherwise.

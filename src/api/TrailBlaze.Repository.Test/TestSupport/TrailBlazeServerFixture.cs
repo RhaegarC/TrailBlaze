@@ -2,22 +2,15 @@ namespace TrailBlaze.Repository.Test.TestSupport;
 
 /// <summary>
 /// A reachable test server, and nothing else. For tests that must build their own schema and
-/// so cannot share a database with anyone.
+/// so cannot share the run's database with anyone.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <see cref="TrailBlazeDatabaseFixture"/> gives a class one migrated database. That is wrong
-/// for a migration test twice over: stopping the schema at an earlier migration is a state the
-/// next test must not inherit, and a database cannot be returned to it once anything has taken
-/// it to head. So these tests get a database each, created and dropped around the single test
-/// that needs it, and this fixture supplies only the two things they cannot create for
-/// themselves — a server that answers, and the skip when it does not.
-/// </para>
-/// <para>
-/// It deliberately creates no database of its own. Doing so would be a wasted
-/// <c>CREATE</c>/<c>DROP</c> per class, and a member nothing reads is the scaffolding smell the
-/// debt register already files.
-/// </para>
+/// <see cref="TrailBlazeDatabaseFixture"/> gives a class the run's migrated database. That is
+/// wrong for a migration test twice over: stopping the schema at an earlier migration is a state
+/// the next test must not inherit, and a database cannot be returned to it once anything has taken
+/// it to head. So these tests get a <see cref="CreateScratchDatabaseAsync">scratch database</see>
+/// of their own, dropped when they finish, and this fixture supplies only the two things they
+/// cannot create for themselves — a server that answers, and the skip when it does not.
 /// </remarks>
 public sealed class TrailBlazeServerFixture : IAsyncLifetime
 {
@@ -29,6 +22,10 @@ public sealed class TrailBlazeServerFixture : IAsyncLifetime
 
     /// <summary>Why <see cref="IsAvailable"/> is false. Empty when it is true.</summary>
     public string SkipReason { get; private set; } = string.Empty;
+
+    /// <summary>The server this fixture reached, for a test that must run its own DDL against it
+    /// rather than through <see cref="CreateScratchDatabaseAsync"/>.</summary>
+    public string ServerConnectionString => _connectionString;
 
     public async Task InitializeAsync()
     {
@@ -56,7 +53,7 @@ public sealed class TrailBlazeServerFixture : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     /// <summary>
-    /// A new, empty database on this server, which the caller disposes.
+    /// A new, empty database on this server, which the caller disposes and the dispose drops.
     /// </summary>
     /// <remarks>
     /// Skips rather than throwing when the server is absent, so a test cannot forget to check
@@ -64,10 +61,10 @@ public sealed class TrailBlazeServerFixture : IAsyncLifetime
     /// The calling test must be <c>[SkippableFact]</c> — under a plain <c>[Fact]</c> the
     /// <c>SkipException</c> is just an exception and the test fails.
     /// </remarks>
-    public async Task<TestDatabase> CreateDatabaseAsync()
+    public async Task<TestDatabase> CreateScratchDatabaseAsync()
     {
         Skip.IfNot(IsAvailable, SkipReason);
 
-        return await TestDatabase.CreateAsync(_connectionString);
+        return await TestDatabase.ScratchAsync(_connectionString);
     }
 }

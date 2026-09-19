@@ -1,6 +1,6 @@
 # 25 — `TrailBlaze.Service.Test` has no tests, and no way to host the ones it needs
 
-Status: **open (narrowed by feature 03)** · Kind: test-gap · Impact: friction · Area: Tests
+Status: **Open** · Kind: test-gap · Impact: friction · Area: Tests
 Source: found 2026-09-18 (during the container-backed test change) · Discharges via: features 06/08 (in part) · Opened: 2026-09-18 · Last verified: 2026-09-19
 
 ## Update — 2026-09-19 (feature 03)
@@ -88,10 +88,10 @@ lands before the first test that needs it.
 Checked 2026-09-18.
 
 - `ls src/api/TrailBlaze.Service.Test/` → `.csproj`, `bin`, `obj`. No source files.
-- `dotnet test` reports the project in the run and adds 0 to the total; the solution's 59 tests were
-  55 repository + 4 Api. The solution is 66 now — 60 repository, 4 Api, 2 here — and the 31
-  repository tests that need a container skip without one, so an unconfigured run reports
-  35 passed / 31 skipped. Re-measured 2026-09-19.
+- `dotnet test` reported the project in the run and added 0 to the total; on 2026-09-18 the
+  solution's 59 tests were 55 repository + 4 Api, re-measured 2026-09-19 at 66 — 60 repository,
+  4 Api, 2 here. That was the last measurement taken for this item; for what the run reports now,
+  [testing-and-tdd.md](../testing-and-tdd.md) is the only home.
 - `TrailBlaze.Service.Test.csproj` lists no `ProjectReference` to `TrailBlaze.Repository`.
 - The four spec bullets above were re-pointed on 2026-09-18 and each carries a note saying its tier
   is unsettled.

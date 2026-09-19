@@ -25,10 +25,10 @@ withdrawn rather than one that settled it.
 
 **Current state (2026-09-19).** Two containers back the suite — `azure-sql-edge` and
 `azure-storage-edge`, started by [`docker-compose.test.yml`](../src/api/docker-compose.test.yml) —
-and 66 tests are discovered: 60 in `TrailBlaze.Repository.Test`, 2 in `TrailBlaze.Service.Test`, 4 in
-`TrailBlaze.Api.Test`. **With the containers running all 66 pass. With nothing configured, 35 pass
-and 31 skip** — and that second number is the honest description of a bare machine, not a failure.
-Measured, not derived: the run reports `Failed: 0, Passed: 35, Skipped: 31, Total: 66` across the
+and 68 tests are discovered: 62 in `TrailBlaze.Repository.Test`, 2 in `TrailBlaze.Service.Test`, 4 in
+`TrailBlaze.Api.Test`. **With the containers running all 68 pass. With nothing configured, 35 pass
+and 33 skip** — and that second number is the honest description of a bare machine, not a failure.
+Measured, not derived: the run reports `Failed: 0, Passed: 35, Skipped: 33, Total: 68` across the
 three projects.
 
 **This paragraph is the only place those counts are written down, and that is deliberate.** They
@@ -68,7 +68,7 @@ startup database work left to make fatal.
 |---|---|---|---|
 | Backend unit | Upload validation, SAS policy construction, pagination clamping, ownership/permission evaluation once feature 09 lands, and reflection assertions that a value has no second source (`RoleComesFromTheRowTests`) | xUnit | Always — fast, offline |
 | Repository model | EF Core's *model* and its *generated SQL* — keys, column types and lengths, soft-delete predicates read through `ToQueryString()` | xUnit + EF Core | Always — offline, opens no connection |
-| Database | The real engine: the migration set applies, the fluent bounds reached `INFORMATION_SCHEMA`, a duplicate key collides, the soft-delete filter executes, audit JSON round-trips, a narrowing `ALTER COLUMN` is refused, a check constraint refuses a value outside its set, a default fills itself in | xUnit + SQL Edge | **`Category=Container`** — skips when unreachable |
+| Database | The real engine: the migration set applies, the fluent bounds reached `INFORMATION_SCHEMA`, a duplicate key collides, the soft-delete filter executes, audit JSON round-trips, a narrowing `ALTER COLUMN` is refused, a check constraint refuses a value outside its set, a default fills itself in; and the database it creates outlives the run | xUnit + SQL Edge | **`Category=Container`** — skips when unreachable |
 | Storage | The real `AzureBlobStorageRepository`: upload, content-type round-trip, a minted SAS that the server accepts, public/private routing, a move | xUnit + Azure SDK | **`Category=Container`** — skips when unreachable |
 | Api host | The real pipeline through `WebApplicationFactory` with unreachable connection strings — a missing setting stops startup and the message names the key, and every registration in the composition root resolves | xUnit + `WebApplicationFactory` | Always — no database, deliberately |
 
@@ -76,7 +76,7 @@ startup database work left to make fatal.
 to misread: `--filter "Category!=Container"` is not "the offline run", it is the 24 tests that touch
 *neither* container — which excludes the 11 storage tests, and those run on a bare machine too,
 because storage falls back to the emulator and needs no secret. The bare-machine run is plain
-`dotnet test`, which is 35 passed and 31 skipped.
+`dotnet test`, which is 35 passed and 33 skipped.
 
 ## What still runs offline, and why it is worth keeping
 
@@ -94,6 +94,14 @@ of this table listed *cascade deletes* under the offline repository tier. The mo
 keys — `AuditLog` is deliberately not an `EntityBase`, and nothing else declares a relationship — so
 there is nothing to cascade, and the row was describing a property the schema does not have. It is
 removed rather than satisfied by inventing a test for a behaviour that does not exist.
+
+**A second withdrawal came with the containers, and it was a real loss.** The old offline repository
+tier pointed EF at an unreachable port and asserted that every save *failed* — a tripwire that
+proved the tier had not silently stopped testing. It worked because save interception runs before a
+connection opens. But that is an EF ordering guarantee rather than a TrailBlaze behaviour, and it is
+unobservable against a live server, so nothing asserts it now and nothing should. The tripwire's job
+is done instead by the skip, which is louder and has its own failure mode
+([STANDARD.md](../src/api/STANDARD.md) §10).
 
 ## The container tier
 
@@ -115,23 +123,54 @@ degrading it to a skip would hide the one thing it was built for.
 - The fixtures skip for you. Branching on `IsAvailable` by hand is how a test ends up either not
   skipping or skipping for a reason it never states.
 
-### Isolation
+### One database, and one per test that needs its own
 
-Each test class gets **one database of its own**, created and migrated in a fixture, dropped on
-dispose. Not one shared database, and not a transaction rolled back per test: a read-back through the
-*same* context hits EF's change tracker rather than the database, and a genuine second context needs
-a second connection inside one transaction, which needs MSDTC — absent from a Linux SQL Edge
-container. Row-level cleanup was the other candidate and is worse: this repo has no hard delete
-(`IDbRepository.DeleteAsync` is a *soft* delete), so it would mean raw SQL ordered by foreign key,
-extended by every future feature, rotting silently.
+**Every container test works against the same database, `TrailBlazeTest`.** It is created once per run
+and migrated to head; each test class gets a scope over it, not a database of its own. Isolation is
+therefore by row rather than by database: an assertion here is scoped to the id it wrote, and nothing
+may assert on a table as a whole. A transaction rolled back after each test was the obvious
+alternative and does not work: reading a row back through the *same* context hits EF's change tracker
+rather than the database, and a genuine second context needs a second connection inside one
+transaction, which needs MSDTC — absent from a Linux SQL Edge container. Row-level cleanup was the
+other candidate and is worse: this repo has no hard delete (`IDbRepository.DeleteAsync` is a *soft*
+delete), so it would mean raw SQL ordered by foreign key, extended by every future feature, rotting
+silently.
+
+A test that must drive a schema of its own — `MigrationNarrowingTests` stops one at an earlier
+migration — cannot use it: that state may not leak into the next test, and a database cannot be
+returned to an earlier migration once anything has taken it to head. Those tests get a
+`TrailBlazeScratch_<guid>` database each, dropped when the test that made it finishes.
+
+### Retention
+
+**The run's database is not dropped at teardown.** A failing container-backed assertion is diagnosed
+by reading the rows behind it, so `TrailBlazeTest` is left standing — tables, rows and all. The next
+run drops it before creating its own, so one run's worth survives and the engine does not fill up
+with databases. A scratch database is the exception, and goes with the test that made it, which is
+what keeps the run's leavings to the one database it means to leave.
+
+The pair on the engine is then always the same two:
+
+```sql
+SELECT name, create_date FROM sys.databases WHERE name LIKE 'TrailBlaze%'
+-- TrailBlaze      the local dev database (README, "Running it locally")
+-- TrailBlazeTest  this tier
+```
+
+`TestDatabaseRetentionTests` asserts both halves — that the run's database outlives its disposal, and
+that a test's own does not.
+
+**Inspect before `docker compose down`.** `azure-sql-edge` has no volume, so removing the container
+takes `TrailBlazeTest` with it. Stopping it, or leaving it running, keeps it.
 
 `Migrate()`, never `EnsureCreated()`. `EnsureCreated` builds the schema from the model and bypasses
 `Migrations/` entirely, so a broken migration stays broken and the test still passes — a test that
 cannot fail.
 
-A test that must build its own schema — `MigrationNarrowingTests` drives a database to an earlier
-migration by hand — gets a database per *test*, because a database cannot be returned to an earlier
-migration once anything has taken it to head.
+The migration set is applied once per run, by the same call that creates the database. Running it
+from each fixture instead would execute `Migrate()` four times over one database, from four classes
+running in parallel — and the loser of a race over `__EFMigrationsHistory` fails a create it did not
+need.
 
 ### Storage
 
@@ -209,7 +248,7 @@ From `src/api/`:
 docker compose -f docker-compose.test.yml up -d    # reads MSSQL_SA_PASSWORD from .env
 dotnet test                                        # everything runnable here
 dotnet test --filter "Category=Container"          # the container tiers alone
-dotnet test --filter "Category!=Container"         # the 20 tests touching neither container
+dotnet test --filter "Category!=Container"         # the tests touching neither container
 docker compose -f docker-compose.test.yml down
 ```
 

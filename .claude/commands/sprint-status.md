@@ -5,13 +5,12 @@ description: Show sprint progress, DoD status, branches, and open pull requests
 Produce a concise sprint status report for TrailBlaze:
 
 1. **Feature progress** — list every feature in `docs/features/` (01–11) with status
-   (not started / in progress / archived), based on file locations and git state.
-2. **Sprint DoD** — check the Definition of Done items in
-   `docs/features/00-mission-1-sprint.md` against what is actually complete (layered solution
-   builds green? Entra auth + auto-provisioning + an admin row? activity CRUD with validation?
-   anonymous paged list? private media upload within caps? SAS delivery authenticated-only?
-   public covers? ownership + admin rules enforced? Figma app integrated? E2E verified?). Show
-   checked vs. unchecked.
+   (not started / in progress / archived), based on file locations and git state. The sprint
+   file's feature table is the record you are reporting on, not a second copy of it: if your
+   reading and its `Status` column disagree, say so rather than choosing one.
+2. **Sprint DoD** — report the Definition of Done items in
+   `docs/features/00-mission-1-sprint.md`, checked against what is actually complete. Read the
+   criteria from that file; do not carry a list of them here, where it would drift.
 3. **Debt queue** — read the open table in [docs/tech-debt/00-debt-log.md](../../docs/tech-debt/00-debt-log.md)
    and report its size, how many items are `— (orphaned)`, and any item whose `Discharges via` names
    a feature that has since been **archived without discharging it**. That last check is the one
@@ -26,13 +25,11 @@ Present as a short table plus a two-line "next action" summary.
 
 **Two honest caveats to surface whenever they apply:**
 
-- **The deployability gap.** Features 04–08 build the mechanics while every authenticated user
-  can still write anything. Until feature 09 (permission enforcement) is merged, `develop` must
-  not be treated as a usable environment. If 09 is not done, say so in the summary rather than
-  reporting a clean-looking sprint.
+- **The deployability gap.** If 09 is not merged, `develop` is not a usable environment — the
+  sequencing note at the top of `docs/features/00-mission-1-sprint.md` states the rule and why.
+  Say so in the summary rather than reporting a clean-looking sprint.
 - **The container tiers, and the difference between a skip and a pass.** The database and storage
   tiers need `docker-compose.test.yml` running; without it they **skip**, and a skip is not a pass.
-  The default `dotnet test` on a bare machine therefore reports 31 passed and 28 skipped, and
-  quoting only the pass count would overstate what ran. There is no storage fake to fall back on —
-  when the container is down, the blob implementation is simply untested. Report the skipped count
-  alongside the passed count, and never describe a run with skips as "all tests passing".
+  Quote the counts from `docs/testing-and-tdd.md`, which is their only home — a number carried
+  here is a number that goes stale here. Report the skipped count alongside the passed count, and
+  never describe a run with skips as "all tests passing".
