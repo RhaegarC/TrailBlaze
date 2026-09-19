@@ -43,6 +43,7 @@ internal static class ServiceExt
 
         // Register service
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IActivityService, ActivityService>();
 
         // Stateless, but registered rather than static so the upload rules have one home the
         // routes depend on through injection: if a cap ever needs to come from configuration

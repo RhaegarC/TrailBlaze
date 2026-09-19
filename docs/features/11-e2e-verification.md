@@ -47,16 +47,16 @@ the app assumes, or whether the real tenant issues the token the API validates.
       containers, and the **real** Entra tenant, by configuration; no test double, emulator, or
       placeholder account string is anywhere in this path — the emulators the ordinary suite falls
       back to are the thing this criterion is distinguished *from*
-- [ ] **Anonymous browsing — Public only**: with no sign-in, `GET /api/activities` returns a
+- [ ] **Anonymous browsing — Public only**: with no sign-in, `GET /api/activity` returns a
       paged, date-descending list containing **Public** entries only — every `Shared` and
       `Private` entry is absent from it — and the app renders it with covers; `pageSize` is
       clamped server-side when a caller asks for more than the maximum
-- [ ] **Anonymous detail**: `GET /api/activities/{id}` for a `Public` entry returns the activity's
+- [ ] **Anonymous detail**: `GET /api/activity/{id}` for a `Public` entry returns the activity's
       text, cover, media count, and creator display name, and the rendered page exposes **no**
       user id, blob path, SAS URL, or private-container byte (Decision #30)
 - [ ] **Unreadable entries are 404, not 403**: the same detail request for a `Shared` or
       `Private` entry returns **404** to an anonymous caller — not 403, and not a redacted 200
-- [ ] **Anonymous denial**: calling `GET /api/activities/{id}/media` and `GET /api/media/{id}/url`
+- [ ] **Anonymous denial**: calling `GET /api/activity/{id}/media` and `GET /api/media/{id}/url`
       without a token returns **401** in both cases, and no blob operation is reached
 - [ ] **Sign in**: authenticating through the app against Entra ID succeeds, the token is
       validated by the API, and the caller's `users` row is auto-provisioned on first sight of the
@@ -87,7 +87,7 @@ the app assumes, or whether the real tenant issues the token the API validates.
       owner, and by the admin
 - [ ] **Collaboration refused where the caller cannot see the activity**: that same second user
       attempting to add media to a `Private` activity they cannot read is refused with **404**,
-      not 403 — and `GET /api/activities/{id}/media` / `GET /api/media/{id}/url` return **404**
+      not 403 — and `GET /api/activity/{id}/media` / `GET /api/media/{id}/url` return **404**
       for them too, so the media surface cannot be used to probe for the entry — while a
       signed-in caller who *can* read an activity but neither owns it nor uploaded a given item is
       refused deletion of that item with **403**

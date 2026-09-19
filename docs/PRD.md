@@ -6,7 +6,7 @@ Owner: TBD
 ## Vision
 
 An **activity journal** with per-entry visibility. Anyone can browse the list of **Public**
-activities ordered by date descending — title, location, date, and a cover image. Signing in
+activities ordered newest first — title, location, date, and a cover image. Signing in
 reveals the media those activities carry and adds the entries their owners marked **Shared**
 (signed-in users only). Entries marked **Private** are visible to their owner alone.
 
@@ -96,9 +96,10 @@ far along its feature is — a feature's own progress lives in the
 | Database engine | **Azure SQL Server** | SQL Server through EF Core (`Microsoft.EntityFrameworkCore.SqlServer`); migrations and snapshot generated against it | feature 01 |
 | API hosting | ACA from a container image | `src/api/Dockerfile` builds the image; no `docker-compose.yml`, because neither target consumes a local multi-service stack | feature 01 |
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
-| Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers, the filters and every count are in [testing-and-tdd.md](testing-and-tdd.md) | feature 01 |
+| Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers and the filters are in [testing-and-tdd.md](testing-and-tdd.md); the counts are in [00-mission-1-sprint.md](features/00-mission-1-sprint.md) | feature 01 |
 | Blob abstraction | `IStorageRepository`, three containers, no fake | `IStorageRepository` in `TrailBlaze.Interface`, one Azure adapter in `TrailBlaze.Repository`, exercised by the storage tier against Azurite | feature 01 |
-| Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
+| Activity table | the data model below | `activities` exists, migrated by `AddActivities`, with its check-constrained `Type`. The CRUD routes and the anonymous paged list are implemented, the list applying the read half of the visibility rule; **who may mutate an entry is not yet enforced**, and an admin still pages what a user pages because no role is read | feature 04 |
+| Media table | the data model below | not built | feature 06 |
 | Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | all five exist, bounded to the lengths in the data model | feature 02 |
 | Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | all four routes exist and return DTOs, and are **untested** ([02-entra-auth.md](features/archive/02-entra-auth.md#testing-status)) | feature 02 |
 | Administrator | one admin, set by hand; role read from the row, never from a claim | `users.Role` is not null, defaults to `User`, and is check-constrained to the closed set. Nothing in the application seeds, promotes or writes it — [03-admin-seeding.md](features/archive/03-admin-seeding.md#decisions) records why | feature 03 |
@@ -135,7 +136,7 @@ Every requirement decision from the grilling session, in order:
 
 | # | Decision | Resolution |
 |---|---|---|
-| 1 | What the product is | An **activity journal**: a user browses activities ordered by date descending and attaches images/videos to each |
+| 1 | What the product is | An **activity journal**: a user browses activities newest-entry-first and attaches images/videos to each |
 | 2 | Audience for activity text vs media | **Activity text is public or restricted by the entry's visibility** (see #26); **images and videos always require sign-in** — this half is unchanged and applies at every visibility level |
 | 3 | Is it one journal or many | **One shared journal** — everyone posts to one feed; visibility governs who may read an entry, ownership governs who may edit it. Private entries are an escape hatch within the shared feed, not private journals (see #26) |
 | 4 | Media storage | **Azure Blob Storage** (not local disk, not the database) |
@@ -144,7 +145,7 @@ Every requirement decision from the grilling session, in order:
 | 7 | How media reaches the browser | **Short-lived SAS URLs** issued by an authenticated endpoint; container stays private |
 | 8 | Authentication | **Entra ID** |
 | 9 | Roles | **User + Admin**; admin can edit/delete any activity |
-| 10 | Which date drives the sort | **User-chosen activity date**; backdating allowed; a `CreatedOn` audit timestamp is kept as the tiebreaker |
+| 10 | Which date drives the sort | **`CreatedOn` descending**, tie-broken by id so the order is total and no row can straddle two pages. **Changed 2026-09-19** at feature 04's review (was: the user-chosen activity date, with `CreatedOn` as the tiebreaker). The user-chosen activity date is still captured and still displayed (Decisions #11, #25) — it simply no longer drives the order, so the feed reads as a journal rather than as a calendar |
 | 11 | Activity fields | `Date`, `Location`, `Title`, `Description` (optional), `CoverImage` (optional), `Type` (visibility, see #26) |
 | 12 | Location capture | **Free-text place name** — no lookup, no structured fields |
 | 13 | Cover image audience | **Follows the activity's visibility** — public for a Public activity, SAS-only for Shared and Private ones (see #29). Supersedes the earlier "always public", which held only while every activity was public |
@@ -157,7 +158,7 @@ Every requirement decision from the grilling session, in order:
 | 20 | Scaffolding adaptation | **Full adaptation** of `.claude/` plus `PRD.md`, `testing-and-tdd.md`, `features/` as foundation work |
 | 21 | Admin surface | **Elevated rights only** — no dedicated admin screens |
 | 22 | Backend vs. frontend sequencing | **API-first**; Figma integration is its own late feature |
-| 23 | Public list behaviour | **Paginated, date-descending, no search** |
+| 23 | Public list behaviour | **Paginated, newest entry first, no search**. `page` is a zero-based index defaulting to 0; `pageSize` defaults to 10 and is clamped to 100 rather than refused |
 | 24 | Upload limits | **~20 media per activity**, images ≤ 10 MB, videos ≤ 200 MB |
 | 25 | Date representation | **Calendar date only** — no time, no timezone, no UTC-midnight conversion |
 | 26 | Per-activity visibility | **`Type` ∈ {`Public`, `Shared`, `Private`}**, required, defaulting to `Public`. `Public` = anonymous may read; `Shared` = signed-in users only; `Private` = the owner only (and admins). Visibility gates **reading**; it never gates media, which needs sign-in at every level (#2). Added from the Figma export, 2026-09-15 — this supersedes the earlier flat "everything is public-read" model and reverses the earlier rejection of private entries in the shared feed, which was rejected on the assumption that private meant *separate journals* |
@@ -207,7 +208,7 @@ erDiagram
         string Description "nullable"
         string Type "Public | Shared | Private"
         string CoverImageBlobPath "nullable, container by Type"
-        string CreatedByUserId FK
+        string CreatedByUserId "the caller's id, a plain column"
     }
     Media {
         string Id PK "GUID, app-assigned"
@@ -239,7 +240,7 @@ erDiagram
 | | `Description` | nvarchar(max) | optional |
 | | `Type` | nvarchar(16) | `Public` \| `Shared` \| `Private`; required, defaults to `Public`; **gates reads** |
 | | `CoverImageBlobPath` | nvarchar(512) | optional; container follows `Type` — `covers` (public) for `Public`, `media` (private, SAS) for `Shared`/`Private` |
-| | `CreatedByUserId` | string (GUID) | FK → `users.Id` |
+| | `CreatedByUserId` | nvarchar(128) | the caller's `users.Id`, stored as a **plain column** — the model declares no foreign keys ([item 23](tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)) |
 | `media` | `Id` | string (GUID) | PK, app-assigned |
 | | `ActivityId` | string (GUID) | FK → `activities.Id` |
 | | `UploadedByUserId` | string (GUID) | FK → `users.Id`; **who added this item** — not necessarily the activity's creator |
@@ -251,11 +252,11 @@ erDiagram
 
 Five consequences follow from the conventions above, and features below depend on them:
 
-- **The sort tiebreaker is `CreatedOn`** (from `EntityBase`), not a column of its own. Ordering is
-  `ActivityDate DESC, CreatedOn DESC` (Decision #10, feature 05).
+- **The sort key is `CreatedOn`** (from `EntityBase`), not a column of its own. Ordering is
+  `CreatedOn DESC, Id DESC` (Decision #10, features 04 and 05).
 - **Keys are strings the application assigns**, so an entity has its id before it is saved. This
   is what lets the audit trail record an `EntityId` on insert.
-- **Deletes are soft.** `DELETE /api/activities/{id}` and `DELETE /api/media/{id}` mark rows
+- **Deletes are soft.** `DELETE /api/activity/{id}` and `DELETE /api/media/{id}` mark rows
   `IsDeleted`; the global query filter removes them from every read path.
 - **Visibility is a column, and it gates every read.** `activities.Type` is evaluated against the
   caller on the list *and* on the detail read. An activity the caller may not see is returned as
@@ -300,7 +301,7 @@ beyond the text and cover (Decision #30): no user id, no blob path, no SAS URL, 
 media field. The count and the name are what the export's list rows display; the ids behind them
 are not.
 
-`GET /api/activities` applies the same rule as a *filter* rather than a 404: an anonymous caller
+`GET /api/activity` applies the same rule as a *filter* rather than a 404: an anonymous caller
 pages the Public entries, a signed-in caller pages Public + Shared + their own Private, and an
 admin pages everything.
 
@@ -308,18 +309,18 @@ admin pages everything.
 
 | Operation | Anonymous | Signed-in non-owner | Owner | Admin |
 |---|---|---|---|---|
-| `POST /api/activities` | ❌ 401 | ✅ 201 | ✅ 201 | ✅ 201 |
-| `PUT /api/activities/{id}` | ❌ 401 | ❌ 403 | ✅ 200 | ✅ 200 |
-| `DELETE /api/activities/{id}` | ❌ 401 | ❌ 403 | ✅ 204 | ✅ 204 |
-| `POST /api/activities/{id}/cover` | ❌ 401 | ❌ 403 | ✅ 200 | ✅ 200 |
-| `POST /api/activities/{id}/media` | ❌ 401 | ✅ 201 if they can read the activity, ❌ **404** if not | ✅ 201 | ✅ 201 |
+| `POST /api/activity` | ❌ 401 | ✅ 201 | ✅ 201 | ✅ 201 |
+| `PUT /api/activity/{id}` | ❌ 401 | ❌ 403 | ✅ 200 | ✅ 200 |
+| `DELETE /api/activity/{id}` | ❌ 401 | ❌ 403 | ✅ 204 | ✅ 204 |
+| `POST /api/activity/{id}/cover` | ❌ 401 | ❌ 403 | ✅ 200 | ✅ 200 |
+| `POST /api/activity/{id}/media` | ❌ 401 | ✅ 201 if they can read the activity, ❌ **404** if not | ✅ 201 | ✅ 201 |
 | `DELETE /api/media/{id}` | ❌ 401 | ✅ 204 **if they uploaded it**, ❌ 403 otherwise | ✅ 204 | ✅ 204 |
 | `PUT /user/me`, `POST` / `DELETE /user/me/avatar` | ❌ 401 | ✅ self only — ❌ 403 for any other user | ✅ self only | ✅ self only |
 
 Media mutation is the one place the two axes cross: **any signed-in user who can see an activity
 may add media to it** (Decision #27), so the check is visibility, not ownership — except on a
 Private activity they do not own, which they cannot see and therefore cannot contribute to.
-`GET /api/activities/{id}/media` and `GET /api/media/{id}/url` return **401** anonymously and
+`GET /api/activity/{id}/media` and `GET /api/media/{id}/url` return **401** anonymously and
 **404** for a signed-in caller who cannot read the activity, so the media surface cannot be used
 to probe for a Private entry's existence.
 
@@ -369,14 +370,14 @@ media is collaborative (Decision #27).
 
 | Method | Route | Auth | Purpose |
 |---|---|---|---|
-| `GET` | `/api/activities?page=&pageSize=` | anonymous | Paged list, date descending. Anonymous callers receive **Public** entries only; a signed-in caller additionally receives **Shared** and their own **Private**. Each row is text, `Type`, media count, creator display name and a cover URL; **never** a user id, blob path or SAS URL for an anonymous caller (Decision #30) |
-| `GET` | `/api/activities/{id}` | anonymous | The same payload for one entry. **404** for an entry the caller may not read |
-| `POST` | `/api/activities` | user | Create — `Type` required, defaulting to `Public` |
-| `PUT` | `/api/activities/{id}` | owner/admin | Update, including `Type` — crossing the public line **moves the cover** |
-| `DELETE` | `/api/activities/{id}` | owner/admin | Delete (cascades media) |
-| `POST` | `/api/activities/{id}/cover` | owner/admin | Upload/replace cover → `covers` (public) if the activity is `Public`, otherwise `media` (private, SAS) |
-| `GET` | `/api/activities/{id}/media` | anyone who can read the activity | Media metadata, each item carrying its uploader |
-| `POST` | `/api/activities/{id}/media` | any signed-in caller who can read the activity | Upload image/video → private container (collaborative, Decision #27) |
+| `GET` | `/api/activity?page=&pageSize=` | anonymous | Paged list, newest entry first. `page` is zero-based, defaulting to 0; `pageSize` defaults to 10 and is clamped to 100 (Decision #23). Anonymous callers receive **Public** entries only; a signed-in caller additionally receives **Shared** and their own **Private**. Each row is text, `Type`, media count, creator display name and a cover URL; **never** a user id, blob path or SAS URL for an anonymous caller (Decision #30) |
+| `GET` | `/api/activity/{id}` | anonymous | The same payload for one entry. **404** for an entry the caller may not read |
+| `POST` | `/api/activity` | user | Create — `Type` required, defaulting to `Public` |
+| `PUT` | `/api/activity/{id}` | owner/admin | Update, including `Type` — crossing the public line **moves the cover** |
+| `DELETE` | `/api/activity/{id}` | owner/admin | Delete (cascades media) |
+| `POST` | `/api/activity/{id}/cover` | owner/admin | Upload/replace cover → `covers` (public) if the activity is `Public`, otherwise `media` (private, SAS) |
+| `GET` | `/api/activity/{id}/media` | anyone who can read the activity | Media metadata, each item carrying its uploader |
+| `POST` | `/api/activity/{id}/media` | any signed-in caller who can read the activity | Upload image/video → private container (collaborative, Decision #27) |
 | `GET` | `/api/media/{id}/url` | anyone who can read the activity | Mint a short-lived SAS URL |
 | `DELETE` | `/api/media/{id}` | uploader / activity owner / admin | Delete media (row + blob) |
 | `GET` | `/user/me` | user | The caller's own row, inserted on first call — **already implemented** |
@@ -385,8 +386,8 @@ media is collaborative (Decision #27).
 | `DELETE` | `/user/me/avatar` | self | Remove the avatar (clears the field and deletes the blob) |
 | `GET` | `/health` | anonymous | Liveness — **already implemented** |
 
-`pageSize` is capped server-side (default 20, max 100) so the endpoint cannot be made to return
-an unbounded result set.
+`page` is a zero-based index and `pageSize` is capped server-side (default 10, max 100) so the
+endpoint cannot be made to return an unbounded result set.
 
 **The cover URL in the two read rows is a SAS URL whenever the bytes are private.** A `Public`
 activity's cover comes back as a plain public URL; a `Shared` or `Private` one comes back as a

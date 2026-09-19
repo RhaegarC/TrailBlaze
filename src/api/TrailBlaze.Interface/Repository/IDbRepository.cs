@@ -22,6 +22,26 @@ public interface IDbRepository
     Task<List<T>> GetListAsync<T>(Expression<Func<T, bool>> predicate) where T : class;
 
     /// <summary>
+    /// Get one page of an ordered, filtered set, and the size of that set.
+    /// </summary>
+    /// <remarks>
+    /// The store does the ordering, the filtering and the paging, which is what keeps a row the
+    /// caller may not see from consuming a page slot, and what keeps the reported total the size
+    /// of the filtered set rather than of the table.
+    /// </remarks>
+    /// <typeparam name="T">Item type.</typeparam>
+    /// <param name="predicate">Condition.</param>
+    /// <param name="orderBy">The ordering, applied before the page is taken.</param>
+    /// <param name="skip">Rows to skip.</param>
+    /// <param name="take">Rows to take.</param>
+    /// <returns>The page's items, and the count of every row the predicate matches.</returns>
+    Task<(List<T> Items, int Total)> GetPageAsync<T>(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+        int skip,
+        int take) where T : class;
+
+    /// <summary>
     /// Create new item.
     /// </summary>
     /// <param name="item">Item.</param>

@@ -40,7 +40,7 @@ one fact. Everything else that moved together every feature had the same shape:
 |---|---|---|
 | Feature status | the sprint file's narrative section, its table, each feature file's `Status:` line, the PRD's current-state table | the sprint table. A feature file's `Status:` line is a lifecycle marker its own location decides; the PRD states capability |
 | Debt item state | the register's `Status` column **and** `STANDARD.md` §12's mirrored table | the register. §12 is a pointer, and an item file's `Status:` line is a lifecycle marker |
-| Test counts and tiers | `testing-and-tdd.md` plus `.claude/commands/sprint-status.md`, which had gone stale | `testing-and-tdd.md`; the command reads them from there |
+| Test counts and tiers | `testing-and-tdd.md` plus `.claude/commands/sprint-status.md`, which had gone stale | the tiers in `testing-and-tdd.md`, which carries no count; the counts in the sprint file, which the command reads them from |
 | "There is no CI" | §11's note and §13's checklist, which required a green CI job that does not exist | §11's note; §13 no longer contradicts it |
 | "`develop` is not deployable until 09" | five documents, each phrasing it differently | the sprint file's sequencing note; the rest point at it |
 | Counts as prose | README's "30 logged decisions" and "11-feature ladder" | neither; an index says what a document holds, which is true at any length |

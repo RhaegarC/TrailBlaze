@@ -43,6 +43,22 @@ public class DatabaseRepository(TrailBlazeContext context) : IDbRepository
     }
 
     /// <inheritdoc/>
+    public async Task<(List<T> Items, int Total)> GetPageAsync<T>(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+        int skip,
+        int take) where T : class
+    {
+        IQueryable<T> query = Context.Set<T>().Where(predicate);
+
+        // Counted after the filter and before the take: the total is what the caller can page through.
+        int total = await query.CountAsync();
+        List<T> items = await orderBy(query).Skip(skip).Take(take).ToListAsync();
+
+        return (items, total);
+    }
+
+    /// <inheritdoc/>
     public async Task<int> CreateAsync<T>(T item)
     {
         ArgumentNullException.ThrowIfNull(item, nameof(item));

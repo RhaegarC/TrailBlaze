@@ -1,6 +1,6 @@
 # TrailBlaze
 
-A public-read **activity journal**. Anyone can browse activities ordered by date descending with
+A public-read **activity journal**. Anyone can browse activities ordered newest first with
 their cover images; signing in reveals the images and videos each activity carries.
 
 TrailBlaze is one shared feed, not a set of private diaries — everyone posts, and ownership
@@ -45,8 +45,8 @@ The workflow lives in `.claude/` and runs on slash commands:
 
 Backend tests run from `src/api/` with `dotnet test`. Two containers back the database and storage
 tiers — start them with `docker compose -f docker-compose.test.yml up -d` first, or those tests
-**skip** rather than fail. See [testing-and-tdd.md](docs/testing-and-tdd.md), which is also the only
-place the test counts are written down.
+**skip** rather than fail. See [testing-and-tdd.md](docs/testing-and-tdd.md); the current counts are
+in [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md), which is their only home.
 
 ## Running it locally
 
@@ -152,12 +152,13 @@ pointed somewhere else would migrate the wrong database and report success.
 
 1. **The suite is real but shallow.** `dotnet test` from `src/api/` is green either way: with the two
    test containers running everything passes, and with nothing configured the container-backed tests
-   **skip** rather than fail — reported rather than hidden, and a skip is not a pass. What is covered,
-   what is not, and every count are in
-   [testing-and-tdd.md](docs/testing-and-tdd.md), which is their only home. Feature
-   02's slice — the profile routes, avatar upload and upload validator — is **not** covered, because
-   its tests were deliberately deferred ([item 12](docs/tech-debt/12-feature-02-tests-deferred.md)).
-   "Green" here means the foundation is green.
+   **skip** rather than fail — reported rather than hidden, and a skip is not a pass. The counts are
+   in [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md), and what is covered against
+   what is not is status, owned by that file's table and the
+   [debt register](docs/tech-debt/00-debt-log.md). Feature 02's slice — the profile routes, avatar
+   upload and upload validator — is **not** covered
+   ([item 12](docs/tech-debt/12-feature-02-tests-deferred.md)). "Green" here means the foundation is
+   green.
 2. **`develop` is not deployable until feature 09 merges.** 09 imposes the ownership and admin
    rules; [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) is where the rule and the
    sequencing behind it live.

@@ -33,7 +33,7 @@ visitors see a picture beside it without any of the activity's private media bec
 
 ## Acceptance criteria
 
-- [ ] `POST /api/activities/{id}/cover` accepts a multipart image upload and returns the resulting cover URL
+- [ ] `POST /api/activity/{id}/cover` accepts a multipart image upload and returns the resulting cover URL
 - [ ] The bytes go to the container the activity's **current `Type`** requires (Decision #29): the **public `covers`** container for a `Public` activity, the **private `media`** container for a `Shared` or `Private` one. Asserted **per type**, not once, because a single happy-path check passes even when the routing is inverted for the other two. *(Asserted by outcome against a real account as of 2026-09-18 — the recording fake is gone. What that costs and what it buys is in the test plan below.)*
 - [ ] The response carries a **plain public URL** for a `Public` activity and a **short-lived SAS URL** for a `Shared`/`Private` one, so the client receives one field either way and never has to know which container holds the bytes
 - [ ] There is **no** way to nominate an existing private media item as the cover: the request model carries no media id, no blob path, and no reference to a `media` row, and a test asserts that shape
@@ -41,7 +41,7 @@ visitors see a picture beside it without any of the activity's private media bec
 - [ ] Size is capped at 10 MB under the image rule, with a file exactly at the cap accepted and one byte over rejected with no blob write (Decision #24)
 - [ ] On success `Activity.CoverImageBlobPath` holds the stored path and the response returns the matching URL
 - [ ] **Replace semantics:** uploading a cover for an activity that already has one replaces the stored path **and** deletes the previous cover blob, so exactly one cover blob exists per activity and none are orphaned — including when the replacement lands in the *other* container
-- [ ] **Visibility-change move.** When `PUT /api/activities/{id}` changes `Type` across the public line, the cover is moved in the same operation: copied to the destination container, `CoverImageBlobPath` updated, and the blob in the old container **deleted**. `Public` → `Shared`/`Private` must leave **no readable copy** in the public container; the reverse must leave a plain public URL behind
+- [ ] **Visibility-change move.** When `PUT /api/activity/{id}` changes `Type` across the public line, the cover is moved in the same operation: copied to the destination container, `CoverImageBlobPath` updated, and the blob in the old container **deleted**. `Public` → `Shared`/`Private` must leave **no readable copy** in the public container; the reverse must leave a plain public URL behind
 - [ ] The move is **required rather than cosmetic**, and this is the criterion that justifies the whole rule: after `Public` → `Private` the old public URL no longer serves the image. The disclosure already happened — that URL may be cached or indexed — so the bytes must go, or a now-`Private` entry's cover stays fetchable by anyone who ever held the link. The test asserts the old blob is **gone**, not merely that the field was repointed
 - [ ] A `Type` change that does **not** cross the public line (`Shared` ↔ `Private`) moves nothing, and a `Type` change on an activity with **no** cover is a no-op rather than an error
 - [ ] The move leaves the cover resolvable from **exactly one** container at every observable point — never from none, and never from both. A `Shared`/`Private` activity is never left holding a public-only cover
@@ -70,7 +70,7 @@ argument for it left to the PR that made the change.
 
 - **The separation rule, restated for three containers.** A cover is always a fresh upload and is never derived from the activity's private media (Decision #14). Do not "optimise" this by reusing or re-pointing a `media` blob as a cover — that single change is what would make promoting private bytes to public possible, and it is precisely what this feature exists to prevent. What decides a cover's audience is **where it was uploaded**, never a flag on an item (Decision #13, amended by #29). Note the asymmetry the private container now carries: cover *blobs* of `Shared`/`Private` activities sit beside media blobs, but a cover never becomes a `media` **row**, and a `media` row never becomes a cover — asserted in both directions.
 - No image resizing, cropping, rotation, or thumbnail generation — bytes are stored exactly as uploaded.
-- No cover removal endpoint in v1: replace is the only mutation. (The PRD API surface lists `POST /api/activities/{id}/cover` and no delete route.)
+- No cover removal endpoint in v1: replace is the only mutation. (The PRD API surface lists `POST /api/activity/{id}/cover` and no delete route.)
 - **No ownership or visibility enforcement.** Any signed-in user can currently set the cover on any activity, including one they cannot read; feature [09-permission-enforcement](09-permission-enforcement.md) adds the owner/admin rules and the visibility gate (404 for a `Private` activity the caller cannot see). Like 06, this feature is therefore part of the deployability gap — see the sequencing note in [00-mission-1-sprint.md](00-mission-1-sprint.md).
 - No EXIF or metadata stripping on the uploaded image.
 - **Covers belong to activities only** — with one exception added since by Decision #28: user

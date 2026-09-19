@@ -117,6 +117,56 @@ second style in the same solution.
 - **Nullable reference types are enabled.** A build is expected to be warning-free; fix the
   warning rather than suppressing it to get a green build.
 
+- **Comments on public members use block form, and the text is one line.** A type, method or
+  property opens and closes `<summary>` on its own lines, with a single line of text between them.
+  A method adds one `<param>` per parameter and a `<returns>`, left empty where the name and the
+  signature already say it:
+
+  ```csharp
+  /// <summary>
+  /// Reads one order.
+  /// </summary>
+  /// <param name="id">The order's id.</param>
+  /// <returns>The order, or not-found. A deleted order is not found.</returns>
+  public async Task<Order?> GetAsync(string id)
+  ```
+
+  ```csharp
+  /// <summary>
+  /// The date the order was placed.
+  /// </summary>
+  public DateOnly PlacedOn { get; init; }
+  ```
+
+  The block form is the convention; **the single line is the standard**
+  ([codereview.md](../../.claude/rules/codereview.md) — "Keep a comment to one line, and say only
+  what the code cannot"). `<remarks>` is for the rare member a caller can be misled by without a
+  second line, never a place to argue the design. A paragraph above a member usually means the
+  member is two members.
+
+- **A service method that reaches a store or the request context wraps its body in `try`/`catch`,
+  logs the failure, and rethrows.** The catch adds the context the exception itself cannot carry —
+  which operation, which id — and `throw;` keeps the error the API's handler already knows how to
+  answer. Swallowing it instead would return a success the caller did not get. A guard clause
+  (`ArgumentNullException.ThrowIfNull`) and a pure rule method that touches nothing stay outside:
+  there is no operation to name and nothing that can fail but the rule itself.
+
+  ```csharp
+  public async Task<OrderOutcome> GetAsync(string id)
+  {
+      try
+      {
+          Order? order = await FindAsync(id);
+          return order is null ? OrderOutcome.NotFound() : OrderOutcome.Completed(order);
+      }
+      catch (Exception ex)
+      {
+          logger.LogError(ex, "Reading order {OrderId} failed.", id);
+          throw;
+      }
+  }
+  ```
+
 ---
 
 ## 2. Adding a feature: the vertical slice
@@ -583,10 +633,11 @@ back to the emulator and needs no secret.
 
 **How to write a test in either tier, how the containers are isolated, and what a run prints are all
 in [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md), which is their only home. No count
-belongs here.** A number restated in four documents goes stale in four, and it did, repeatedly — the
-record is [item 19](../../docs/tech-debt/19-doc-indexes-drifted.md). This section keeps the claim,
-which is what a reviewer needs; the strategy doc keeps the measurement, which is what has to be
-re-run.
+belongs here**: the counts are in
+[00-mission-1-sprint.md](../../docs/features/00-mission-1-sprint.md), and nowhere else. A number
+restated in four documents goes stale in four, and it did, repeatedly — the record is
+[item 19](../../docs/tech-debt/19-doc-indexes-drifted.md). This section keeps the claim, which is
+what a reviewer needs; the sprint file keeps the measurement, which is what has to be re-run.
 
 ### Rules
 

@@ -1,5 +1,6 @@
 namespace TrailBlaze.Service;
 
+using Microsoft.Extensions.Logging;
 using TrailBlaze.Interface.Infrastructure;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
@@ -11,7 +12,8 @@ public sealed class UserService(
     IDbRepository dbRepository,
     IStorageRepository storageRepository,
     IUserContextService userContext,
-    IUploadValidationService uploadValidation) : IUserService
+    IUploadValidationService uploadValidation,
+    ILogger<UserService> logger) : IUserService
 {
     /// <summary>
     /// The key a rejected avatar upload reports its error under. It matches the form field
@@ -22,50 +24,66 @@ public sealed class UserService(
     /// <inheritdoc/>
     public async Task<User?> GetOrCreateAsync()
     {
-        string? entraObjectId = userContext.EntraObjectId;
-
-        // A validated token still might not carry an object id. There is no identity to
-        // key a row on, so there is nothing to look up and — more importantly — nothing
-        // that may be inserted: an unidentifiable caller must not create a user.
-        if (string.IsNullOrWhiteSpace(entraObjectId))
+        try
         {
-            return null;
-        }
+            string? entraObjectId = userContext.EntraObjectId;
 
-        User? user = await dbRepository.GetAsync<User>(existing => existing.Id == entraObjectId);
+            // A validated token still might not carry an object id. There is no identity to
+            // key a row on, so there is nothing to look up and — more importantly — nothing
+            // that may be inserted: an unidentifiable caller must not create a user.
+            if (string.IsNullOrWhiteSpace(entraObjectId))
+            {
+                return null;
+            }
 
-        if (user is not null)
-        {
+            User? user = await dbRepository.GetAsync<User>(existing => existing.Id == entraObjectId);
+
+            if (user is not null)
+            {
+                return user;
+            }
+
+            // The object id is the row's identity, so it is assigned here rather than left to
+            // the constructor's generated key. The claims are shortened to fit their columns on
+            // the way in -- see ToColumn.
+            user = new User
+            {
+                Id = entraObjectId,
+                DisplayName = ToColumn(userContext.ActorName, Constant.UserProfile.DisplayNameLength),
+                Email = ToColumn(userContext.Email, Constant.UserProfile.EmailLength),
+            };
+
+            // The read above and this write are two statements, not one transaction, so they are
+            // not atomic: two requests for the same unseen object id can both find nothing and
+            // both insert. The primary key still admits only one row, so the loser fails its
+            // insert rather than corrupting anything -- it surfaces as a 500 on that one request
+            // instead of converging. Accepted knowingly; a retry-on-duplicate would be the fix if
+            // it is ever seen in practice.
+            await dbRepository.CreateAsync(user);
+
             return user;
         }
-
-        // The object id is the row's identity, so it is assigned here rather than left to
-        // the constructor's generated key. The claims are shortened to fit their columns on
-        // the way in -- see ToColumn.
-        user = new User
+        catch (Exception ex)
         {
-            Id = entraObjectId,
-            DisplayName = ToColumn(userContext.ActorName, Constant.UserProfile.DisplayNameLength),
-            Email = ToColumn(userContext.Email, Constant.UserProfile.EmailLength),
-        };
-
-        // The read above and this write are two statements, not one transaction, so they are
-        // not atomic: two requests for the same unseen object id can both find nothing and
-        // both insert. The primary key still admits only one row, so the loser fails its
-        // insert rather than corrupting anything -- it surfaces as a 500 on that one request
-        // instead of converging. Accepted knowingly; a retry-on-duplicate would be the fix if
-        // it is ever seen in practice.
-        await dbRepository.CreateAsync(user);
-
-        return user;
+            logger.LogError(ex, "Reading or provisioning the caller's row failed for {Caller}.", userContext.EntraObjectId);
+            throw;
+        }
     }
 
     /// <inheritdoc/>
     public async Task<UserProfileResponse?> GetProfileAsync()
     {
-        User? user = await GetOrCreateAsync();
+        try
+        {
+            User? user = await GetOrCreateAsync();
 
-        return user is null ? null : ToResponse(user);
+            return user is null ? null : ToResponse(user);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Reading the caller's profile failed for {Caller}.", userContext.EntraObjectId);
+            throw;
+        }
     }
 
     /// <inheritdoc/>
@@ -73,73 +91,81 @@ public sealed class UserService(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        User? user = await GetOrCreateAsync();
-
-        if (user is null)
+        try
         {
-            return ProfileOutcome.NoCaller();
+            User? user = await GetOrCreateAsync();
+
+            if (user is null)
+            {
+                return ProfileOutcome.NoCaller();
+            }
+
+            var errors = new Dictionary<string, string[]>();
+
+            // Everything is validated before anything is written, so a request with two bad fields
+            // reports both rather than making the client discover them one round trip at a time.
+            string? displayName = request.DisplayName?.Trim();
+
+            if (string.IsNullOrEmpty(displayName))
+            {
+                errors[nameof(UpdateProfileRequest.DisplayName)] = [Constant.Message.DisplayNameRequired];
+            }
+            else if (displayName.Length > Constant.UserProfile.DisplayNameLength)
+            {
+                // Rejected, not shortened. This text was typed by the caller, so truncating it
+                // would be silently discarding what they wrote -- the opposite of the rule for a
+                // token claim, which they did not write and so cannot be asked to fix.
+                errors[nameof(UpdateProfileRequest.DisplayName)] = [Constant.Message.DisplayNameTooLong];
+            }
+
+            string? description = Normalise(request.Description);
+
+            if (description is not null && description.Length > Constant.UserProfile.DescriptionLength)
+            {
+                errors[nameof(UpdateProfileRequest.Description)] = [Constant.Message.DescriptionTooLong];
+            }
+
+            // An absent preference means the default rather than "leave unchanged": this replaces
+            // the editable fields, so omitting one converges on the same value the column would
+            // have held had the client never mentioned it.
+            string theme = request.PreferredTheme ?? Constant.UserPreference.DarkTheme;
+
+            // Exact match, deliberately: these values are compared by readers and stored verbatim,
+            // so accepting "dark" would put a value in the column that nothing recognizes.
+            if (!Constant.UserPreference.Themes.Contains(theme))
+            {
+                errors[nameof(UpdateProfileRequest.PreferredTheme)] = [Constant.Message.ThemeNotAllowed];
+            }
+
+            string language = request.PreferredLanguage ?? Constant.UserPreference.English;
+
+            if (!Constant.UserPreference.Languages.Contains(language))
+            {
+                errors[nameof(UpdateProfileRequest.PreferredLanguage)] = [Constant.Message.LanguageNotAllowed];
+            }
+
+            if (errors.Count > 0)
+            {
+                return ProfileOutcome.Rejected(errors);
+            }
+
+            // Only the four editable fields are assigned. Role, Email and Id are not reachable
+            // from here at all -- not because they are checked, but because nothing above this
+            // line ever read them out of the request.
+            user.DisplayName = displayName;
+            user.Description = description;
+            user.PreferredTheme = theme;
+            user.PreferredLanguage = language;
+
+            await dbRepository.UpdateAsync(user);
+
+            return ProfileOutcome.Completed(ToResponse(user));
         }
-
-        var errors = new Dictionary<string, string[]>();
-
-        // Everything is validated before anything is written, so a request with two bad fields
-        // reports both rather than making the client discover them one round trip at a time.
-        string? displayName = request.DisplayName?.Trim();
-
-        if (string.IsNullOrEmpty(displayName))
+        catch (Exception ex)
         {
-            errors[nameof(UpdateProfileRequest.DisplayName)] = [Constant.Message.DisplayNameRequired];
+            logger.LogError(ex, "Updating the profile failed for {Caller}.", userContext.EntraObjectId);
+            throw;
         }
-        else if (displayName.Length > Constant.UserProfile.DisplayNameLength)
-        {
-            // Rejected, not shortened. This text was typed by the caller, so truncating it
-            // would be silently discarding what they wrote -- the opposite of the rule for a
-            // token claim, which they did not write and so cannot be asked to fix.
-            errors[nameof(UpdateProfileRequest.DisplayName)] = [Constant.Message.DisplayNameTooLong];
-        }
-
-        string? description = Normalise(request.Description);
-
-        if (description is not null && description.Length > Constant.UserProfile.DescriptionLength)
-        {
-            errors[nameof(UpdateProfileRequest.Description)] = [Constant.Message.DescriptionTooLong];
-        }
-
-        // An absent preference means the default rather than "leave unchanged": this replaces
-        // the editable fields, so omitting one converges on the same value the column would
-        // have held had the client never mentioned it.
-        string theme = request.PreferredTheme ?? Constant.UserPreference.DarkTheme;
-
-        // Exact match, deliberately: these values are compared by readers and stored verbatim,
-        // so accepting "dark" would put a value in the column that nothing recognizes.
-        if (!Constant.UserPreference.Themes.Contains(theme))
-        {
-            errors[nameof(UpdateProfileRequest.PreferredTheme)] = [Constant.Message.ThemeNotAllowed];
-        }
-
-        string language = request.PreferredLanguage ?? Constant.UserPreference.English;
-
-        if (!Constant.UserPreference.Languages.Contains(language))
-        {
-            errors[nameof(UpdateProfileRequest.PreferredLanguage)] = [Constant.Message.LanguageNotAllowed];
-        }
-
-        if (errors.Count > 0)
-        {
-            return ProfileOutcome.Rejected(errors);
-        }
-
-        // Only the four editable fields are assigned. Role, Email and Id are not reachable
-        // from here at all -- not because they are checked, but because nothing above this
-        // line ever read them out of the request.
-        user.DisplayName = displayName;
-        user.Description = description;
-        user.PreferredTheme = theme;
-        user.PreferredLanguage = language;
-
-        await dbRepository.UpdateAsync(user);
-
-        return ProfileOutcome.Completed(ToResponse(user));
     }
 
     /// <inheritdoc/>
@@ -147,72 +173,88 @@ public sealed class UserService(
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        string? rejection = uploadValidation.ValidateImage(contentType, sizeBytes);
-
-        if (rejection is not null)
+        try
         {
-            // Rejected before the caller is even resolved, so a bad upload writes nothing: no
-            // blob to orphan, and no row touched.
-            return ProfileOutcome.Rejected(AvatarFormField, rejection);
+            string? rejection = uploadValidation.ValidateImage(contentType, sizeBytes);
+
+            if (rejection is not null)
+            {
+                // Rejected before the caller is even resolved, so a bad upload writes nothing: no
+                // blob to orphan, and no row touched.
+                return ProfileOutcome.Rejected(AvatarFormField, rejection);
+            }
+
+            User? user = await GetOrCreateAsync();
+
+            if (user is null)
+            {
+                return ProfileOutcome.NoCaller();
+            }
+
+            string path = AvatarPathFor(user.Id, contentType!);
+            string? previousPath = user.AvatarBlobPath;
+
+            await storageRepository.UploadAsync(
+                Constant.StorageContainer.Avatars, path, content, contentType!);
+
+            user.AvatarBlobPath = path;
+            await dbRepository.UpdateAsync(user);
+
+            // Deleting the old blob comes after the row points at the new one, never before. The
+            // reverse order can leave the row naming a blob that is already gone -- a broken avatar
+            // nobody can diagnose. This order can at worst leave one unreferenced blob, which is
+            // inert and collectable; and while both exist, nothing a user can see is missing.
+            if (!string.IsNullOrWhiteSpace(previousPath))
+            {
+                await storageRepository.DeleteAsync(Constant.StorageContainer.Avatars, previousPath);
+            }
+
+            return ProfileOutcome.Completed(ToResponse(user));
         }
-
-        User? user = await GetOrCreateAsync();
-
-        if (user is null)
+        catch (Exception ex)
         {
-            return ProfileOutcome.NoCaller();
+            logger.LogError(ex, "Storing an avatar failed for {Caller}.", userContext.EntraObjectId);
+            throw;
         }
-
-        string path = AvatarPathFor(user.Id, contentType!);
-        string? previousPath = user.AvatarBlobPath;
-
-        await storageRepository.UploadAsync(
-            Constant.StorageContainer.Avatars, path, content, contentType!);
-
-        user.AvatarBlobPath = path;
-        await dbRepository.UpdateAsync(user);
-
-        // Deleting the old blob comes after the row points at the new one, never before. The
-        // reverse order can leave the row naming a blob that is already gone -- a broken avatar
-        // nobody can diagnose. This order can at worst leave one unreferenced blob, which is
-        // inert and collectable; and while both exist, nothing a user can see is missing.
-        if (!string.IsNullOrWhiteSpace(previousPath))
-        {
-            await storageRepository.DeleteAsync(Constant.StorageContainer.Avatars, previousPath);
-        }
-
-        return ProfileOutcome.Completed(ToResponse(user));
     }
 
     /// <inheritdoc/>
     public async Task<ProfileOutcome> RemoveAvatarAsync()
     {
-        User? user = await GetOrCreateAsync();
-
-        if (user is null)
+        try
         {
-            return ProfileOutcome.NoCaller();
-        }
+            User? user = await GetOrCreateAsync();
 
-        string? path = user.AvatarBlobPath;
+            if (user is null)
+            {
+                return ProfileOutcome.NoCaller();
+            }
 
-        // Having no avatar is a normal state, not a failure -- most users have none. So this
-        // returns success with zero storage calls rather than asking the vendor to delete
-        // something that was never there, which is what makes "remove what you do not have" a
-        // no-op instead of an error the caller has to interpret.
-        if (string.IsNullOrWhiteSpace(path))
-        {
+            string? path = user.AvatarBlobPath;
+
+            // Having no avatar is a normal state, not a failure -- most users have none. So this
+            // returns success with zero storage calls rather than asking the vendor to delete
+            // something that was never there, which is what makes "remove what you do not have" a
+            // no-op instead of an error the caller has to interpret.
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return ProfileOutcome.Completed(ToResponse(user));
+            }
+
+            user.AvatarBlobPath = null;
+            await dbRepository.UpdateAsync(user);
+
+            // Row first, then blob, for the same reason as on replacement: this order never leaves
+            // the row naming a blob that is missing.
+            await storageRepository.DeleteAsync(Constant.StorageContainer.Avatars, path);
+
             return ProfileOutcome.Completed(ToResponse(user));
         }
-
-        user.AvatarBlobPath = null;
-        await dbRepository.UpdateAsync(user);
-
-        // Row first, then blob, for the same reason as on replacement: this order never leaves
-        // the row naming a blob that is missing.
-        await storageRepository.DeleteAsync(Constant.StorageContainer.Avatars, path);
-
-        return ProfileOutcome.Completed(ToResponse(user));
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Removing an avatar failed for {Caller}.", userContext.EntraObjectId);
+            throw;
+        }
     }
 
     /// <summary>
