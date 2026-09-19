@@ -30,6 +30,11 @@ and 38 skip** — and that second number is the honest description of a bare mac
 Measured, not derived: the run reports `Failed: 0, Passed: 38, Skipped: 38, Total: 76` across the
 three projects.
 
+**This paragraph is the only place those counts are written down, and that is deliberate.** They
+were previously restated in the README, the PRD, the sprint file and STANDARD §10, and went stale in
+all four whenever a feature added a test. If you are here to update them, update them here and stop —
+[item 19](tech-debt/19-doc-indexes-drifted.md) is the record of what the duplication cost.
+
 **But the count is not the coverage.** The one product slice that has shipped and is still untested
 is feature 02's — profile routes, avatar upload and upload validator. Those tests were deliberately
 deferred, and [item 12](tech-debt/12-feature-02-tests-deferred.md) tracks writing them and records

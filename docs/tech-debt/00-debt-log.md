@@ -42,7 +42,7 @@ user yet — and its row says so.
 | 16 | [Unreferenced forward-looking scaffolding](16-unreferenced-scaffolding.md) | hygiene | friction | Persistence | features 06/07/08 (in part) | open |
 | 17 | [`AllowedOrigins` is declared twice](17-allowedorigins-duplicated.md) | correctness | silent-wrong | Config | — (orphaned) | open |
 | 18 | [Tracked settings carry another repo's permissions](18-claude-settings-cross-repo.md) | hygiene | friction | Workflow | — (orphaned) | open |
-| 19 | [Documentation indexes have drifted](19-doc-indexes-drifted.md) | docs | cosmetic | Docs | — (orphaned) | open |
+| 19 | [Documentation indexes have drifted](19-doc-indexes-drifted.md) | docs | cosmetic | Docs | — (orphaned) | open (partly discharged by 03) |
 | 20 | [`LastModifiedOn` is left at its sentinel on insert](20-lastmodified-unset-on-insert.md) | correctness | silent-wrong | Audit | — (orphaned) | open |
 | 21 | [The public/private container set exists only in prose](21-container-access-levels-in-prose.md) | capability | silent-wrong | Storage | — (orphaned) | open |
 | 22 | [The test tier's database engine is a retired product](22-test-engine-is-a-retired-product.md) | correctness | friction | Tests | — (orphaned) | open |

@@ -588,11 +588,15 @@ dotnet test --filter "Category!=Container"         # the tests touching neither 
 **`Category=Container` is the only trait in the solution, and the two filters are not
 complements.** `Category!=Container` selects the tests that touch *neither* container — it is not
 "the offline run", because it also drops the storage tier, which runs whenever a storage endpoint
-answers, configured or not. With nothing configured at all the solution reports **38 passed, 38
-skipped** out of 76 — 29 and 31 of those in `TrailBlaze.Repository.Test`, 2 and 7 in
-`TrailBlaze.Service.Test`, plus 7 in `TrailBlaze.Api.Test`, none of them tagged. The storage tests
-still run against the emulator fallback (storage needs no secret by design), so the 38 skips are the
-database tier and only it. Measured on this branch, not derived.
+answers, configured or not. The storage tests run against the emulator fallback (storage needs no
+secret by design), so a run with nothing configured passes the storage tier and the offline tier and
+**skips the database tier and only it**. Measured, not derived.
+
+**What that run prints is written down in one place — [testing-and-tdd.md](../../docs/testing-and-tdd.md) —
+and no count belongs here.** A number restated in four documents goes stale in four, and it did:
+it moved 31 → 42 → 59 → 76 in three days, each move a hand edit
+([item 19](../../docs/tech-debt/19-doc-indexes-drifted.md)). This section keeps the claim, which is
+what a reader needs; the strategy doc keeps the measurement, which is what has to be re-run.
 
 ### The database tier
 

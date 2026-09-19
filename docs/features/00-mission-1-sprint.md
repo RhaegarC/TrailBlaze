@@ -52,7 +52,7 @@ The repository was initialised from a generic layered .NET scaffold, which lande
   consumes a local multi-service stack. Still absent: **no CI pipeline**, which 01 does not claim
   and which is now the only path either component has to production.
   **Superseded in part (2026-09-18).** The counts and the storage fake above are historical: the
-  suite was 59 tests then and is 76 now, and the fake is deleted — storage and the database run against containers
+  suite has grown since, and the fake is deleted — storage and the database run against containers
   started by `src/api/docker-compose.test.yml`. `docker-compose.yml` is still absent, and that is
   unchanged; the test-scoped file starts no application process and is not deployed.
 - **02 — implemented and archived (merged to `develop` in PR #4), but its tests are deferred, so it
@@ -114,7 +114,8 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 
 - [x] Layered `TrailBlaze.*` backend solution builds; `dotnet test` green from `src/api/` **with a
       non-zero test count** — a green run over zero discovered tests does not count, and was the
-      state when this line was written. It is 76 tests now, 38 of them container-backed
+      state when this line was written. [testing-and-tdd.md](../testing-and-tdd.md) holds the
+      current counts, and is the only document that does
 - [ ] Entra auth: backend validates bearer tokens; users auto-provisioned; exactly one admin seeded
       — **the admin half is done** (feature 03); the line stays open on the token half, whose tests
       were deferred by 02 ([item 12](../tech-debt/12-feature-02-tests-deferred.md))
