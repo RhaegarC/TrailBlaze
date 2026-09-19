@@ -50,11 +50,12 @@ longer exists, and an item describing behaviour the product cannot reach is not 
 | 20 | [`LastModifiedOn` is left at its sentinel on insert](20-lastmodified-unset-on-insert.md) | correctness | silent-wrong | Audit | — (orphaned) | open |
 | 21 | [The public/private container set exists only in prose](21-container-access-levels-in-prose.md) | capability | silent-wrong | Storage | — (orphaned) | open |
 | 22 | [The test tier's database engine is a retired product](22-test-engine-is-a-retired-product.md) | correctness | friction | Tests | — (orphaned) | open |
-| 23 | [Documentation asserts foreign keys the model does not have](23-foreign-keys-asserted-that-do-not-exist.md) | docs | friction | Model | features 04/06 (in part) | open — the four feature-spec statements are corrected (2026-09-19); the PRD's own `FK →` labels and its "cascades media" note remain |
+| 23 | [Documentation asserts foreign keys the model does not have](23-foreign-keys-asserted-that-do-not-exist.md) | docs | friction | Model | features 06 (in part) | open — the four feature-spec statements and the `activities.CreatedByUserId` rows are corrected (2026-09-19); the two `media` `FK →` labels and the "cascades media" note remain, both of which feature 06 owns |
 | 24 | [Every write method returns the entry count, not the rows named](24-write-methods-return-entry-count.md) | correctness | silent-wrong | Persistence | — (orphaned) | open |
-| 25 | [`TrailBlaze.Service.Test` has no tests, and no way to host the ones it needs](25-service-test-tier-is-empty.md) | test-gap | friction | Tests | features 06/08 (in part) | open (narrowed by 03) |
+| 25 | [Nothing drives the service against a store, so the seam between them is untested](25-service-test-tier-is-empty.md) | test-gap | friction | Tests | features 06/08 (in part) | open — the tier is no longer empty and (c) was taken by feature 04 (2026-09-19); what remains is the service→store seam |
 | 26 | [The composition root has never opened a connection](26-composition-root-never-opened-a-connection.md) | test-gap | friction | Api | — (orphaned) | open |
 | 27 | [`Category!=Container` is not the offline run](27-container-filter-is-not-the-offline-run.md) | docs | cosmetic | Docs | — (orphaned) | open |
+| 28 | [An unconfigured deployment answers 500 on every protected route](28-unconfigured-auth-answers-500.md) | correctness | friction | Api | feature 11 (in part) | open |
 
 Rows are ordered by number, which for 01–12 is §12 order and for 13+ is filing order. The queue
 order is a judgement, not a column — see "Where to start" at the bottom. **A deleted item leaves a

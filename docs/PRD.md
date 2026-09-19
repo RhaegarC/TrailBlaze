@@ -98,7 +98,8 @@ far along its feature is — a feature's own progress lives in the
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
 | Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers, the filters and every count are in [testing-and-tdd.md](testing-and-tdd.md) | feature 01 |
 | Blob abstraction | `IStorageRepository`, three containers, no fake | `IStorageRepository` in `TrailBlaze.Interface`, one Azure adapter in `TrailBlaze.Repository`, exercised by the storage tier against Azurite | feature 01 |
-| Activity and media tables | the data model below | only `users` and the audit table exist | feature 04 |
+| Activity table | the data model below | `activities` exists, migrated by `AddActivities`, with its check-constrained `Type`. CRUD routes are implemented; **who may read or mutate an entry is not yet enforced** | feature 04 |
+| Media table | the data model below | not built | feature 06 |
 | Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | all five exist, bounded to the lengths in the data model | feature 02 |
 | Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | all four routes exist and return DTOs, and are **untested** ([02-entra-auth.md](features/archive/02-entra-auth.md#testing-status)) | feature 02 |
 | Administrator | one admin, set by hand; role read from the row, never from a claim | `users.Role` is not null, defaults to `User`, and is check-constrained to the closed set. Nothing in the application seeds, promotes or writes it — [03-admin-seeding.md](features/archive/03-admin-seeding.md#decisions) records why | feature 03 |
@@ -207,7 +208,7 @@ erDiagram
         string Description "nullable"
         string Type "Public | Shared | Private"
         string CoverImageBlobPath "nullable, container by Type"
-        string CreatedByUserId FK
+        string CreatedByUserId "the caller's id, a plain column"
     }
     Media {
         string Id PK "GUID, app-assigned"
@@ -239,7 +240,7 @@ erDiagram
 | | `Description` | nvarchar(max) | optional |
 | | `Type` | nvarchar(16) | `Public` \| `Shared` \| `Private`; required, defaults to `Public`; **gates reads** |
 | | `CoverImageBlobPath` | nvarchar(512) | optional; container follows `Type` — `covers` (public) for `Public`, `media` (private, SAS) for `Shared`/`Private` |
-| | `CreatedByUserId` | string (GUID) | FK → `users.Id` |
+| | `CreatedByUserId` | nvarchar(128) | the caller's `users.Id`, stored as a **plain column** — the model declares no foreign keys ([item 23](tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)) |
 | `media` | `Id` | string (GUID) | PK, app-assigned |
 | | `ActivityId` | string (GUID) | FK → `activities.Id` |
 | | `UploadedByUserId` | string (GUID) | FK → `users.Id`; **who added this item** — not necessarily the activity's creator |

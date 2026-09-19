@@ -43,11 +43,17 @@ internal static class ServiceExt
 
         // Register service
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IActivityService, ActivityService>();
 
         // Stateless, but registered rather than static so the upload rules have one home the
         // routes depend on through injection: if a cap ever needs to come from configuration
         // rather than Constant, that changes here and no caller changes at all.
         services.AddSingleton<IUploadValidationService, UploadValidationService>();
+
+        // The activity field rules are decidable from the request alone and hold no state, so
+        // the same reasoning applies as above: injected rather than static, singleton rather
+        // than scoped, so nothing is constructed per request to answer a pure question.
+        services.AddSingleton<IActivityValidationService, ActivityValidationService>();
 
         // Register the caller abstraction. Scoped, because it reads the current request's
         // claims; nothing outside a request should resolve it.

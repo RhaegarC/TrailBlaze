@@ -11,7 +11,11 @@ public class TrailBlazeContext(DbContextOptions<TrailBlazeContext> options) : Db
     /// <summary>The name the engine knows the role's check constraint by.</summary>
     private const string RoleConstraintName = "CK_Users_Role";
 
+    /// <summary>The name the engine knows the type's check constraint by.</summary>
+    private const string TypeConstraintName = "CK_Activities_Type";
+
     public DbSet<AuditLog> AuditLogs { get; set; }
+    public DbSet<Activity> Activities { get; set; }
     public DbSet<User> Users { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -31,6 +35,37 @@ public class TrailBlazeContext(DbContextOptions<TrailBlazeContext> options) : Db
             // provider's own convention for an unbounded string, so it is left to the
             // convention rather than restated here -- a `HasColumnType("nvarchar(max)")` would be
             // a no-op, and STANDARD §10 forbids a test that cannot go red guarding it.
+        });
+
+        modelBuilder.Entity<Activity>(entity =>
+        {
+            entity.Property(activity => activity.Title).HasMaxLength(Constant.ActivityField.TitleLength);
+            entity.Property(activity => activity.Location).HasMaxLength(Constant.ActivityField.LocationLength);
+
+            // Required with no database default, unlike the user's preferences: a row whose
+            // visibility nobody chose is a row whose reader would be deciding who may see it.
+            entity.Property(activity => activity.Type)
+                .HasMaxLength(Constant.ActivityField.TypeLength)
+                .IsRequired();
+
+            entity.Property(activity => activity.CoverImageBlobPath)
+                .HasMaxLength(Constant.ActivityField.CoverImageBlobPathLength);
+
+            // The closed set is enforced by the engine, not only by the service that writes it:
+            // otherwise 'Friends' stores successfully and is then visible to nobody, or -- if a
+            // reader treated an unknown value as the most permissive one -- to everybody.
+            entity.ToTable(table => table.HasCheckConstraint(
+                TypeConstraintName,
+                $"[{nameof(Activity.Type)}] IN "
+                + $"({string.Join(", ", Constant.ActivityType.All.Select(type => $"'{type}'"))})"));
+
+            // The creator is a plain column and deliberately not a relationship: the model
+            // declares no foreign keys, so a deleted user leaves their entries standing rather
+            // than taking them with it. Which of the two the product wants is the debt
+            // register's question; this is the behaviour today, said out loud.
+            entity.Property(activity => activity.CreatedByUserId)
+                .HasMaxLength(Constant.ActivityField.CreatedByUserIdLength)
+                .IsRequired();
         });
 
         modelBuilder.Entity<User>(entity =>

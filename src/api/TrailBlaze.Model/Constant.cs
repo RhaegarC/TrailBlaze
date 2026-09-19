@@ -49,6 +49,23 @@ public static class Constant
 
         public static readonly string VideoTooLarge =
             $"The video must be {Upload.VideoSizeCapBytes / (1024 * 1024)} MB or smaller.";
+
+        // Activity validation. Rejections, never rewrites: this is text the caller typed, so
+        // shortening it would be storing something they did not write.
+        public const string TitleRequired = "Title is required.";
+
+        public const string LocationRequired = "Location is required.";
+
+        public const string ActivityDateRequired = "Activity date is required.";
+
+        public static readonly string TitleTooLong =
+            $"Title must be {ActivityField.TitleLength} characters or fewer.";
+
+        public static readonly string LocationTooLong =
+            $"Location must be {ActivityField.LocationLength} characters or fewer.";
+
+        public static readonly string TypeNotAllowed =
+            $"Type must be one of: {string.Join(", ", ActivityType.All)}.";
     }
 
     public static class ConfigKey
@@ -142,6 +159,28 @@ public static class Constant
     }
 
     /// <summary>
+    /// The values <c>Activity.Type</c> accepts. A closed set the engine also enforces:
+    /// <c>CK_Activities_Type</c> is composed from it.
+    /// </summary>
+    public static class ActivityType
+    {
+        /// <summary>Anonymous callers may read it.</summary>
+        public const string Public = "Public";
+
+        /// <summary>Signed-in callers may read it.</summary>
+        public const string Shared = "Shared";
+
+        /// <summary>Its creator and administrators may read it.</summary>
+        public const string Private = "Private";
+
+        /// <summary>What an absent type means on create.</summary>
+        public const string Default = Public;
+
+        /// <summary>The values <c>Activity.Type</c> accepts.</summary>
+        public static readonly string[] All = [Public, Shared, Private];
+    }
+
+    /// <summary>
     /// The two presentation preferences a profile carries, and the values each accepts. A
     /// closed set rather than free text: both columns are non-nullable with a default, so a
     /// value outside this list is not a variation to tolerate but a caller to reject.
@@ -197,6 +236,26 @@ public static class Constant
         /// <summary>Shared by <c>PreferredTheme</c> and <c>PreferredLanguage</c>: both hold
         /// one of a handful of short tokens.</summary>
         public const int PreferenceLength = 16;
+    }
+
+    /// <summary>
+    /// The length each <c>activities</c> column is bounded to, from the PRD's data-model row.
+    /// <c>Description</c> is absent because it is deliberately unbounded — it is the long-text
+    /// field.
+    /// </summary>
+    public static class ActivityField
+    {
+        public const int TitleLength = 200;
+
+        public const int LocationLength = 200;
+
+        public const int TypeLength = 16;
+
+        public const int CoverImageBlobPathLength = 512;
+
+        /// <summary>Holds an Entra object id, the same value <c>users.Id</c> is keyed on. Room
+        /// for a GUID and then some, so a longer identifier shape needs no migration.</summary>
+        public const int CreatedByUserIdLength = 128;
     }
 
     /// <summary>

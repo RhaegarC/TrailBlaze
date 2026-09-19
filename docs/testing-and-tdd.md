@@ -14,22 +14,29 @@ The API is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBla
 xUnit test project (`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`,
 `TrailBlaze.Service.Test`). New tests go in the project matching the layer they exercise.
 
-**The case that looked like an exception was claimed and then unclaimed.** Feature 03 first answered
-it by giving `TrailBlaze.Service.Test` a `ProjectReference` to `TrailBlaze.Repository.Test` so four
-store-backed service tests could run there; the service they tested was removed in review, the tests
-went with it, and the reference was reverted rather than left behind. So the rule stands as written
-and **the case it does not cover is still open** — a test whose subject is service-layer logic but
-which needs a store. [Item 25](tech-debt/25-service-test-tier-is-empty.md) owns that question, still
-recommends splitting by claim kind, and now records feature 03 as a decision that was taken and
-withdrawn rather than one that settled it.
+**The case that looked like an exception was claimed and then unclaimed — and feature 04 then split
+it instead.** Feature 03 first answered it by giving `TrailBlaze.Service.Test` a `ProjectReference`
+to `TrailBlaze.Repository.Test` so four store-backed service tests could run there; the service they
+tested was removed in review, the tests went with it, and the reference was reverted rather than left
+behind. Feature 04 (2026-09-19) then took
+[item 25](tech-debt/25-service-test-tier-is-empty.md)'s recommendation for real: **split by claim
+kind.** A claim *decided by the request* — the field rules, the request shape, what the service hands
+the repository — runs offline in `TrailBlaze.Service.Test`. A claim *about what the store does* — the
+column type, the check constraint, the soft-delete filter, the audit stamp — runs in
+`TrailBlaze.Repository.Test`, container-backed where it must be. No reference was added, no fake
+database appeared, and the tier that was empty now holds 35 tests. **What that leaves is the seam
+between the two**: no tier drives `ActivityService` → `IDbRepository` → SQL Server in one run, so the
+service's wiring is asserted against a recording double and the store's behaviour through direct
+repository calls, and neither test would catch the two being wired to each other wrongly. Item 25
+stays open for that, narrowed.
 
-**Current state (2026-09-19).** Two containers back the suite — `azure-sql-edge` and
-`azure-storage-edge`, started by [`docker-compose.test.yml`](../src/api/docker-compose.test.yml) —
-and 68 tests are discovered: 62 in `TrailBlaze.Repository.Test`, 2 in `TrailBlaze.Service.Test`, 4 in
-`TrailBlaze.Api.Test`. **With the containers running all 68 pass. With nothing configured, 35 pass
-and 33 skip** — and that second number is the honest description of a bare machine, not a failure.
-Measured, not derived: the run reports `Failed: 0, Passed: 35, Skipped: 33, Total: 68` across the
-three projects.
+**Current state (2026-09-19, after feature 04).** Two containers back the suite —
+`azure-sql-edge` and `azure-storage-edge`, started by
+[`docker-compose.test.yml`](../src/api/docker-compose.test.yml) — and 123 tests are discovered: 80 in
+`TrailBlaze.Repository.Test`, 35 in `TrailBlaze.Service.Test`, 8 in `TrailBlaze.Api.Test`. **With the
+containers running all 123 pass. With nothing configured, 84 pass and 39 skip** — and that second
+number is the honest description of a bare machine, not a failure. Measured, not derived:
+`Failed: 0, Passed: 84, Skipped: 39, Total: 123` across the three projects.
 
 **This paragraph is the only place those counts are written down, and that is deliberate.** They
 were previously restated in the README, the PRD, the sprint file and STANDARD §10, and went stale in
@@ -42,8 +49,16 @@ deferred, and [item 12](tech-debt/12-feature-02-tests-deferred.md) tracks writin
 why the gap is the dangerous kind: an untested guard everyone believes is tested is worse than one
 known to be untested. Feature 03 (2026-09-19) added the first coverage of product behaviour rather
 than of the foundation — the `Role` constraint, its backfill, and the two reflection assertions that
-a role has no source but the row — so "the foundation is green" is no longer quite the whole story,
-but the profile slice still is not covered.
+a role has no source but the row — and feature 04 (same day) added the first *whole* product slice:
+activity CRUD, with its field rules, its request shape, its schema and its routes each asserted in
+the tier that owns the claim. The profile slice still is not covered.
+
+**A gap feature 04 found rather than closed.** The api tier's `[Authorize]` routes answer **500**, not
+401, when the host has no Entra tenant and audience — there is no scheme to challenge with, and
+`app.UseExceptionHandler()` turns the resulting throw into a problem+json 500. The start-up warning
+claims the opposite ("every request is anonymous"). Every test in that tier that exercises a
+protected route therefore has to configure a tenant and an audience first, which is why
+`ActivityRouteTests` does. [Item 28](tech-debt/28-unconfigured-auth-answers-500.md) owns it.
 
 `TestSupport/` lives in `TrailBlaze.Repository.Test` and holds the container fixtures,
 `TestEnvironment`, and `FakeUserContext`. **There is no fake for storage and none for the
@@ -66,17 +81,25 @@ startup database work left to make fatal.
 
 | Tier | Scope | Tooling | Runs |
 |---|---|---|---|
-| Backend unit | Upload validation, SAS policy construction, pagination clamping, ownership/permission evaluation once feature 09 lands, and reflection assertions that a value has no second source (`RoleComesFromTheRowTests`) | xUnit | Always — fast, offline |
-| Repository model | EF Core's *model* and its *generated SQL* — keys, column types and lengths, soft-delete predicates read through `ToQueryString()` | xUnit + EF Core | Always — offline, opens no connection |
-| Database | The real engine: the migration set applies, the fluent bounds reached `INFORMATION_SCHEMA`, a duplicate key collides, the soft-delete filter executes, audit JSON round-trips, a narrowing `ALTER COLUMN` is refused, a check constraint refuses a value outside its set, a default fills itself in; and the database it creates outlives the run | xUnit + SQL Edge | **`Category=Container`** — skips when unreachable |
+| Backend unit | Upload validation, activity field validation, SAS policy construction, pagination clamping, ownership/permission evaluation once feature 09 lands, and reflection assertions that a value has no second source (`RoleComesFromTheRowTests`) or no way in (`ActivityRequestShapeTests`) | xUnit | Always — fast, offline |
+| Repository model | EF Core's *model* and its *generated SQL* — keys, column types and lengths, soft-delete predicates read through `ToQueryString()`, a check constraint's SQL, and the absence of a relationship the docs might imply | xUnit + EF Core | Always — offline, opens no connection |
+| Database | The real engine: the migration set applies, the fluent bounds reached `INFORMATION_SCHEMA`, a duplicate key collides, the soft-delete filter executes, audit JSON round-trips, a narrowing `ALTER COLUMN` is refused, a check constraint refuses a value outside its set, a default fills itself in, a row round-trips through `DatabaseRepository` and is re-read in a fresh scope; and the database it creates outlives the run | xUnit + SQL Edge | **`Category=Container`** — skips when unreachable |
 | Storage | The real `AzureBlobStorageRepository`: upload, content-type round-trip, a minted SAS that the server accepts, public/private routing, a move | xUnit + Azure SDK | **`Category=Container`** — skips when unreachable |
-| Api host | The real pipeline through `WebApplicationFactory` with unreachable connection strings — a missing setting stops startup and the message names the key, and every registration in the composition root resolves | xUnit + `WebApplicationFactory` | Always — no database, deliberately |
+| Api host | The real pipeline through `WebApplicationFactory` with unreachable connection strings — a missing setting stops startup and the message names the key, every registration in the composition root resolves, and the activity routes answer 401 to an anonymous caller when Entra is configured | xUnit + `WebApplicationFactory` | Always — no database, deliberately |
 
-`Category=Container` is **the only trait in the solution**. That makes the two obvious filters easy
-to misread: `--filter "Category!=Container"` is not "the offline run", it is the 24 tests that touch
-*neither* container — which excludes the 11 storage tests, and those run on a bare machine too,
-because storage falls back to the emulator and needs no secret. The bare-machine run is plain
-`dotnet test`, which is 35 passed and 33 skipped.
+`Category=Container` is **the only trait in the solution**, and 50 of the 123 carry it: 39 in the
+database tier and 11 in the storage tier. That makes the two obvious filters easy to misread.
+`--filter "Category!=Container"` selects 73 and is not "the offline run", because it excludes those
+11 storage tests — which run on a bare machine too, since storage falls back to the emulator and
+needs no secret. Each of the three projects' numbers is `Passed / Skipped / Total` on a machine with
+nothing configured:
+
+| Project | Bare machine | With the containers |
+|---|---|---|
+| `TrailBlaze.Service.Test` | 35 / 0 / 35 | 35 / 0 / 35 |
+| `TrailBlaze.Repository.Test` | 41 / 39 / 80 | 80 / 0 / 80 |
+| `TrailBlaze.Api.Test` | 8 / 0 / 8 | 8 / 0 / 8 |
+| **All three** | **84 / 39 / 123** | **123 / 0 / 123** |
 
 ## What still runs offline, and why it is worth keeping
 

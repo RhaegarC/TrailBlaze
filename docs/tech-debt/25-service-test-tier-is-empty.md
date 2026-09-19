@@ -1,7 +1,34 @@
-# 25 — `TrailBlaze.Service.Test` has no tests, and no way to host the ones it needs
+# 25 — Nothing drives the service against a store, so the seam between them is untested
 
 Status: **Open** · Kind: test-gap · Impact: friction · Area: Tests
 Source: found 2026-09-18 (during the container-backed test change) · Discharges via: features 06/08 (in part) · Opened: 2026-09-18 · Last verified: 2026-09-19
+
+## Update — 2026-09-19 (feature 04): **(c) taken for real**, and the seam is what is left
+
+Feature 04 answered the decision by doing it rather than by arguing it, and took **(c)**. The split
+it drew, for activity CRUD:
+
+| Claim | Tier |
+|---|---|
+| Decided by the request — field rules, what is stored, the request's own shape | `TrailBlaze.Service.Test`, offline |
+| About the store — column type and bounds, the check constraint, the soft-delete filter, the audit stamp, the row round-trip | `TrailBlaze.Repository.Test`, container-backed where it must be |
+
+No `ProjectReference` was added, no fake database appeared, and the mechanism for the one service
+claim that mentions a repository — what the service *hands* it — is a recording double defined inside
+the test file that uses it, which answers no reads. **Fact 1 is now firmly closed**: the project
+holds tests of real product behaviour, and (c)'s cost is visible in the same PR rather than deferred
+— the spec bullets name whose behaviour they assert. The counts themselves live in
+[testing-and-tdd.md](../testing-and-tdd.md), which is their only home.
+
+**What (c) does not buy, stated plainly.** The two tiers meet nowhere. No test drives
+`ActivityService` → `IDbRepository` → SQL Server in one run: the service tier cannot construct a
+`TrailBlazeContext` (it does not reference `TrailBlaze.Repository`) and the api tier cannot
+authenticate without an Entra tenant, so its connection string points at a dead port on purpose. A
+service wired to the wrong repository method, or a `DbSet` the context does not map, is caught by
+neither — the first because the double answers only the calls the service makes, the second because
+only the repository tier builds a context at all. **That seam is now the whole of this item**, and it
+is the same question as [item 26](26-composition-root-never-opened-a-connection.md) asked from the
+service side. Its repair steps 1–4 are done or superseded; what follows below is the record.
 
 ## Update — 2026-09-19 (feature 03)
 
@@ -40,8 +67,10 @@ decision when those features start.
 
 Two related facts, and the second is the one that costs.
 
-*Both facts below are as filed on 2026-09-18. Fact 1 no longer holds — see the update above. Fact 2
-still does, and is now the whole of the item.*
+*Both facts below are as filed on 2026-09-18, and **both are now retired as statements** — fact 1 by
+feature 03 and feature 04, fact 2 by feature 04's split. What survives is neither of them: it is that
+the two tiers the split created meet nowhere, so nothing drives the service against a store. The
+updates above are the record; this section is kept as what the item was filed as.*
 
 **1. The project contains no tests.** `src/api/TrailBlaze.Service.Test/` holds a `.csproj` and build
 output, nothing else — no `.cs` file at all. `dotnet test` still discovers and reports the project as
@@ -55,10 +84,15 @@ derivation, URL shape — can live here. Every claim that is *about a store* can
 
 | Claim the specs want | Tier that could host it | Currently |
 |---|---|---|
-| feature 06 — the per-activity count cap at 19/20/21 | needs a query, so an engine | no home |
-| feature 06 — a refused upload leaves no orphan blob | needs a listable store | no home |
-| feature 08 — the destination container per `Type` | needs an observable store | no home |
-| feature 08 — the move leaves the source empty | needs an observable store | no home |
+| feature 06 — the per-activity count cap at 19/20/21 | needs a query, so an engine | `TrailBlaze.Repository.Test` — a store outcome, per the (c) split feature 04 took |
+| feature 06 — a refused upload leaves no orphan blob | needs a listable store | `TrailBlaze.Repository.Test`, same reasoning |
+| feature 08 — the destination container per `Type` | needs an observable store | `TrailBlaze.Repository.Test`, same reasoning |
+| feature 08 — the move leaves the source empty | needs an observable store | `TrailBlaze.Repository.Test`, same reasoning |
+
+**Each of those four asserts the *repository's* behaviour, not the service's** — which is (c)'s cost,
+paid by naming it. Whether the rule that chooses the container lives in the service or the repository
+is the question each spec answers when it is written; feature 04's answer was that the rule lives in
+the service (asserted offline) and the outcome in the repository tier.
 
 Those four bullets were written against the deleted `IStorageRepository` fake, which is why they had
 a home before and do not now.
@@ -141,8 +175,9 @@ repository's state — is a real, describable claim. The cost is that the spec b
 
 ## Close checklist
 
-- [ ] The project contains at least one test, or the reason it does not is written down
-- [ ] A service-layer claim that needs a store names the tier that runs it
-- [ ] The four spec bullets point at a tier that can host them
-- [ ] The tier table in [testing-and-tdd.md](../testing-and-tdd.md) accounts for this project
-- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)
+- [x] The project contains at least one test, or the reason it does not is written down
+- [x] A service-layer claim that needs a store names the tier that runs it
+- [ ] The four spec bullets point at a tier that can host them — **done in the (c) split, but 06 and
+      08 must reread it against their own specs** rather than inherit it by default
+- [x] The tier table in [testing-and-tdd.md](../testing-and-tdd.md) accounts for this project
+- [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md) — stays open for the seam
