@@ -51,8 +51,7 @@ public class DatabaseRepository(TrailBlazeContext context) : IDbRepository
     {
         IQueryable<T> query = Context.Set<T>().Where(predicate);
 
-        // Counted before the page is taken, and after the filter: the total describes what the
-        // caller can page through, not what the table holds.
+        // Counted after the filter and before the take: the total is what the caller can page through.
         int total = await query.CountAsync();
         List<T> items = await orderBy(query).Skip(skip).Take(take).ToListAsync();
 

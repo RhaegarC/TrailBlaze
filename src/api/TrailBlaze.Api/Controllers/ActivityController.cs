@@ -48,8 +48,7 @@ public class ActivityController(IActivityService activityService) : ControllerBa
             return Respond(outcome);
         }
 
-        // The Location header names the route that reads it back, so a client that just
-        // created an entry does not have to construct the address for it.
+        // CreatedAtAction, so the Location header names the route that reads the entry back.
         return CreatedAtAction(nameof(Get), new { id = outcome.Activity!.Id }, outcome.Activity);
     }
 

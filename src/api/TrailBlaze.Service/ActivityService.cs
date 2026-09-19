@@ -33,8 +33,7 @@ public sealed class ActivityService(
             errors[nameof(input.ActivityDate)] = [Constant.Message.ActivityDateRequired];
         }
 
-        // An absent type is a caller who supplied none, which is not a value to reject: the
-        // default answers it. Only a value that names something is checked against the set.
+        // An absent type is a caller who supplied none, which the default answers rather than a rejection.
         if (!ActivityDraft.IsKnownType(input.Type))
         {
             errors[nameof(input.Type)] = [Constant.Message.TypeNotAllowed];
@@ -58,9 +57,8 @@ public sealed class ActivityService(
                 return ActivityOutcome.Rejected(errors);
             }
 
-            // The route carries [Authorize], so this is a token that validated without identifying
-            // anyone. There is no one to attribute an entry to, and an unattributed entry is one
-            // nobody may edit and nobody may be shown as having written.
+            // The route carries [Authorize], so this is a token that validated without naming anyone,
+            // and an entry with no author is one nobody may edit.
             string? caller = userContext.EntraObjectId;
 
             if (string.IsNullOrWhiteSpace(caller))
@@ -78,9 +76,7 @@ public sealed class ActivityService(
                 Description = draft.Description,
                 Type = draft.Type,
 
-                // Attribution is read from the request in flight and never from the body, which has
-                // no property for it. Id, CreatedOn and CreatedBy are left to EntityBase and the
-                // audit interceptor.
+                // From the request in flight, never the body, which has no property for it.
                 CreatedByUserId = caller,
             };
 
@@ -125,8 +121,7 @@ public sealed class ActivityService(
                 ? Constant.ActivityPaging.DefaultPageSize
                 : Math.Min(pageSize, Constant.ActivityPaging.MaxPageSize);
 
-            // A page index this large is a past-the-end request rather than an overflow:
-            // saturating the skip keeps the answer an empty page instead of a negative OFFSET.
+            // Saturating keeps a huge page index a past-the-end request rather than a negative OFFSET.
             int skip = (int)Math.Min((long)appliedPage * appliedSize, int.MaxValue);
 
             (List<Activity> items, int total) = await dbRepository.GetPageAsync<Activity>(
@@ -137,8 +132,7 @@ public sealed class ActivityService(
 
             return new ActivityPage
             {
-                // A caller with no token is shown no blob path at all: a cover may live in the
-                // private container, and a path is the address a SAS is minted for.
+                // A path is the address a SAS is minted for, so a token-less caller is shown none.
                 Items = [.. items.Select(item => ToResponse(item, includeCoverPath: caller is not null))],
                 Page = appliedPage,
                 PageSize = appliedSize,
@@ -159,8 +153,7 @@ public sealed class ActivityService(
 
         try
         {
-            // Read before validating, so an id that names nothing is a 404 whatever the body says:
-            // the alternative answers "your date is malformed" about an entry that does not exist.
+            // Read before validating, so an id that names nothing is a 404 whatever the body says.
             Activity? activity = await FindAsync(id);
 
             if (activity is null)
@@ -182,17 +175,14 @@ public sealed class ActivityService(
             activity.ActivityDate = draft.ActivityDate;
             activity.Description = draft.Description;
 
-            // The one field an omission does not default. An absent type leaves the stored value
-            // alone rather than falling back to Public: a visibility change is a disclosure, so it
-            // has to be asked for. Falling back here would publish an entry whenever a client sent
-            // a body that predated the field.
+            // The one field an omission does not default: a visibility change is a disclosure, so it
+            // has to be asked for rather than fall out of a body that predated the field.
             if (!string.IsNullOrWhiteSpace(request.Type))
             {
                 activity.Type = draft.Type;
             }
 
-            // Read, changed, written back — never replaced with a fresh entity. UpdateAsync writes
-            // every property, so one built from the request alone would blank `CreatedOn`.
+            // Read, changed, written back — never replaced, because UpdateAsync writes every property.
             await dbRepository.UpdateAsync(activity);
 
             return ActivityOutcome.Completed(ToResponse(activity, includeCoverPath: true));
