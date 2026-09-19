@@ -127,42 +127,17 @@ public static class Constant
         public const string Media = "media";
     }
 
-    /// <summary>
-    /// The role column's closed set. Two values, and the smallness is the design: there is no
-    /// promotion screen and no role management, so a third value would be a third authorization
-    /// behaviour with nothing that could reach it.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The set is enforced in three places, deliberately, and each covers a writer the others
-    /// cannot see. <c>User.Role</c> defaults to <see cref="User"/>, so a row inserted by code
-    /// that never mentions the column lands on the powerless value. The mapping composes a
-    /// check constraint from <see cref="All"/>, so the engine refuses anything else whatever
-    /// wrote it — a script, a support query, a future feature. And the fluent configuration
-    /// bounds the column, which catches the one failure the constraint would not: a value long
-    /// enough to be truncated into a different, valid-looking role.
-    /// </para>
-    /// <para>
-    /// The check constraint is composed from <see cref="All"/> rather than written out beside
-    /// it, so a value added here cannot leave a column still admitting only the old set. That
-    /// composition is not enough on its own: the constraint lives in the schema, so changing
-    /// this list requires a migration, and the repository tier asserts the SQL against a
-    /// literal so the omission is caught rather than shipped.
-    /// </para>
-    /// </remarks>
+    /// <summary>The values <c>User.Role</c> accepts. Changing this list needs a migration, and
+    /// <c>CK_Users_Role</c> is composed from it.</summary>
     public static class UserRole
     {
-        /// <summary>An ordinary signed-in person, and the default. Grants nothing beyond what
-        /// every authenticated caller may do.</summary>
+        /// <summary>An ordinary signed-in person, and the default.</summary>
         public const string User = "User";
 
-        /// <summary>The administrator. Granted by hand, by updating the row's `Role` column
-        /// in the database — there is no endpoint and no startup path that sets it. Read by
-        /// feature 09's override; nothing in this feature acts on it.</summary>
+        /// <summary>The administrator, granted by setting the row's <c>Role</c> column by hand.</summary>
         public const string Admin = "Admin";
 
-        /// <summary>The values <c>User.Role</c> accepts, and the source of the constraint that
-        /// enforces them.</summary>
+        /// <summary>The values <c>User.Role</c> accepts.</summary>
         public static readonly string[] All = [User, Admin];
     }
 

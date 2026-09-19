@@ -15,20 +15,8 @@ public sealed class User : EntityBase
 {
     public string? DisplayName { get; set; }
 
-    /// <summary>
-    /// What this person may do, from the closed set in <see cref="Constant.UserRole"/>.
-    /// Non-nullable with a default of <c>User</c>, and the two halves of that say different
-    /// things: non-nullable because every reader of this column is an authorization decision
-    /// and none of them may have to decide what an absent role means, and <c>User</c> because
-    /// the value a row lands on when nothing said otherwise must be the one that grants
-    /// nothing.
-    /// </summary>
-    /// <remarks>
-    /// The value is a stored fact rather than a claim. Nothing in this app reads a role out of
-    /// a token, which is why this column is the only source a check has —
-    /// <c>CallerRoleService</c>. The column is also constrained to the set at the database, so
-    /// a value outside it cannot be stored by anything, this application included.
-    /// </remarks>
+    /// <summary><c>User</c> or <c>Admin</c>. Defaults to <c>User</c>, and is set by hand in the
+    /// database rather than by anything in the application.</summary>
     public string Role { get; set; } = Constant.UserRole.User;
 
     /// <summary>The profile bio. Nullable, and normalised so that whitespace-only is null.</summary>

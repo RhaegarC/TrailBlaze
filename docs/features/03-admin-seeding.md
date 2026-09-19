@@ -14,7 +14,8 @@ Source: [PRD](../PRD.md) — Decisions #9/#21 + "Authentication & authorization"
 The `users.Role` column: non-null, defaulting to `User`, bounded, and constrained to the closed set
 `User`/`Admin`. The administrator is a **database fact** — one row with `Role` set to `Admin`, set by
 hand, by whoever operates the deployment. Nothing in the application grants, promotes, or seeds it,
-and nothing reads a role from a token: the role is resolved from the caller's own row.
+and nothing reads a role from a token: the only role the application hands back is the one on the
+caller's own row, by way of `/user/me`.
 
 **State at the start (2026-09-15).** The `Role` property existed on the `User` entity, but as a
 nullable `string` with no default, no length, and no constraint to `User`/`Admin` — so the column was
@@ -22,9 +23,10 @@ present and the *rule* was not.
 
 **State now.** The column is non-null, defaulted to `User`, bounded to 16 characters and
 check-constrained to the closed set by `CK_Users_Role`; `20260919032941_ConstrainUserRole` backfills
-and tightens it. The caller's role is answered from their own row by `ICallerRoleService`. There is
-no seeding path, no admin configuration key, and no hosted service — see
-[Decisions](#decisions), which records that removal.
+and tightens it. `/user/me` already returns the caller's own `Role` from their row, and the two ways
+a role could arrive from anywhere *else* — a claim, or a payload — are asserted absent. There is no
+seeding path, no admin configuration key, and no hosted service; see [Decisions](#decisions), which
+records those removals.
 
 ## Story
 
@@ -55,13 +57,18 @@ elevated rights exist without a grant screen, an invitation flow, or an applicat
       constraint — because each is refused by the state the one before it removes; verified against
       a populated database, not only an empty one. Applied by the pipeline, unchanged from 01:
       `Program.cs` still carries no `MigrateAsync` call
-- [x] The role is resolved from the `users` row keyed by the caller's Entra object id — never from
-      a token claim (PRD "Authentication & authorization"). `CallerRoleService` reads the object id
-      and nothing else; `CallerRoleTests` covers the row-says-`User`, no-row and no-identity cases
+- [~] The role is resolved from the `users` row keyed by the caller's Entra object id — never from
+      a token claim (PRD "Authentication & authorization"). **Half met, and the half that is missing
+      is deliberate.** The prohibition holds and is asserted: `RoleComesFromTheRowTests` pins that
+      neither the caller abstraction nor the profile edit request carries a `Role`, so there is no
+      claim-shaped or payload-shaped source for one. The positive — a server-side read of the row —
+      was built as `ICallerRoleService` and **removed the same day**, because nothing consumed it and
+      `/user/me` already answers the same question from the same row. Feature 09 adds the read it
+      needs, when it has a caller to make it for
 - [x] ~~The identity abstraction from 02 exposes `Role`, so a later authorization check has exactly
-      one place to ask~~ — **not done as worded; see [Decisions](#decisions).** The role is exposed
-      by a new `ICallerRoleService` instead, and `IUserContextService` is asserted to still have no
-      `Role` (`RoleComesFromTheRowTests`)
+      one place to ask~~ — **not done as worded, and not replaced either; see
+      [Decisions](#decisions).** `IUserContextService` is asserted to have no `Role`, and the role
+      is served to the client by `UserProfileResponse` instead
 - [x] A user auto-provisioned by 02's path is inserted with `Role = User`, and no request payload
       or claim can make it `Admin`. The column default covers any insert that does not name it, and
       `RoleComesFromTheRowTests.The_profile_edit_request_offers_no_role` asserts `UpdateProfileRequest`
@@ -91,8 +98,17 @@ startup seeder:
 
 `AdminSeed`, `AdminSeedingService`, `IAdminSeedingService`, `AdminSeedingHostedService`,
 `AdminSeedingTests`, the `AdminObjectId`/`AdminDisplayName` keys and the length check on the seeded
-display name are all gone with them. Their removal takes a test count with it: this feature now adds
+display name are all gone with them. Their removal takes a test count with it: this feature added
 **11 tests**, where the seeder's version added 17.
+
+**Removed on 2026-09-19, in review.** `ICallerRoleService`, `CallerRoleService` and
+`CallerRoleTests` went the same day as the seeder, for a different reason. The criterion above asked
+for the role to be readable from the row, and this served that — but nothing called it. `/user/me`
+already returns `Role` on `UserProfileResponse` from the same row, so the service was a second way to
+ask one question, with no caller to justify it, and would have been the first thing feature 09 had to
+work around rather than use. **11 tests became 7**: the four `CallerRoleTests` cases went with it, and
+`RoleComesFromTheRowTests` — which is the negative half of the rule, and the half that can be
+asserted without a caller — stayed.
 
 ## Tests (TDD)
 
@@ -113,15 +129,18 @@ wrong now. What was actually written, by tier:
   out-of-set rows come out as `User` while a pre-existing `Admin` is preserved, the column ends up
   `IS_NULLABLE = 'NO'`, the engine itself refuses a third role with SQL error 547 naming
   `CK_Users_Role`, and a bare `INSERT` with no `Role` lands as `User`.
-- **Service (`TrailBlaze.Service.Test`).** No longer empty. `CallerRoleTests` (container) covers the
-  row, the missing row, the missing identity and the soft-deleted row. `RoleComesFromTheRowTests`
-  (offline) is the reflection assertion that the role has nowhere else to come from. This project
-  gained a `ProjectReference` to `TrailBlaze.Repository.Test` to reach `TestSupport/` — see
-  [Decisions](#decisions).
-- **API (`TrailBlaze.Api.Test`, offline).** `CompositionRootTests` resolves `ICallerRoleService`,
-  which is the one registration this feature adds. The startup theory is back to the two connection
-  strings: with no admin keys to require, there is no longer a configuration mistake that this tier
-  knows about and the composition root does not.
+- **Service (`TrailBlaze.Service.Test`, offline).** No longer empty, and no longer container-backed.
+  `RoleComesFromTheRowTests` is the reflection assertion that the role has nowhere else to come
+  from — two `Assert.DoesNotContain` calls over `IUserContextService` and `UpdateProfileRequest`.
+  Its container sibling, `CallerRoleTests`, was removed with `ICallerRoleService` (see above), and
+  the `ProjectReference` to `TrailBlaze.Repository.Test` went with it, so this project is back to
+  what `develop` has. The tier is two tests, both offline, and that is the honest count for a
+  feature that added no service logic — see [Decisions](#decisions).
+- **API (`TrailBlaze.Api.Test`, offline).** `CompositionRootTests` gained nothing from this feature
+  and asserts nothing new: the registration it would have covered, `ICallerRoleService`, was the one
+  this review removed, and the two connection strings are what the composition root takes. The
+  startup theory is back to those two: with no admin keys to require, there is no longer a
+  configuration mistake that this tier knows about and the composition root does not.
 
 What the tests still cannot speak to is deployment shape — one container is not several ACA
 replicas, and no test signs in through Entra. See [testing-and-tdd.md](../testing-and-tdd.md).
@@ -131,15 +150,17 @@ replicas, and no test signs in through Entra. See [testing-and-tdd.md](../testin
 Four choices this feature made that differ from what the file, or a neighbouring document,
 originally said. Each is recorded here rather than only in code.
 
-1. **The role is a service, not a property on `IUserContextService`.** The criterion above asked
-   for `Role` on 02's identity abstraction. That abstraction is synchronous and claims-only and is
-   implemented in the Api layer; a role read from the row would have put data access in the
-   entrance and made the Api layer reach back into the Service layer, which is a cycle the solution
-   is not built on. `ICallerRoleService.GetRoleAsync` sits in `TrailBlaze.Interface/Service/` and is
-   implemented in `TrailBlaze.Service`. The consequence is that there are now **two** ways to ask
-   about the caller and a reader has to know which answers what — worth the price, because the
-   alternative was a layer violation, and `RoleComesFromTheRowTests` pins the split so it cannot
-   quietly reunite.
+1. **The role is not on `IUserContextService`, and it is not on a service of its own either.** The
+   criterion above asked for `Role` on 02's identity abstraction. That abstraction is synchronous,
+   claims-only, and implemented in the Api layer, so a role read from the row would have put data
+   access in the entrance — which is why the criterion was struck. The first replacement was
+   `ICallerRoleService`, in `TrailBlaze.Interface/Service/` and implemented in `TrailBlaze.Service`,
+   and it was removed in review for a reason the criterion itself supplies: **no one was asking.**
+   `/user/me` returns `Role` on `UserProfileResponse` from the caller's own row, so the service
+   could not answer a question the application lacked an answer to. What is left is the negative
+   half, and it is the half this feature can prove: `RoleComesFromTheRowTests` asserts that neither
+   the caller abstraction nor the edit request carries a `Role`, so a token or a body has nowhere to
+   put one. The read belongs to feature 09, which will have an authorization check to make with it.
 2. **The administrator is a database fact, not a startup behaviour.** An earlier revision of this
    feature seeded the configured administrator from two required settings at boot — a hosted
    service, a read-then-insert-then-promote service, and a configuration path that refused to start
@@ -156,15 +177,19 @@ originally said. Each is recorded here rather than only in code.
    guarantee in one respect — nothing stops a deployment from having no administrator — and the
    trade is taken deliberately: the failure is visible the first time an admin action is attempted,
    and it is visible to the person who owns the credential, rather than being a silent rewrite of a
-   privilege column that no one asked for. The role is still read from the row, which is what
-   feature 09 needs and what this feature's remaining criteria assert.
-3. **Store-backed service tests run in `TrailBlaze.Service.Test`.** That project gained a
-   `ProjectReference` to `TrailBlaze.Repository.Test` to reuse its fixtures and `TestSupport/`.
-   [Tech-debt 25](../tech-debt/25-service-test-tier-is-empty.md) already owned this question and
-   recommends the opposite split; taking the other option is recorded there rather than diverged
-   from in silence. The tier rule is "new tests go in the project matching the layer they exercise",
-   the role logic is service-layer logic, and the measured cost is small — `Service.Test` still runs
-   offline in milliseconds, skipping its four container tests.
+   privilege column that no one asked for. The role stays readable from the row, by way of the
+   profile response; what this feature asserts is that it is readable from nowhere else.
+3. **The service test tier stays as `develop` has it, and this feature withdraws its earlier answer
+   to [tech-debt 25](../tech-debt/25-service-test-tier-is-empty.md).** As first written, this feature
+   gave `TrailBlaze.Service.Test` a `ProjectReference` to `TrailBlaze.Repository.Test` and four
+   container tests with it, and recorded that decision against item 25's recommendation of the
+   opposite split. Those four tests were `CallerRoleTests`, and they went with the service they
+   tested. Reverting the `csproj` rather than leaving an unreferenced package behind means this PR
+   no longer touches that file at all, and item 25 stays open with its recommendation unanswered —
+   which is the correct state, because **a project reference taken to support tests that were then
+   deleted is not an answer to the question, it is a leftover.** The question item 25 asks is real
+   and the next feature that puts real logic in the service tier is the one that should answer it,
+   on its own evidence.
 4. **Nothing in the application writes `Admin`.** With the seeder gone there is no code path that
    sets `Role` to anything but the column's default: `UserService` inserts without naming the column
    and assigns four fields on update, none of them `Role`. The check constraint admits `Admin`

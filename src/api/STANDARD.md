@@ -566,12 +566,12 @@ each one catches a specific regression that had already happened once.
 > **State as of 2026-09-19:** `TrailBlaze.Repository.Test` runs against two containers —
 > `azure-sql-edge` and `azure-storage-edge`, started by `docker-compose.test.yml` — and every test
 > that needs one is tagged `Category=Container` and **skips** when it cannot reach it.
-> `TrailBlaze.Api.Test` stays offline. `TrailBlaze.Service.Test` holds tests again as of feature 03:
-> `CallerRoleTests` is `Category=Container`, `RoleComesFromTheRowTests` is offline, and the project
-> references `TrailBlaze.Repository.Test` for `TestSupport/` — a test
-> project referencing a test project, which
-> [tech-debt 25](../../docs/tech-debt/25-service-test-tier-is-empty.md) records as the settled
-> answer to where a store-backed service assertion runs.
+> `TrailBlaze.Api.Test` stays offline. `TrailBlaze.Service.Test` holds tests again as of feature 03,
+> and they are offline too: `RoleComesFromTheRowTests`, two reflection assertions that a role has no
+> source but the row. The project has no container test and no reference to another test project —
+> the one it briefly had, for a service deleted in review, went with it
+> ([tech-debt 25](../../docs/tech-debt/25-service-test-tier-is-empty.md) still asks where a
+> store-backed service assertion runs, and feature 03 turned out not to need the answer).
 
 ### Two tiers, and which one runs when
 

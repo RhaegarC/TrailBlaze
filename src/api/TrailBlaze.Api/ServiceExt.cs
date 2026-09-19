@@ -44,12 +44,6 @@ internal static class ServiceExt
         // Register service
         services.AddScoped<IUserService, UserService>();
 
-        // The caller's role, for whatever authorizes against it. Scoped rather than singleton
-        // because it reads the request in flight for the caller's object id, and registered
-        // separately from IUserContextService because it is the one identity question that has
-        // to reach the database — see ICallerRoleService.
-        services.AddScoped<ICallerRoleService, CallerRoleService>();
-
         // Stateless, but registered rather than static so the upload rules have one home the
         // routes depend on through injection: if a cap ever needs to come from configuration
         // rather than Constant, that changes here and no caller changes at all.

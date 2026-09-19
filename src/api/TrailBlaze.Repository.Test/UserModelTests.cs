@@ -84,12 +84,8 @@ public sealed class UserModelTests
     /// The role is non-nullable and defaults to <c>User</c>.
     /// </summary>
     /// <remarks>
-    /// Non-nullable, so no reader has to decide what an absent role means — the same argument
-    /// the preferences carry, applied to the one column where guessing is a security decision.
-    /// <c>User</c> rather than <c>Admin</c> is least privilege as a default: a row inserted by
-    /// a path that never mentions the column, or one that predates it, lands on the powerless
-    /// value. Declaring it here is the column's half of that; the migration's backfill is the
-    /// other, and it defaults to the same value for the same reason.
+    /// <c>User</c> rather than <c>Admin</c>: a row inserted by a path that never mentions the
+    /// column, or one that predates it, must land on the value that grants nothing.
     /// </remarks>
     [Fact]
     public void The_role_column_is_non_nullable_and_defaults_to_user()
@@ -106,20 +102,10 @@ public sealed class UserModelTests
     /// The role is limited to the closed set by the engine, not only by the code that writes it.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Asserted against a literal rather than against <c>Constant.UserRole.All</c>, which is
-    /// what the mapping composes the SQL from. A test that read the same constant back would
-    /// agree with the mapping however the set changed, and would pass over a column still
-    /// admitting a value the constants had dropped; the literal fails there, and a change to
-    /// the set then has to be matched by a migration — which is true, because the constraint is
-    /// in the schema.
-    /// </para>
-    /// <para>
-    /// This is the model's declaration of it. That SQL Server actually refuses a third value,
-    /// and that the tightening applies to a table that already holds rows, are properties of
-    /// the migration rather than of the model, and belong to the container tier —
-    /// <see cref="UserRoleMigrationTests"/>.
-    /// </para>
+    /// Asserted against a literal, not against <c>Constant.UserRole.All</c> which is what the
+    /// mapping composes the SQL from: a test that read the same constant back would agree with
+    /// the mapping however the set changed. That the engine refuses a third value is a
+    /// property of the migration, and is <see cref="UserRoleMigrationTests"/>'.
     /// </remarks>
     [Fact]
     public void The_role_column_admits_only_the_closed_set()

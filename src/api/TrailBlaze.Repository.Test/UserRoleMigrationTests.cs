@@ -11,29 +11,17 @@ using TrailBlaze.Repository.Test.TestSupport;
 /// What the role constraint does to a <c>users</c> table that already holds rows.
 /// </summary>
 /// <remarks>
-/// <para>
-/// <see cref="UserModelTests"/> asserts what the model declares — non-nullable, defaulted,
-/// limited to <c>User</c> and <c>Admin</c> — and that is a claim about metadata. The claim the
-/// deployment rests on is different and harder: the migration must reach head against a table
-/// that was written under the old schema. Three things could go wrong there and none of them is
-/// visible from the model. A bare <c>ALTER COLUMN … NOT NULL</c> fails outright when even one
-/// row holds <c>NULL</c>, so the backfill has to run first. A check constraint added before the
-/// backfill is rejected by the data it is meant to describe. And a constraint that exists but
-/// admits everything refuses nothing, which is what the third test below is for.
-/// </para>
-/// <para>
-/// <b>A database each, not the class's shared one.</b> These tests drive a database to
-/// <c>InitialCreate</c> and write rows the model would not accept, which is a state no later
-/// test may inherit and which the shared fixture — migrated on construction — would have
-/// already taken past.
-/// </para>
+/// <see cref="UserModelTests"/> asserts what the model declares, which is a claim about metadata.
+/// This is the harder one the deployment rests on: the migration must reach head against a table
+/// written under the old schema. Each test takes its own database, because they drive one to
+/// <c>InitialCreate</c> and write rows the model would not accept — a state the shared fixture,
+/// migrated on construction, would already have taken past.
 /// </remarks>
 [Trait("Category", "Container")]
 public sealed class UserRoleMigrationTests(TrailBlazeServerFixture server)
     : IClassFixture<TrailBlazeServerFixture>
 {
-    /// <summary>The migration that creates <c>Users</c>, with <c>Role</c> unbounded and
-    /// nullable — the shape of every row written before feature 03.</summary>
+    /// <summary>The migration that creates <c>Users</c>, with <c>Role</c> nullable.</summary>
     private const string InitialCreate = "20260915144435_InitialCreate";
 
     /// <summary>The constraint the model declares, as the database names it.</summary>
@@ -47,14 +35,11 @@ public sealed class UserRoleMigrationTests(TrailBlazeServerFixture server)
     /// and the column tightened.
     /// </summary>
     /// <remarks>
-    /// Three rows, because there are three answers and only one of them is the obvious one.
-    /// <c>NULL</c> is the case the backfill exists for. <c>SuperUser</c> is the case it would be
-    /// easy to forget: it is not null, so a <c>WHERE Role IS NULL</c> backfill leaves it in
-    /// place — and the check constraint then fails against a row the deploy never intended to
-    /// keep, which stops the migration rather than the request that would have read it.
-    /// <c>Admin</c> is the control: a legitimate value must survive untouched, or the backfill
-    /// would silently demote the administrator — the one row whose <c>Role</c> is not the
-    /// default, and the one a backfill written carelessly would not think to spare.
+    /// Three rows for three answers. <c>NULL</c> is the case the backfill exists for.
+    /// <c>SuperUser</c> is the one it would be easy to forget — not null, so a
+    /// <c>WHERE Role IS NULL</c> backfill leaves it for the check constraint to refuse, stopping
+    /// the deploy. <c>Admin</c> is the control: a backfill written carelessly would demote the
+    /// one row that grants something.
     /// </remarks>
     [SkippableFact]
     public async Task Rows_written_before_the_constraint_survive_it()
@@ -99,10 +84,10 @@ public sealed class UserRoleMigrationTests(TrailBlazeServerFixture server)
     /// violation rather than as a length error.
     /// </summary>
     /// <remarks>
-    /// The number is asserted, not just "it threw". A length failure is also an exception, and
-    /// a bare <c>Assert.ThrowsAsync</c> would accept it — reading as though the closed set were
-    /// enforced when what actually rejected the row was its width. <c>SuperUser</c> is nine
-    /// characters against a sixteen-character column, so no width rule can be what refuses it.
+    /// The error number is asserted, not just "it threw": a length failure is also an exception,
+    /// and accepting any of them would read as though the set were enforced when what rejected
+    /// the row was its width. <c>SuperUser</c> is nine characters against a sixteen-character
+    /// column, so no width rule can be what refuses it.
     /// </remarks>
     [SkippableFact]
     public async Task The_engine_refuses_a_role_outside_the_closed_set()
@@ -140,10 +125,7 @@ public sealed class UserRoleMigrationTests(TrailBlazeServerFixture server)
     /// </summary>
     /// <remarks>
     /// <see cref="UserModelTests"/> proves the model carries a default; this proves SQL Server
-    /// was given one. The two are separate facts and the second is the one that holds for a
-    /// writer which is not this application — a script, a support query, a future migration.
-    /// <c>User</c> rather than <c>Admin</c> for the reason the whole column is arranged this
-    /// way: the value applied when nobody said anything must be the one that grants nothing.
+    /// was given one — the fact that holds for a writer which is not this application.
     /// </remarks>
     [SkippableFact]
     public async Task The_database_applies_the_user_default_itself()

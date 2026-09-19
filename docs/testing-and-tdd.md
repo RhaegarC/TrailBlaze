@@ -14,20 +14,21 @@ The API is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBla
 xUnit test project (`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`,
 `TrailBlaze.Service.Test`). New tests go in the project matching the layer they exercise.
 
-The rule has no exception, and feature 03 settled the case that looked like one: a test whose subject
-is service-layer logic but which needs a store still goes in `TrailBlaze.Service.Test`, which took a
-`ProjectReference` to `TrailBlaze.Repository.Test` to reach `TestSupport/`'s fixtures. Filing store-
-backed service assertions as "repository behaviour" would have put them in the tier whose name says
-they are about the wrong layer — the failure the suffix rule exists to prevent
-([codereview.md](../.claude/rules/codereview.md)). [Item 25](tech-debt/25-service-test-tier-is-empty.md)
-records the decision, including the recommendation it overrode.
+**The case that looked like an exception was claimed and then unclaimed.** Feature 03 first answered
+it by giving `TrailBlaze.Service.Test` a `ProjectReference` to `TrailBlaze.Repository.Test` so four
+store-backed service tests could run there; the service they tested was removed in review, the tests
+went with it, and the reference was reverted rather than left behind. So the rule stands as written
+and **the case it does not cover is still open** — a test whose subject is service-layer logic but
+which needs a store. [Item 25](tech-debt/25-service-test-tier-is-empty.md) owns that question, still
+recommends splitting by claim kind, and now records feature 03 as a decision that was taken and
+withdrawn rather than one that settled it.
 
 **Current state (2026-09-19).** Two containers back the suite — `azure-sql-edge` and
 `azure-storage-edge`, started by [`docker-compose.test.yml`](../src/api/docker-compose.test.yml) —
-and 70 tests are discovered: 60 in `TrailBlaze.Repository.Test`, 6 in `TrailBlaze.Service.Test`, 4 in
-`TrailBlaze.Api.Test`. **With the containers running all 70 pass. With nothing configured, 35 pass
-and 35 skip** — and that second number is the honest description of a bare machine, not a failure.
-Measured, not derived: the run reports `Failed: 0, Passed: 35, Skipped: 35, Total: 70` across the
+and 66 tests are discovered: 60 in `TrailBlaze.Repository.Test`, 2 in `TrailBlaze.Service.Test`, 4 in
+`TrailBlaze.Api.Test`. **With the containers running all 66 pass. With nothing configured, 35 pass
+and 31 skip** — and that second number is the honest description of a bare machine, not a failure.
+Measured, not derived: the run reports `Failed: 0, Passed: 35, Skipped: 31, Total: 66` across the
 three projects.
 
 **This paragraph is the only place those counts are written down, and that is deliberate.** They
@@ -40,9 +41,9 @@ is feature 02's — profile routes, avatar upload and upload validator. Those te
 deferred, and [item 12](tech-debt/12-feature-02-tests-deferred.md) tracks writing them and records
 why the gap is the dangerous kind: an untested guard everyone believes is tested is worse than one
 known to be untested. Feature 03 (2026-09-19) added the first coverage of product behaviour rather
-than of the foundation — the `Role` constraint, its backfill, and the role-resolution logic — so
-"the foundation is green" is no longer quite the whole story, but the profile slice still is not
-covered.
+than of the foundation — the `Role` constraint, its backfill, and the two reflection assertions that
+a role has no source but the row — so "the foundation is green" is no longer quite the whole story,
+but the profile slice still is not covered.
 
 `TestSupport/` lives in `TrailBlaze.Repository.Test` and holds the container fixtures,
 `TestEnvironment`, and `FakeUserContext`. **There is no fake for storage and none for the
@@ -75,7 +76,7 @@ startup database work left to make fatal.
 to misread: `--filter "Category!=Container"` is not "the offline run", it is the 24 tests that touch
 *neither* container — which excludes the 11 storage tests, and those run on a bare machine too,
 because storage falls back to the emulator and needs no secret. The bare-machine run is plain
-`dotnet test`, which is 35 passed and 35 skipped.
+`dotnet test`, which is 35 passed and 31 skipped.
 
 ## What still runs offline, and why it is worth keeping
 

@@ -99,3 +99,36 @@ suffix is cheap to fix in review and expensive once later features have copied i
 `TrailBlaze.Interface/Infrastructure/`; both were found by reading the operations the type exposes
 (upload, delete, move, mint a read URL) and seeing that every one of them was data access. Its
 `AddBlobStorage` neighbour looked like the same case as `AddRepositoryPersistence` and was not.
+
+## Keep a comment to one line, and say only what the code cannot
+
+**One line is the target. One line is usually the answer.** A paragraph above a member is a review
+finding, not thoroughness — the longer a comment is, the more of it is restatement, and a comment
+that argues a design is a comment that goes stale the moment the design changes.
+
+A comment earns its line by saying something the declaration cannot:
+
+- a non-obvious contract — a null that means three different things, a value that arrives shortened
+- a failure mode a caller would otherwise be surprised by
+- a decision that would look like a mistake without one line of context
+
+It does not earn a line by:
+
+- restating the signature, the type name, or the body (`/// Gets or sets the name.` on `Name`)
+- arguing. Design reasoning belongs in the commit message, the feature file, the debt register or
+  the PR body — those are documents whose subject is the decision. A comment's subject is the line
+  of code under it
+- narrating a history (`// Changed in feature 03 to …`) or a choice that no longer has an
+  alternative
+- being a paragraph per statement. Three sentences of comment on two lines of code is the pattern
+  this rule exists to stop
+
+`<summary>` carries the one line. `<remarks>` is for the rare member whose caller can be misled
+without a second line, and it is two or three lines at most, never nested `<para>` after `<para>`.
+Match the comment to the code: a two-line method takes at most one short line above it.
+
+**How to apply:** when reading a diff, count the comment lines against the code lines they sit on.
+When the comments are longer than the member, cut them to the single line that would have saved a
+reader — and if no single line does, the member is probably two members or is doing something the
+name does not admit. Existing files keep their comments until something changes them; the rule
+binds what you write.
