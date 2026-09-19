@@ -1,7 +1,28 @@
 # 12 — Feature 02's behaviour shipped without the tests §10 requires
 
-Status: **open** · Kind: test-gap · Impact: blocks · Area: Tests
-Source: STANDARD §12.12 · Discharges via: 11 (in part) · Opened: 2026-09-17 · Last verified: 2026-09-18
+Status: **open (narrowed by feature 03)** · Kind: test-gap · Impact: blocks · Area: Tests
+Source: STANDARD §12.12 · Discharges via: 11 (in part) · Opened: 2026-09-17 · Last verified: 2026-09-19
+
+## Update — 2026-09-19 (feature 03)
+
+**The highest-value assertion in this item now exists, and only for `Role`.** Feature 03 wrote
+`RoleComesFromTheRowTests.The_profile_edit_request_offers_no_role`
+([source](../../src/api/TrailBlaze.Service.Test/RoleComesFromTheRowTests.cs)) — a reflection
+assertion that `UpdateProfileRequest` carries no `Role` property, commented with the reason it can
+pass from day one, which is exactly what the repair plan's step 1 asked for. The close checklist's
+first line is satisfied **for that one field**.
+
+**`Email` and `Id` are still unguarded**, though the sub-table's row names all three. The test
+asserts one property name, not the set; widening it is a two-line change and the cheapest thing left
+in this item. Nothing about it is blocked.
+
+**Why feature 03 did it rather than this item.** 03's own criterion is that no payload or claim can
+make a caller an admin, and the row is what decides the role — so the guard is on 03's critical path,
+not borrowed. It is filed here because this item is where the missing test was recorded and where the
+prediction that 03 would need it was written.
+
+**This item does not close on that.** Everything else in the sub-table is unwritten, including all
+eleven "Now? Yes" rows that this item's own text says should not wait for anything.
 
 ## What the debt is
 
@@ -15,7 +36,8 @@ silent when wrong:
 
 - **The privilege-escalation guard has no test.** `UpdateProfileRequest` has no `Role`, `Email` or
   `Id` property, and that absence is the *entire* control. Nothing would fail if a later change
-  added one.
+  added one. (`Role` was covered on 2026-09-19 by feature 03 — see the update above. `Email` and
+  `Id` were not.)
 - **The avatar's public-read behaviour has no test**, so Decision #28's design intent is implemented
   but never fetched from the real container.
 
@@ -141,7 +163,8 @@ in this table.
 
 ## Close checklist
 
-- [ ] The reflection test exists and is commented as to why it can pass from day one
+- [x] The reflection test exists and is commented as to why it can pass from day one — for `Role`,
+      2026-09-19. Widening it to `Email` and `Id` is still open
 - [ ] Every "Now? Yes" row in the sub-table above is covered by a test that was seen to fail
 - [x] The storage tier's public-read assertion exists (`StorageContainerRoutingTests`, 2026-09-18)
 - [ ] The service-layer duplicate-key catch is tested against the number `DuplicateKeyTests` measures

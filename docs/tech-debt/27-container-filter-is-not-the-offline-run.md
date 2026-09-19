@@ -25,6 +25,11 @@ them.** Someone reaching for a fast local check will get a green run that omitte
 and the run looks complete: 20 passing tests and no skips reported, because a filter *excludes*
 rather than skips. A skip is visible in the summary; an excluded test is not.
 
+**The counts in the table above drifted again on 2026-09-19, one feature later** — 20 became 27 and
+31/28 became 38/38 out of 76, because feature 03 added tests to both container-backed tiers. The
+prose was re-corrected; the counts were not, which is the item's own point about numbers being the
+least durable part of this. It is evidence for the repair below, not a new defect.
+
 **The cost is bounded, which is why it is cosmetic.** The documents are corrected as of 2026-09-18 —
 [testing-and-tdd.md](../testing-and-tdd.md), [STANDARD.md](../../src/api/STANDARD.md) §10, the README
 and the sprint commands all state what the filter selects and warn against reading it as the offline

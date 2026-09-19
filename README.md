@@ -43,21 +43,31 @@ The workflow lives in `.claude/` and runs on slash commands:
 ```
 
 Backend tests run from `src/api/` with `dotnet test`. Two containers back the database and storage
-tiers — start them with `docker compose -f docker-compose.test.yml up -d` first, or those 28 tests
+tiers — start them with `docker compose -f docker-compose.test.yml up -d` first, or those 38 tests
 **skip** rather than fail. See [testing-and-tdd.md](docs/testing-and-tdd.md).
 
 ## Running it locally
 
 The API refuses to start without its required settings (`DbConnection`, `BlobConnection`,
-`AllowedOrigins`), so there is no zero-configuration boot. Locally they come from user-secrets —
-never from `appsettings.json` or `launchSettings.json`, which are version-controlled:
+`AllowedOrigins`, and the two administrator settings below), so there is no zero-configuration boot.
+Locally they come from user-secrets — never from `appsettings.json` or `launchSettings.json`, which
+are version-controlled:
 
 ```bash
 cd src/api/TrailBlaze.Api
 dotnet user-secrets set "DbConnection" "Server=tcp:<server>.database.windows.net,1433;Initial Catalog=TrailBlaze;User ID=<user>;Password=<password>;Encrypt=True;TrustServerCertificate=False"
 dotnet user-secrets set "BlobConnection" "<azure storage account connection string>"
+dotnet user-secrets set "AdminObjectId" "<the Entra object id of the administrator>"
+dotnet user-secrets set "AdminDisplayName" "<the name that account shows as>"
 dotnet run
 ```
+
+**The two administrator settings are refused if absent, and that is deliberate.** The first boot
+seeds one `users` row for `AdminObjectId` with `Role = Admin`; a deployment that started without one
+would be a deployment nobody could administer, and it would look perfectly healthy. The seeding is
+idempotent — every later start finds the row and writes nothing — and it does **not** fail the host
+when the database is unreachable, which is a separate trade argued in
+[AdminSeedingHostedService](src/api/TrailBlaze.Api/AdminSeedingHostedService.cs).
 
 **Or run against a local SQL Edge container** and skip the firewall rule entirely:
 
@@ -133,14 +143,16 @@ pointed somewhere else would migrate the wrong database and report success.
 
 ## Three things to know before you start
 
-1. **The suite is real but shallow.** `dotnet test` from `src/api/` discovers 59 tests. With the two
-   test containers running, all 59 pass; with nothing configured, **31 pass and 28 skip** — the
-   skips are the database tier, and they are reported rather than hidden. What is covered is the
-   foundation: the audit interceptor, the soft-delete filter executed against the engine, the
-   **migration set actually applying**, the fluent bounds reaching the schema, storage routing
-   including a minted SAS the server accepts, and the host's startup rules. The one product slice
-   that has shipped — feature 02's profile routes, avatar upload and upload validator — is **not**
-   covered: its tests were deliberately deferred, and
+1. **The suite is real but shallow.** `dotnet test` from `src/api/` discovers 76 tests. With the two
+   test containers running, all 76 pass; with nothing configured, **38 pass and 38 skip** — the
+   skips are the database and storage tiers, and they are reported rather than hidden. What is
+   covered is the foundation: the audit interceptor, the soft-delete filter executed against the
+   engine, the **migration set actually applying**, the fluent bounds reaching the schema, storage
+   routing including a minted SAS the server accepts, and the host's startup rules. Feature 03 added
+   the first product coverage — the `Role` constraint and its backfill against a real engine, and the
+   seeding and role-resolution logic — so the store-backed *service* tier now exists. Feature 02's
+   slice — the profile routes, avatar upload and upload validator — is still **not** covered: its
+   tests were deliberately deferred, and
    [item 12](docs/tech-debt/12-feature-02-tests-deferred.md) tracks writing them. "Green" here means
    the foundation is green.
 2. **`develop` is not deployable until feature 09 merges.** Features 04–08 build the CRUD and

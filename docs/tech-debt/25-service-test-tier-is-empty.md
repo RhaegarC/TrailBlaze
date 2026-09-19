@@ -1,11 +1,49 @@
 # 25 — `TrailBlaze.Service.Test` has no tests, and no way to host the ones it needs
 
-Status: **open** · Kind: test-gap · Impact: friction · Area: Tests
-Source: found 2026-09-18 (during the container-backed test change) · Discharges via: features 06/08 (in part) · Opened: 2026-09-18 · Last verified: 2026-09-18
+Status: **open (narrowed by feature 03)** · Kind: test-gap · Impact: friction · Area: Tests
+Source: found 2026-09-18 (during the container-backed test change) · Discharges via: features 06/08 (in part) · Opened: 2026-09-18 · Last verified: 2026-09-19
+
+## Update — 2026-09-19 (feature 03)
+
+Feature 03 needed both halves of this item and so closed fact 1 and answered the decision, taking
+**(a)** rather than the **(c)** recommended below. Recorded here rather than diverged from in
+silence; the reasoning is in [03-admin-seeding.md](../features/03-admin-seeding.md#decisions).
+
+**Fact 1 is closed.** `TrailBlaze.Service.Test` now holds nine tests in three files:
+`AdminSeedingTests` (3, container) and `CallerRoleTests` (4, container) cover the seeding decision and
+role resolution against a real database, and `RoleComesFromTheRowTests` (2, offline) asserts by
+reflection that the role has no other source. Measured after the change: 2 passed / 7 skipped / 9 ms
+offline, 9 passed / 1 s with the containers up.
+
+**Decision: (a) — the service tier took the repository reference.** The recommendation below
+preferred (c) and rested on a cost that the measurement above does not show: 1 s for nine
+container-backed tests is not a tier "slow to the point of changing how the tier is used", and the
+offline run is unchanged for anyone without containers, because the seven store-backed tests skip
+rather than fail. Against that, (c)'s own drawback is the one that decided it — the assertions that
+matter here are security ones ("the caller's role comes from the row, never the token", "no caller
+without a row is granted one"), and (c) would have filed them as the repository's behaviour, which
+is where nobody looks for an authorization rule. The tier rule in
+[testing-and-tdd.md](../testing-and-tdd.md) — a test goes in the project matching the layer it
+exercises — then applies without an exception.
+
+**What was bought and what was paid.** The reference is a `ProjectReference` to
+`TrailBlaze.Repository.Test`, not to `TrailBlaze.Repository`, so the service tier still cannot reach
+the `DbContext` or the storage implementation in production code; it reaches the *fixtures*, which is
+the smallest thing that works. The cost is that a test project now references another test project,
+which is the arrangement this item's related [item 16](16-unreferenced-scaffolding.md) would object
+to if it had no consumer; it has nine. A shared `TestSupport` project is the tidier shape and is
+left as a follow-up rather than attempted inside a feature.
+
+**Still open, and what it still owns.** The four spec bullets in the table above are unaffected —
+features 06 and 08 are unbuilt and their tier is now answered by precedent: a store-backed service
+claim runs beside the service. The bullets should be re-pointed at this project when those features
+start, and `testing-and-tdd.md`'s tier table now accounts for it.
 
 ## What the debt is
 
 Two related facts, and the second is the one that costs.
+
+*Both facts below are as filed on 2026-09-18. Fact 1 no longer holds — see the update above.*
 
 **1. The project contains no tests.** `src/api/TrailBlaze.Service.Test/` holds a `.csproj` and build
 output, nothing else — no `.cs` file at all. `dotnet test` still discovers and reports the project as
@@ -52,8 +90,8 @@ lands before the first test that needs it.
 Checked 2026-09-18.
 
 - `ls src/api/TrailBlaze.Service.Test/` → `.csproj`, `bin`, `obj`. No source files.
-- `dotnet test` reports the project in the run and adds 0 to the total; the solution's 59 tests are
-  55 repository + 4 Api.
+- `dotnet test` reports the project in the run and adds 0 to the total; the solution's 59 tests were
+  55 repository + 4 Api. (It is 76 now: 9 here, and the counts below were re-measured.)
 - `TrailBlaze.Service.Test.csproj` lists no `ProjectReference` to `TrailBlaze.Repository`.
 - The four spec bullets above were re-pointed on 2026-09-18 and each carries a note saying its tier
   is unsettled.

@@ -14,18 +14,30 @@ The API is a layered solution under `src/api/` — `TrailBlaze.Model`, `TrailBla
 xUnit test project (`TrailBlaze.Api.Test`, `TrailBlaze.Repository.Test`,
 `TrailBlaze.Service.Test`). New tests go in the project matching the layer they exercise.
 
-**Current state (2026-09-18).** Two containers back the suite — `azure-sql-edge` and
-`azure-storage-edge`, started by [`docker-compose.test.yml`](../src/api/docker-compose.test.yml) —
-and 59 tests are discovered: 55 in `TrailBlaze.Repository.Test`, 4 in `TrailBlaze.Api.Test`, and
-none in `TrailBlaze.Service.Test`. **With the containers running all 59 pass. With nothing
-configured, 31 pass and 28 skip** — and that second number is the honest description of a bare
-machine, not a failure.
+The rule has no exception, and feature 03 settled the case that looked like one: a test whose subject
+is service-layer logic but which needs a store still goes in `TrailBlaze.Service.Test`, which took a
+`ProjectReference` to `TrailBlaze.Repository.Test` to reach `TestSupport/`'s fixtures. Filing store-
+backed service assertions as "repository behaviour" would have put them in the tier whose name says
+they are about the wrong layer — the failure the suffix rule exists to prevent
+([codereview.md](../.claude/rules/codereview.md)). [Item 25](tech-debt/25-service-test-tier-is-empty.md)
+records the decision, including the recommendation it overrode.
 
-**But the count is not the coverage.** The one product slice that has shipped — feature 02's profile
-routes, avatar upload and upload validator — has no tests at all; they were deliberately deferred.
-[Item 12](tech-debt/12-feature-02-tests-deferred.md) tracks writing them, and records why the gap is
-the dangerous kind: an untested guard everyone believes is tested is worse than one known to be
-untested. Read these numbers as "the foundation is green".
+**Current state (2026-09-19).** Two containers back the suite — `azure-sql-edge` and
+`azure-storage-edge`, started by [`docker-compose.test.yml`](../src/api/docker-compose.test.yml) —
+and 76 tests are discovered: 60 in `TrailBlaze.Repository.Test`, 9 in `TrailBlaze.Service.Test`, 7 in
+`TrailBlaze.Api.Test`. **With the containers running all 76 pass. With nothing configured, 38 pass
+and 38 skip** — and that second number is the honest description of a bare machine, not a failure.
+Measured, not derived: the run reports `Failed: 0, Passed: 38, Skipped: 38, Total: 76` across the
+three projects.
+
+**But the count is not the coverage.** The one product slice that has shipped and is still untested
+is feature 02's — profile routes, avatar upload and upload validator. Those tests were deliberately
+deferred, and [item 12](tech-debt/12-feature-02-tests-deferred.md) tracks writing them and records
+why the gap is the dangerous kind: an untested guard everyone believes is tested is worse than one
+known to be untested. Feature 03 (2026-09-19) added the first coverage of product behaviour rather
+than of the foundation — the `Role` constraint and its backfill, and the seeding and role-resolution
+logic — so "the foundation is green" is no longer quite the whole story, but the profile slice still
+is not covered.
 
 `TestSupport/` lives in `TrailBlaze.Repository.Test` and holds the container fixtures,
 `TestEnvironment`, and `FakeUserContext`. **There is no fake for storage and none for the
@@ -36,20 +48,27 @@ nothing has to be removed from the service collection to achieve that, because m
 applied by the deployment pipeline rather than at startup, and the context is not resolved until a
 request asks for it.
 
+Since feature 03 that is a claim the tier *defends* rather than one it simply enjoys. Seeding runs
+in a hosted service, so booting now makes one connection attempt that is expected to fail; it is
+caught and logged, and the host starts. The tier is therefore also the regression test for the
+offline property itself — if a future change made a database failure fatal to startup, `StartupTests`
+would go red on a machine with no container, which is the failure signal worth having.
+
 ## Test tiers
 
 | Tier | Scope | Tooling | Runs |
 |---|---|---|---|
-| Backend unit | Upload validation, SAS policy construction, pagination clamping, and ownership/permission evaluation once feature 09 lands | xUnit | Always — fast, offline |
+| Backend unit | Upload validation, SAS policy construction, pagination clamping, ownership/permission evaluation once feature 09 lands, and reflection assertions that a value has no second source (`RoleComesFromTheRowTests`) | xUnit | Always — fast, offline |
 | Repository model | EF Core's *model* and its *generated SQL* — keys, column types and lengths, soft-delete predicates read through `ToQueryString()` | xUnit + EF Core | Always — offline, opens no connection |
-| Database | The real engine: the migration set applies, the fluent bounds reached `INFORMATION_SCHEMA`, a duplicate key collides, the soft-delete filter executes, audit JSON round-trips, a narrowing `ALTER COLUMN` is refused | xUnit + SQL Edge | **`Category=Container`** — skips when unreachable |
+| Database | The real engine: the migration set applies, the fluent bounds reached `INFORMATION_SCHEMA`, a duplicate key collides, the soft-delete filter executes, audit JSON round-trips, a narrowing `ALTER COLUMN` is refused, a check constraint refuses a value outside its set, a default fills itself in | xUnit + SQL Edge | **`Category=Container`** — skips when unreachable |
 | Storage | The real `AzureBlobStorageRepository`: upload, content-type round-trip, a minted SAS that the server accepts, public/private routing, a move | xUnit + Azure SDK | **`Category=Container`** — skips when unreachable |
+| Api host | The real pipeline through `WebApplicationFactory` with unreachable connection strings — a missing setting stops startup and the message names the key, and every registration in the composition root resolves | xUnit + `WebApplicationFactory` | Always — no database, deliberately |
 
 `Category=Container` is **the only trait in the solution**. That makes the two obvious filters easy
-to misread: `--filter "Category!=Container"` is not "the offline run", it is the 20 tests that touch
+to misread: `--filter "Category!=Container"` is not "the offline run", it is the 27 tests that touch
 *neither* container — which excludes the 11 storage tests, and those run on a bare machine too,
 because storage falls back to the emulator and needs no secret. The bare-machine run is plain
-`dotnet test`, which is 31 passed and 28 skipped.
+`dotnet test`, which is 38 passed and 38 skipped.
 
 ## What still runs offline, and why it is worth keeping
 
