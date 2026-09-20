@@ -1,5 +1,7 @@
 namespace TrailBlaze.Interface.Service;
 
+using TrailBlaze.Model;
+
 /// <summary>
 /// Decides whether an uploaded file is one this app will store, against the shared allowlists
 /// and size caps.
@@ -31,6 +33,19 @@ public interface IUploadValidationService
     /// <param name="sizeBytes">The number of bytes the upload carries.</param>
     /// <returns>Null when acceptable, otherwise the reason to return to the client.</returns>
     string? ValidateVideo(string? contentType, long sizeBytes);
+
+    /// <summary>
+    /// The kind a content type belongs to, or <c>null</c> for a type neither allowlist admits.
+    /// </summary>
+    /// <remarks>
+    /// Media is the one route that accepts two kinds, so it is the one route that has to ask which
+    /// a file is. Answered here rather than at the route, because the answer is the same membership
+    /// test <see cref="ValidateImage"/> and <see cref="ValidateVideo"/> perform, and a second copy
+    /// of it is a second idea of what an image is.
+    /// </remarks>
+    /// <param name="contentType">The declared content type, as sent by the client.</param>
+    /// <returns>One of <see cref="Constant.MediaKind"/>, or null when it is neither.</returns>
+    string? MediaKindOf(string? contentType);
 
     /// <summary>
     /// The file extension a stored object is named with, or an empty string for a type this

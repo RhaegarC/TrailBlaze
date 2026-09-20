@@ -1,6 +1,7 @@
 ﻿namespace TrailBlaze.Repository;
 
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 using System.Linq.Expressions;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Model.DatabaseEntity;
@@ -65,6 +66,36 @@ public class DatabaseRepository(TrailBlazeContext context) : IDbRepository
         await Context.AddAsync(item);
         int count = await Context.SaveChangesAsync();
         return count;
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> CreateIfUnderAsync<T>(T item, Expression<Func<T, bool>> countOf, int cap)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(countOf);
+
+        // Serializable rather than the default, and this is the whole point of the operation:
+        // under read-committed two uploads arriving together would both read cap - 1 and both
+        // insert, which is one row past the cap -- precisely the case the cap exists for.
+        await using var transaction =
+            await Context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
+        int existing = await Context.Set<T>().CountAsync(countOf);
+
+        if (existing >= cap)
+        {
+            // Rolled back rather than left to dispose: the count took range locks, and holding
+            // them past the answer would serialize unrelated uploads for no reason.
+            await transaction.RollbackAsync();
+            return false;
+        }
+
+        await Context.AddAsync(item);
+        await Context.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return true;
     }
 
     /// <inheritdoc/>

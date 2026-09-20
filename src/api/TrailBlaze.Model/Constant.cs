@@ -66,6 +66,14 @@ public static class Constant
 
         public static readonly string TypeNotAllowed =
             $"Type must be one of: {string.Join(", ", ActivityType.All)}.";
+
+        // Media. An image or a video that is neither on the allowlist is refused by the shared
+        // message for its kind, so only a type belonging to no kind has its own.
+        public static readonly string MediaTypeNotAllowed =
+            $"The file must be one of: {string.Join(", ", Upload.MediaContentTypes)}.";
+
+        public static readonly string MediaLimitReached =
+            $"An activity can hold at most {MediaLimit.PerActivity} media items.";
     }
 
     public static class ConfigKey
@@ -276,6 +284,51 @@ public static class Constant
     }
 
     /// <summary>
+    /// The values <c>Media.Kind</c> accepts. Derived from the content type rather than sent, so
+    /// a caller cannot label a video an image — and the engine enforces the set with
+    /// <c>CK_Media_Kind</c>, as it does for an activity's type.
+    /// </summary>
+    public static class MediaKind
+    {
+        public const string Image = "Image";
+
+        public const string Video = "Video";
+
+        /// <summary>The values <c>Media.Kind</c> accepts.</summary>
+        public static readonly string[] All = [Image, Video];
+    }
+
+    /// <summary>
+    /// The length each <c>media</c> column is bounded to, from the PRD's data-model row.
+    /// </summary>
+    public static class MediaField
+    {
+        public const int KindLength = 16;
+
+        public const int BlobPathLength = 512;
+
+        public const int ContentTypeLength = 128;
+
+        public const int OriginalFileNameLength = 260;
+
+        /// <summary>Holds a <c>users.Id</c> or an <c>activities.Id</c> — both an app-assigned GUID —
+        /// at the bound the activity's creator column already takes. The activity's own key column
+        /// is longer, because EF's key convention bound that one; comparing the two is a plain
+        /// string comparison, so the widths need not match.</summary>
+        public const int ReferenceIdLength = 128;
+    }
+
+    /// <summary>
+    /// How many items one activity may carry (Decision #24).
+    /// </summary>
+    public static class MediaLimit
+    {
+        /// <summary>Counted across every uploader, because media is collaborative: the cap is the
+        /// activity's, not the contributor's (Decision #27).</summary>
+        public const int PerActivity = 20;
+    }
+
+    /// <summary>
     /// What an uploaded file may be: the content types each kind accepts and the size cap each
     /// is held to.
     /// </summary>
@@ -302,11 +355,32 @@ public static class Constant
         /// <summary>The video types activity media may be.</summary>
         public static readonly string[] VideoContentTypes = ["video/mp4", "video/quicktime"];
 
+        /// <summary>Everything an activity's media may be, for the message a caller sees when the
+        /// type they sent belongs to neither kind.</summary>
+        public static readonly string[] MediaContentTypes =
+            [.. ImageContentTypes, .. VideoContentTypes];
+
         /// <summary>The image cap: 10 MB. A file exactly at the cap is accepted.</summary>
         public const long ImageSizeCapBytes = 10L * 1024 * 1024;
 
-        /// <summary>The video cap: 200 MB (Decision #24). Unused until feature 06, kept here
-        /// so the two caps are read together and neither is invented at a call site.</summary>
+        /// <summary>The video cap: 200 MB (Decision #24).</summary>
         public const long VideoSizeCapBytes = 200L * 1024 * 1024;
+
+        /// <summary>
+        /// The largest request body the media upload route accepts: the video cap plus room for the
+        /// multipart envelope around it.
+        /// </summary>
+        /// <remarks>
+        /// A route limit rather than a validation rule. Kestrel refuses a body over 30 MB and the
+        /// form parser refuses a multipart body over 128 MB, both **before** the service sees
+        /// anything — so without this the documented 400 for an oversize file would arrive as a bare
+        /// 413 for every video over 128 MB, which is most of the ones the cap admits. The envelope
+        /// allowance is what keeps a file exactly at the cap from being refused by its own boundary
+        /// and headers.
+        /// </remarks>
+        public const long MaxMediaRequestBytes = VideoSizeCapBytes + MultipartEnvelopeBytes;
+
+        /// <summary>Room for boundaries and part headers around a file at the cap.</summary>
+        private const long MultipartEnvelopeBytes = 64L * 1024;
     }
 }

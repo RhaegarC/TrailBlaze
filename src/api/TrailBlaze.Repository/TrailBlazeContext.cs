@@ -14,9 +14,15 @@ public class TrailBlazeContext(DbContextOptions<TrailBlazeContext> options) : Db
     /// <summary>The name the engine knows the type's check constraint by.</summary>
     private const string TypeConstraintName = "CK_Activities_Type";
 
+    /// <summary>The name the engine knows the media kind's check constraint by.</summary>
+    private const string KindConstraintName = "CK_Media_Kind";
+
     public DbSet<AuditLog> AuditLogs { get; set; }
     public DbSet<Activity> Activities { get; set; }
     public DbSet<User> Users { get; set; }
+
+    /// <summary>Named without a plural, so the table is <c>Media</c> rather than <c>Medias</c>.</summary>
+    public DbSet<Media> Media { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +72,50 @@ public class TrailBlazeContext(DbContextOptions<TrailBlazeContext> options) : Db
             entity.Property(activity => activity.CreatedByUserId)
                 .HasMaxLength(Constant.ActivityField.CreatedByUserIdLength)
                 .IsRequired();
+        });
+
+        modelBuilder.Entity<Media>(entity =>
+        {
+            entity.Property(media => media.ActivityId)
+                .HasMaxLength(Constant.MediaField.ReferenceIdLength)
+                .IsRequired();
+
+            // Not a relationship, for the same reason the activity's creator is not one: the model
+            // declares no foreign keys. The uploader is still a column of its own rather than a read
+            // of the activity's creator, because media is collaborative (Decision #27).
+            entity.Property(media => media.UploadedByUserId)
+                .HasMaxLength(Constant.MediaField.ReferenceIdLength)
+                .IsRequired();
+
+            entity.Property(media => media.Kind)
+                .HasMaxLength(Constant.MediaField.KindLength)
+                .IsRequired();
+
+            entity.Property(media => media.BlobPath)
+                .HasMaxLength(Constant.MediaField.BlobPathLength)
+                .IsRequired();
+
+            entity.Property(media => media.ContentType)
+                .HasMaxLength(Constant.MediaField.ContentTypeLength)
+                .IsRequired();
+
+            entity.Property(media => media.OriginalFileName)
+                .HasMaxLength(Constant.MediaField.OriginalFileNameLength)
+                .IsRequired();
+
+            // Both reads of this table open on the activity — the listing asks for one activity's
+            // items and the cap counts them — so the index is what keeps either from scanning every
+            // media row in the database.
+            entity.HasIndex(media => media.ActivityId);
+
+            // The closed set is enforced by the engine as well as by the service that derives it,
+            // for the same reason the activity's type is: a value outside the set is recognized by
+            // nothing, and a reader would be guessing what it is about to serve.
+            // Qualified below, because the DbSet property is named Media and shadows the type.
+            entity.ToTable(table => table.HasCheckConstraint(
+                KindConstraintName,
+                $"[{nameof(TrailBlaze.Model.DatabaseEntity.Media.Kind)}] IN "
+                + $"({string.Join(", ", Constant.MediaKind.All.Select(kind => $"'{kind}'"))})"));
         });
 
         modelBuilder.Entity<User>(entity =>

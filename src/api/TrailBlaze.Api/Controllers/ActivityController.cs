@@ -3,17 +3,23 @@ namespace TrailBlaze.Api.Controllers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TrailBlaze.Interface.Service;
+using TrailBlaze.Model;
 using TrailBlaze.Model.Activity;
+using TrailBlaze.Model.Media;
 
 /// <summary>
-/// One activity: page through them, create it, read it, edit it, remove it.
+/// One activity: page through them, create it, read it, edit it, remove it, and see what media it
+/// carries.
 /// </summary>
 [ApiController]
 [Authorize]
 [Route("api/[controller]")]
-public class ActivityController(IActivityService activityService) : ControllerBase
+public class ActivityController(
+    IActivityService activityService,
+    IMediaService mediaService) : ControllerBase
 {
     private readonly IActivityService _activityService = activityService;
+    private readonly IMediaService _mediaService = mediaService;
 
     /// <summary>
     /// One page of the activities the caller may read, newest first.
@@ -90,6 +96,52 @@ public class ActivityController(IActivityService activityService) : ControllerBa
         ActivityOutcome outcome = await _activityService.DeleteAsync(id);
 
         return Respond(outcome);
+    }
+
+    /// <summary>
+    /// Adds one image or video to an activity.
+    /// </summary>
+    /// <remarks>
+    /// Collaborative: any signed-in caller who can read the activity may contribute to it, not only
+    /// its creator (Decision #27). Both limits are raised for this route deliberately — a 200 MB video
+    /// exceeds Kestrel's own 30 MB body default and the form parser's 128 MB multipart default, either
+    /// of which would refuse the upload as a bare 413 before the service could answer with the
+    /// documented 400.
+    /// </remarks>
+    /// <param name="id">The activity's id.</param>
+    /// <param name="file">The image or video.</param>
+    /// <returns>The stored item, the reasons the upload was refused, or not-found.</returns>
+    [HttpPost("{id}/media")]
+    [RequestSizeLimit(Constant.Upload.MaxMediaRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = Constant.Upload.MaxMediaRequestBytes)]
+    public async Task<IActionResult> UploadMedia(string id, [FromForm] IFormFile? file)
+    {
+        if (file is null)
+        {
+            // Without this the route would dereference a null and 500. A body with no file part is a
+            // malformed request, which is a 400.
+            return BadRequest(Constant.Message.NoFileUploaded);
+        }
+
+        await using Stream content = file.OpenReadStream();
+
+        MediaOutcome outcome = await _mediaService.UploadAsync(
+            id, content, file.ContentType, file.Length, file.FileName);
+
+        return this.ToActionResult(outcome);
+    }
+
+    /// <summary>
+    /// The metadata of every item an activity carries, oldest first.
+    /// </summary>
+    /// <param name="id">The activity's id.</param>
+    /// <returns>The items; not-found for an activity the caller may not read.</returns>
+    [HttpGet("{id}/media")]
+    public async Task<IActionResult> ListMedia(string id)
+    {
+        MediaListing listing = await _mediaService.ListAsync(id);
+
+        return listing.Found ? Ok(listing.Items) : NotFound();
     }
 
     /// <summary>

@@ -1,7 +1,6 @@
 namespace TrailBlaze.Service;
 
 using Microsoft.Extensions.Logging;
-using System.Linq.Expressions;
 using TrailBlaze.Interface.Infrastructure;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
@@ -12,6 +11,8 @@ using TrailBlaze.Model.DatabaseEntity;
 /// <inheritdoc/>
 public sealed class ActivityService(
     IDbRepository dbRepository,
+    IStorageRepository storageRepository,
+    IActivityAccessService activityAccess,
     IUserContextService userContext,
     ILogger<ActivityService> logger) : IActivityService
 {
@@ -125,7 +126,7 @@ public sealed class ActivityService(
             int skip = (int)Math.Min((long)appliedPage * appliedSize, int.MaxValue);
 
             (List<Activity> items, int total) = await dbRepository.GetPageAsync<Activity>(
-                VisibleToCaller(caller), NewestFirst, skip, appliedSize);
+                activityAccess.VisibleTo(caller), NewestFirst, skip, appliedSize);
 
             logger.LogInformation(
                 "Listed {Count} of {Total} activities for page {Page}.", items.Count, total, appliedPage);
@@ -206,6 +207,7 @@ public sealed class ActivityService(
                 return ActivityOutcome.NotFound();
             }
 
+            await RemoveMediaAsync(id);
             await dbRepository.DeleteAsync<Activity>([id]);
 
             return ActivityOutcome.Deleted();
@@ -218,6 +220,36 @@ public sealed class ActivityService(
     }
 
     /// <summary>
+    /// Takes an activity's media with it, whichever uploader contributed each item.
+    /// </summary>
+    /// <remarks>
+    /// Done here rather than by a cascade, because the model declares no foreign keys: without this
+    /// the rows would outlive their activity, holding blobs nothing can reach and a count the cap
+    /// would keep counting. An owner deleting their entry is never blocked by media someone else
+    /// contributed, which is the point of removing them by hand.
+    /// </remarks>
+    /// <param name="activityId">The activity being deleted.</param>
+    private async Task RemoveMediaAsync(string activityId)
+    {
+        List<Media> items =
+            await dbRepository.GetListAsync<Media>(row => row.ActivityId == activityId);
+
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        await dbRepository.DeleteAsync<Media>([.. items.Select(item => item.Id)]);
+
+        // Rows first, then blobs: this order can at worst leave an unreferenced blob, which is
+        // inert, where the reverse can leave a row naming bytes that are already gone.
+        foreach (Media item in items)
+        {
+            await storageRepository.DeleteAsync(Constant.StorageContainer.Media, item.BlobPath);
+        }
+    }
+
+    /// <summary>
     /// The live row, or null for an id that is unknown or already deleted — the soft-delete filter
     /// makes the second case indistinguishable from the first, deliberately.
     /// </summary>
@@ -225,23 +257,6 @@ public sealed class ActivityService(
     /// <returns></returns>
     private async Task<Activity?> FindAsync(string id) =>
         await dbRepository.GetAsync<Activity>(row => row.Id == id);
-
-    /// <summary>
-    /// The entries a caller may read: a token-less caller sees the public ones, a signed-in caller
-    /// adds the shared ones and their own private ones.
-    /// </summary>
-    /// <remarks>
-    /// No admin branch: <c>IUserContextService</c> carries no role, and reading one is the
-    /// permission work feature 09 owns. Until then an administrator pages what a user pages.
-    /// </remarks>
-    /// <param name="caller"></param>
-    /// <returns></returns>
-    private static Expression<Func<Activity, bool>> VisibleToCaller(string? caller) =>
-        string.IsNullOrWhiteSpace(caller)
-            ? activity => activity.Type == Constant.ActivityType.Public
-            : activity => activity.Type == Constant.ActivityType.Public
-                || activity.Type == Constant.ActivityType.Shared
-                || activity.CreatedByUserId == caller;
 
     /// <summary>
     /// Ordering by creation, newest first, with the id as a tie-break so the order is total and a

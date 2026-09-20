@@ -44,6 +44,12 @@ internal static class ServiceExt
         // Register service
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IActivityService, ActivityService>();
+        services.AddScoped<IMediaService, MediaService>();
+
+        // Stateless, so a singleton: it reads no request and holds nothing between calls. Registered
+        // rather than static because two services and nothing else consult it, and the visibility rule
+        // is the one thing in this application that must not be restated at a call site.
+        services.AddSingleton<IActivityAccessService, ActivityAccessService>();
 
         // Stateless, but registered rather than static so the upload rules have one home the
         // routes depend on through injection: if a cap ever needs to come from configuration

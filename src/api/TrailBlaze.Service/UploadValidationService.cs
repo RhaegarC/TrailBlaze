@@ -43,6 +43,14 @@ public sealed class UploadValidationService : IUploadValidationService
             Constant.Message.VideoTypeNotAllowed,
             Constant.Message.VideoTooLarge);
 
+    /// <inheritdoc/>
+    public string? MediaKindOf(string? contentType) =>
+        Constant.Upload.ImageContentTypes.Contains(contentType, StringComparer.OrdinalIgnoreCase)
+            ? Constant.MediaKind.Image
+            : Constant.Upload.VideoContentTypes.Contains(contentType, StringComparer.OrdinalIgnoreCase)
+                ? Constant.MediaKind.Video
+                : null;
+
     /// <summary>
     /// The file extension a stored object is named with, or an empty string for a type this
     /// app does not recognize.

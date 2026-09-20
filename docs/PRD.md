@@ -99,7 +99,7 @@ far along its feature is — a feature's own progress lives in the
 | Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers and the filters are in [testing-and-tdd.md](testing-and-tdd.md); the counts are in [00-mission-1-sprint.md](features/00-mission-1-sprint.md) | feature 01 |
 | Blob abstraction | `IStorageRepository`, three containers, no fake | `IStorageRepository` in `TrailBlaze.Interface`, one Azure adapter in `TrailBlaze.Repository`, exercised by the storage tier against Azurite | feature 01 |
 | Activity table | the data model below | `activities` exists, migrated by `AddActivities`, with its check-constrained `Type`. The CRUD routes and the anonymous paged list are implemented, the list applying the read half of the visibility rule; **who may mutate an entry is not yet enforced**, and an admin still pages what a user pages because no role is read | feature 04 |
-| Media table | the data model below | not built | feature 06 |
+| Media table | the data model below | `Media` exists, migrated by `AddMedia`, with its check-constrained `Kind` and an index on `ActivityId`. Upload, metadata listing, deletion and the activity-delete cascade are implemented, gated on the read rule; **the administrator is not enforced** — nothing reads a role, so an admin contributes and deletes as an ordinary user until feature 09 | feature 06 |
 | Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | all five exist, bounded to the lengths in the data model | feature 02 |
 | Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | all four routes exist and return DTOs, and are **untested** ([02-entra-auth.md](features/archive/02-entra-auth.md#testing-status)) | feature 02 |
 | Administrator | one admin, set by hand; role read from the row, never from a claim | `users.Role` is not null, defaults to `User`, and is check-constrained to the closed set. Nothing in the application seeds, promotes or writes it — [03-admin-seeding.md](features/archive/03-admin-seeding.md#decisions) records why | feature 03 |
@@ -212,8 +212,8 @@ erDiagram
     }
     Media {
         string Id PK "GUID, app-assigned"
-        string ActivityId FK
-        string UploadedByUserId FK "who added this item"
+        string ActivityId "names activities.Id, a plain column"
+        string UploadedByUserId "who added this item"
         string Kind "Image | Video"
         string BlobPath "always the private container"
         string ContentType
@@ -242,8 +242,8 @@ erDiagram
 | | `CoverImageBlobPath` | nvarchar(512) | optional; container follows `Type` — `covers` (public) for `Public`, `media` (private, SAS) for `Shared`/`Private` |
 | | `CreatedByUserId` | nvarchar(128) | the caller's `users.Id`, stored as a **plain column** — the model declares no foreign keys ([item 23](tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)) |
 | `media` | `Id` | string (GUID) | PK, app-assigned |
-| | `ActivityId` | string (GUID) | FK → `activities.Id` |
-| | `UploadedByUserId` | string (GUID) | FK → `users.Id`; **who added this item** — not necessarily the activity's creator |
+| | `ActivityId` | nvarchar(128) | names `activities.Id`, stored as a **plain column** — no foreign key, as on `activities` above ([item 23](tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)) |
+| | `UploadedByUserId` | nvarchar(128) | names `users.Id`, a **plain column**; **who added this item** — not necessarily the activity's creator |
 | | `Kind` | nvarchar(16) | `Image` \| `Video` |
 | | `BlobPath` | nvarchar(512) | **private** container; served only via SAS. Also holds covers of Shared/Private activities |
 | | `ContentType` | nvarchar(128) | validated allowlist |
