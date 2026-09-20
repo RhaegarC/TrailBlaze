@@ -260,10 +260,6 @@ public static class Constant
         public const int TypeLength = 16;
 
         public const int CoverImageBlobPathLength = 512;
-
-        /// <summary>Holds an Entra object id, the same value <c>users.Id</c> is keyed on. Room
-        /// for a GUID and then some, so a longer identifier shape needs no migration.</summary>
-        public const int CreatedByUserIdLength = 128;
     }
 
     /// <summary>
@@ -311,10 +307,9 @@ public static class Constant
 
         public const int OriginalFileNameLength = 260;
 
-        /// <summary>Holds a <c>users.Id</c> or an <c>activities.Id</c> — both an app-assigned GUID —
-        /// at the bound the activity's creator column already takes. The activity's own key column
-        /// is longer, because EF's key convention bound that one; comparing the two is a plain
-        /// string comparison, so the widths need not match.</summary>
+        /// <summary>Holds an <c>activities.Id</c> — an app-assigned GUID. The activity's own key
+        /// column is longer, because EF's key convention bound that one; comparing the two is a
+        /// plain string comparison, so the widths need not match.</summary>
         public const int ReferenceIdLength = 128;
     }
 

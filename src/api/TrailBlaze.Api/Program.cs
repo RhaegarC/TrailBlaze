@@ -1,4 +1,4 @@
-using TrailBlaze.Api;
+using TrailBlaze.Api.Extension;
 using TrailBlaze.Model;
 
 var builder = WebApplication.CreateBuilder(args);

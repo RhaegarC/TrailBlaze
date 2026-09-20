@@ -1,20 +1,16 @@
 namespace TrailBlaze.Model.DatabaseEntity;
 
 /// <summary>
-/// One image or video attached to an activity, and who attached it.
+/// One image or video attached to an activity.
 /// </summary>
 /// <remarks>
-/// The uploader is a column of its own rather than a read of the activity's creator, because the
-/// two answer different questions: who logged the day, and who contributed this picture. Media is
-/// collaborative (Decision #27), so they are usually different people.
+/// The uploader is <see cref="EntityBase.CreatedBy"/>, set from the caller. It is not the activity's
+/// creator: media is collaborative (Decision #27), so the two are usually different people.
 /// </remarks>
 public sealed class Media : EntityBase
 {
     /// <summary>The activity it belongs to, as a plain column: the model declares no foreign keys.</summary>
     public string ActivityId { get; set; } = string.Empty;
-
-    /// <summary>The caller who uploaded it, never a value from the request body.</summary>
-    public string UploadedByUserId { get; set; } = string.Empty;
 
     /// <summary><c>Image</c> or <c>Video</c>, derived from the content type.</summary>
     public string Kind { get; set; } = string.Empty;

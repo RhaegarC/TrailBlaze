@@ -40,7 +40,7 @@ public sealed class ActivityRoundTripTests(TrailBlazeDatabaseFixture fixture)
         Assert.Equal(RidgeDate, stored.ActivityDate);
         Assert.Equal("A walk along the north ridge.", stored.Description);
         Assert.Equal("Public", stored.Type);
-        Assert.Equal("oid-ada", stored.CreatedByUserId);
+        Assert.Equal("oid-ada", stored.CreatedBy);
     }
 
     /// <summary>
@@ -120,7 +120,7 @@ public sealed class ActivityRoundTripTests(TrailBlazeDatabaseFixture fixture)
         Assert.Equal("Ridge walk, revised", revised.Title);
         Assert.Equal("Private", revised.Type);
         Assert.Equal(created, revised.CreatedOn);
-        Assert.Equal("oid-ada", revised.CreatedByUserId);
+        Assert.Equal("oid-ada", revised.CreatedBy);
     }
 
     /// <summary>
@@ -197,7 +197,7 @@ public sealed class ActivityRoundTripTests(TrailBlazeDatabaseFixture fixture)
         ActivityDate = RidgeDate,
         Description = "A walk along the north ridge.",
         Type = "Public",
-        CreatedByUserId = "oid-ada",
+        CreatedBy = "oid-ada",
     };
 
     /// <summary>The creation stamp as the row holds it, through a scope of its own.</summary>

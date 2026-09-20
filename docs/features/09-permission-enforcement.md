@@ -21,7 +21,7 @@ statement of them:
   applies it to the two anonymous-reachable read routes; this feature owns it as the single
   predicate and applies it to **every** other route, so a `Private` activity is not reachable by
   a side door.
-- **Ownership** (`activities.CreatedByUserId`) decides who may **mutate** an entry. Media is the
+- **Ownership** (`activities.CreatedBy`) decides who may **mutate** an entry. Media is the
   exception that makes the two axes visibly cross: **any signed-in caller who can read an
   activity may add media to it** (Decision #27), so the media-upload check is visibility, not
   ownership — the thing this feature would most easily get wrong by assuming the older rule.
@@ -36,7 +36,7 @@ the access the PRD grants them — and nothing more by default.
 
 - [03-admin-seeding](archive/03-admin-seeding.md) (`users.Role` stored and constrained; the admin is a row
   someone sets by hand, so this feature must not assume one exists)
-- [04-activity-crud](archive/04-activity-crud.md) (activities, their `CreatedByUserId`, and the routes this feature gates)
+- [04-activity-crud](archive/04-activity-crud.md) (activities, their `CreatedBy`, and the routes this feature gates)
 
 Features 05–08 (public list, media upload, SAS delivery, cover images) are **retrofitted** by this
 feature: their endpoints ship permissive and are brought under the matrix here.
@@ -128,7 +128,7 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   it implements `IStorageRepository` only to record whether it was invoked, exists for no other test,
   and is not a stand-in for the repository. Authorization being evaluated before any blob operation
   is the single claim such a double is still sanctioned for; the outcome half is the container tier's.
-- Integration (`TrailBlaze.Repository.Test`) — the `CreatedByUserId` lookup the ownership decision
+- Integration (`TrailBlaze.Repository.Test`) — the `CreatedBy` lookup the ownership decision
   reads returns the right owner, including after an update, and the visibility lookup reads the
   activity's current `Type`. *(changed 2026-09-18 — "this tier needs no database" no longer holds: a
   lookup that *returns* an owner is an executed query, and the repository tier now has a real engine
@@ -156,7 +156,7 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   the 04 and 05 criteria look like they were missing something.
 - Visibility remains **per activity, never per item** (Decision #14): there is no per-media flag,
   and no way to publish one photo out of a `Private` entry.
-- No changes to the data model — ownership rides on `activities.CreatedByUserId` and visibility on
+- No changes to the data model — ownership rides on `activities.CreatedBy` and visibility on
   `activities.Type`, both created by feature 04.
 - This feature does not add authentication itself; it consumes the identity that 02 established.
   **It does have to add the role read.** 03 stored and constrained `users.Role`, and made it

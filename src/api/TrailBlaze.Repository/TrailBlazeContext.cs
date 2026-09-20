@@ -64,26 +64,13 @@ public class TrailBlazeContext(DbContextOptions<TrailBlazeContext> options) : Db
                 TypeConstraintName,
                 $"[{nameof(Activity.Type)}] IN "
                 + $"({string.Join(", ", Constant.ActivityType.All.Select(type => $"'{type}'"))})"));
-
-            // The creator is a plain column and deliberately not a relationship: the model
-            // declares no foreign keys, so a deleted user leaves their entries standing rather
-            // than taking them with it. Which of the two the product wants is the debt
-            // register's question; this is the behaviour today, said out loud.
-            entity.Property(activity => activity.CreatedByUserId)
-                .HasMaxLength(Constant.ActivityField.CreatedByUserIdLength)
-                .IsRequired();
         });
 
         modelBuilder.Entity<Media>(entity =>
         {
+            // Not a relationship: the model declares no foreign keys, so an activity's deletion
+            // leaves its media rows standing until the service removes them (Decision #27).
             entity.Property(media => media.ActivityId)
-                .HasMaxLength(Constant.MediaField.ReferenceIdLength)
-                .IsRequired();
-
-            // Not a relationship, for the same reason the activity's creator is not one: the model
-            // declares no foreign keys. The uploader is still a column of its own rather than a read
-            // of the activity's creator, because media is collaborative (Decision #27).
-            entity.Property(media => media.UploadedByUserId)
                 .HasMaxLength(Constant.MediaField.ReferenceIdLength)
                 .IsRequired();
 

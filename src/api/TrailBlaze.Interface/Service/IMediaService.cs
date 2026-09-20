@@ -6,9 +6,8 @@ using TrailBlaze.Model.Media;
 /// The media an activity carries: what may be stored, who may contribute it, and who may remove it.
 /// </summary>
 /// <remarks>
-/// Media is collaborative (Decision #27), so the gate on both writing and reading here is whether
-/// the caller can <em>read the activity</em> — not whether they wrote it. The rule itself is
-/// <see cref="IActivityAccessService"/>'s; this contract consults it and never restates it.
+/// Media is collaborative (Decision #27), so the gate on both writing and reading here is whether the
+/// caller can <em>read the activity</em> — not whether they wrote it.
 /// </remarks>
 public interface IMediaService
 {
@@ -16,9 +15,7 @@ public interface IMediaService
     /// Stores an uploaded image or video against an activity, attributed to the caller.
     /// </summary>
     /// <remarks>
-    /// The three ways this can be refused before anything is written — an unrecognized type, an
-    /// oversize file, an activity at its item limit — all leave no blob and no row, so a caller
-    /// never has to reason about partial state.
+    /// A refusal leaves no blob and no row, so a caller never reasons about partial state.
     /// </remarks>
     /// <param name="activityId">The activity the item is attached to.</param>
     /// <param name="content">The uploaded bytes.</param>

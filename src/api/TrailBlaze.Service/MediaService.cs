@@ -12,7 +12,7 @@ using TrailBlaze.Model.Media;
 public sealed class MediaService(
     IDbRepository dbRepository,
     IStorageRepository storageRepository,
-    IActivityAccessService activityAccess,
+    IActivityService activityService,
     IUserContextService userContext,
     IUploadValidationService uploadValidation,
     ILogger<MediaService> logger) : IMediaService
@@ -40,14 +40,13 @@ public sealed class MediaService(
                 return Rejected(Constant.Message.MediaTypeNotAllowed);
             }
 
-            // The size cap is the kind's own, and the comparison is the shared service's: an image is
-            // held to 10 MB and a video to 200, and neither number is restated here.
+            // The cap is the kind's own, and the comparison is the shared service's: an image is held
+            // to 10 MB and a video to 200, and neither number is restated here.
             string? rejection = kind == Constant.MediaKind.Image
                 ? uploadValidation.ValidateImage(contentType, sizeBytes)
                 : uploadValidation.ValidateVideo(contentType, sizeBytes);
 
-            // Refused before the caller is resolved, so a bad upload writes nothing and costs no
-            // query: no blob to orphan, and no row touched.
+            // Refused before the caller is resolved, so a bad upload writes nothing and costs no query.
             if (rejection is not null)
             {
                 return Rejected(rejection);
@@ -62,10 +61,9 @@ public sealed class MediaService(
 
             Activity? activity = await dbRepository.GetAsync<Activity>(row => row.Id == activityId);
 
-            // One answer for an activity that does not exist and one this caller may not read.
-            // Media is collaborative, so the gate is the read rule and not ownership (Decision #27);
-            // the rule is IActivityAccessService's, never restated here.
-            if (activity is null || !activityAccess.CanRead(activity, caller))
+            // One answer for an activity that does not exist and one this caller may not read: media
+            // is collaborative, so the gate is the read rule and not ownership (Decision #27).
+            if (activity is null || !activityService.CanRead(activity, caller))
             {
                 return MediaOutcome.NotFound();
             }
@@ -80,7 +78,7 @@ public sealed class MediaService(
 
                 // From the request in flight, never from a body: an upload cannot be attributed to
                 // someone else, exactly as an activity's creator cannot.
-                UploadedByUserId = caller,
+                CreatedBy = caller,
                 Kind = kind!,
                 BlobPath = path,
                 ContentType = contentType!,
@@ -89,8 +87,7 @@ public sealed class MediaService(
             };
 
             // The row before the bytes, counted and inserted as one step, so a caller at the cap is
-            // turned away before any blob exists. The reverse order writes bytes it then has to
-            // delete, and a delete that fails leaves an orphan nothing points at.
+            // turned away before any blob exists.
             bool stored = await dbRepository.CreateIfUnderAsync(
                 media, row => row.ActivityId == activityId, Constant.MediaLimit.PerActivity);
 
@@ -106,9 +103,19 @@ public sealed class MediaService(
             }
             catch
             {
-                // The row is committed and the bytes never landed, which a reader would see as an
-                // item whose fetch fails. Undone rather than left, since the row is the visible half.
-                await UndoRowAsync(media.Id);
+                // The row is committed and the bytes never landed, which a reader would see as an item
+                // whose fetch fails. Undone rather than left, since the row is the visible half.
+                try
+                {
+                    await dbRepository.DeleteAsync<Media>([media.Id]);
+                }
+                catch (Exception undo)
+                {
+                    // Best-effort: the request is already failing, and an undo that threw on top of
+                    // that would replace the real cause with its own.
+                    logger.LogError(undo, "Undoing media row {MediaId} after a failed upload failed.", media.Id);
+                }
+
                 throw;
             }
 
@@ -138,7 +145,7 @@ public sealed class MediaService(
 
             Activity? activity = await dbRepository.GetAsync<Activity>(row => row.Id == activityId);
 
-            if (activity is null || !activityAccess.CanRead(activity, caller))
+            if (activity is null || !activityService.CanRead(activity, caller))
             {
                 return MediaListing.NotFound();
             }
@@ -146,10 +153,9 @@ public sealed class MediaService(
             List<Media> items =
                 await dbRepository.GetListAsync<Media>(row => row.ActivityId == activityId);
 
-            // One read for the whole listing rather than one per uploader: the names are resolved in
-            // the service because the model declares no relationship, so the join is a second query
-            // over a handful of ids rather than a navigation EF could follow.
-            string[] uploaderIds = [.. items.Select(item => item.UploadedByUserId).Distinct()];
+            // One read for the whole listing rather than one per uploader: the model declares no
+            // relationship, so the names are joined here rather than followed as a navigation.
+            string[] uploaderIds = [.. items.Select(item => item.CreatedBy).OfType<string>().Distinct()];
 
             List<User> uploaders = uploaderIds.Length == 0
                 ? []
@@ -162,7 +168,7 @@ public sealed class MediaService(
                 [.. items
                     .OrderBy(item => item.CreatedOn)
                     .ThenBy(item => item.Id)
-                    .Select(item => ToResponse(item, names.GetValueOrDefault(item.UploadedByUserId)))]);
+                    .Select(item => ToResponse(item, names.GetValueOrDefault(item.CreatedBy ?? string.Empty)))]);
         }
         catch (Exception ex)
         {
@@ -194,19 +200,16 @@ public sealed class MediaService(
 
             // Three principals and no fourth (Decision #27): the contributor, the owner of the entry
             // the item sits on, and an administrator. The administrator is not among them yet --
-            // nothing can read a role today, see IActivityAccessService -- so a caller who is one is
-            // judged as an ordinary user here.
-            bool permitted = media.UploadedByUserId == caller
-                || activity?.CreatedByUserId == caller;
+            // nothing can read a role today -- so a caller who is one is judged as an ordinary user.
+            bool permitted = media.CreatedBy == caller
+                || activity?.CreatedBy == caller;
 
             if (!permitted)
             {
                 return MediaOutcome.Forbidden();
             }
 
-            // Row first, then blob. This order can at worst leave an unreferenced blob, which is
-            // inert; the reverse can leave a row naming bytes that are already gone, which a reader
-            // sees as a broken item.
+            // Row first, then blob: this order can at worst leave an unreferenced blob, which is inert.
             await dbRepository.DeleteAsync<Media>([media.Id]);
             await storageRepository.DeleteAsync(Constant.StorageContainer.Media, media.BlobPath);
 
@@ -224,41 +227,13 @@ public sealed class MediaService(
     private static MediaOutcome Rejected(string reason) =>
         MediaOutcome.Rejected(new Dictionary<string, string[]> { [FileFormField] = [reason] });
 
-    /// <summary>Where a newly uploaded item is stored: the activity's folder, then a fresh name.</summary>
-    /// <remarks>
-    /// A fresh name per upload rather than a stable one, so a client that has cached a path is never
-    /// served the previous bytes under it. The activity id is an app-assigned GUID, so it needs no
-    /// escaping to be a path segment.
-    /// </remarks>
-    /// <param name="activityId">The activity the item belongs to.</param>
-    /// <param name="contentType">A content type already checked against the allowlist.</param>
+    /// <summary>Where a newly uploaded item is stored: the activity's folder, then a fresh name, so a
+    /// client that cached a path is never served the previous bytes under it.</summary>
     private string MediaPathFor(string activityId, string contentType) =>
         $"{activityId}/{Guid.NewGuid():N}{uploadValidation.FileExtensionFor(contentType)}";
 
-    /// <summary>
-    /// Removes a row whose bytes never landed.
-    /// </summary>
-    /// <remarks>
-    /// Best-effort: the request is already failing, and an undo that threw on top of that would
-    /// replace the real cause with its own. A row left behind is reported rather than swallowed.
-    /// </remarks>
-    /// <param name="mediaId">The row to remove.</param>
-    private async Task UndoRowAsync(string mediaId)
-    {
-        try
-        {
-            await dbRepository.DeleteAsync<Media>([mediaId]);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Undoing media row {MediaId} after a failed upload also failed.", mediaId);
-        }
-    }
-
     /// <summary>The stored item as the client sees it. It carries no path, by design: the bytes are
     /// reached through feature 07, and this is what says there are any.</summary>
-    /// <param name="media">The row.</param>
-    /// <param name="uploaderDisplayName">The uploader's name, or null when their row is unreadable.</param>
     private static MediaResponse ToResponse(Media media, string? uploaderDisplayName) => new()
     {
         Id = media.Id,
@@ -267,7 +242,7 @@ public sealed class MediaService(
         SizeBytes = media.SizeBytes,
         OriginalFileName = media.OriginalFileName,
         CreatedOn = media.CreatedOn,
-        UploadedByUserId = media.UploadedByUserId,
+        UploadedByUserId = media.CreatedBy ?? string.Empty,
         UploaderDisplayName = uploaderDisplayName,
     };
 }

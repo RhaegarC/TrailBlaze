@@ -44,7 +44,7 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
             .GetAsync<Media>(row => row.Id == written.Id))!;
 
         Assert.Equal(activityId, stored.ActivityId);
-        Assert.Equal("oid-ada", stored.UploadedByUserId);
+        Assert.Equal("oid-ada", stored.CreatedBy);
         Assert.Equal(Constant.MediaKind.Image, stored.Kind);
         Assert.Equal("image/png", stored.ContentType);
         Assert.Equal(4_096, stored.SizeBytes);
@@ -314,7 +314,7 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
     private static Media Item(string activityId, string fileName, string kind, long sizeBytes) => new()
     {
         ActivityId = activityId,
-        UploadedByUserId = "oid-ada",
+        CreatedBy = "oid-ada",
         Kind = kind,
         BlobPath = $"{activityId}/{Guid.NewGuid():N}{Path.GetExtension(fileName)}",
         ContentType = kind == Constant.MediaKind.Video ? "video/mp4" : "image/png",

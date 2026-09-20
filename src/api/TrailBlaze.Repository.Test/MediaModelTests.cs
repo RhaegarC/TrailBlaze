@@ -19,7 +19,6 @@ public sealed class MediaModelTests
 {
     [Theory]
     [InlineData(nameof(Media.ActivityId), 128)]
-    [InlineData(nameof(Media.UploadedByUserId), 128)]
     [InlineData(nameof(Media.Kind), 16)]
     [InlineData(nameof(Media.BlobPath), 512)]
     [InlineData(nameof(Media.ContentType), 128)]
@@ -34,13 +33,20 @@ public sealed class MediaModelTests
     /// </summary>
     [Theory]
     [InlineData(nameof(Media.ActivityId))]
-    [InlineData(nameof(Media.UploadedByUserId))]
     [InlineData(nameof(Media.Kind))]
     [InlineData(nameof(Media.BlobPath))]
     [InlineData(nameof(Media.ContentType))]
     [InlineData(nameof(Media.OriginalFileName))]
     public void A_required_column_is_non_nullable(string propertyName) =>
         Assert.False(PropertyOf(propertyName).IsNullable);
+
+    /// <summary>
+    /// The uploader is the shared audit column <see cref="EntityBase.CreatedBy"/>, which every
+    /// <see cref="EntityBase"/> already carries — so an item has no uploader column of its own.
+    /// </summary>
+    [Fact]
+    public void The_uploader_is_the_shared_audit_column() =>
+        Assert.NotNull(PropertyOf(nameof(Media.CreatedBy)));
 
     /// <summary>
     /// A 200 MB video does not fit in an <c>int</c>, and the column EF infers for a
@@ -83,11 +89,10 @@ public sealed class MediaModelTests
     /// Both of the item's references are plain columns, not relationships.
     /// </summary>
     /// <remarks>
-    /// The PRD draws <c>ActivityId</c> and <c>UploadedByUserId</c> as FKs and the model declares no
-    /// foreign keys at all (see the debt register). The difference is a behaviour rather than a
-    /// diagram: with a relationship, EF would cascade an activity's deletion into its media and a
-    /// user's deletion into everything they contributed, and neither is what the product asks for —
-    /// <c>ActivityService</c> removes the media itself, and a user is never deleted at all.
+    /// The PRD draws <c>ActivityId</c> as an FK and the model declares no foreign keys at all (see
+    /// the debt register). The difference is a behaviour rather than a diagram: with a relationship,
+    /// EF would cascade an activity's deletion into its media, which is not what the product asks
+    /// for — <c>ActivityService</c> removes the media itself.
     /// </remarks>
     [Fact]
     public void Both_references_are_columns_and_not_relationships()

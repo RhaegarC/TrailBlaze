@@ -25,9 +25,4 @@ public sealed class Activity : EntityBase
     /// Set only by the cover upload route (feature 08), never by a create or update body.
     /// </summary>
     public string? CoverImageBlobPath { get; set; }
-
-    /// <summary>
-    /// The caller's id as a plain column: the model declares no foreign keys.
-    /// </summary>
-    public string CreatedByUserId { get; set; } = string.Empty;
 }

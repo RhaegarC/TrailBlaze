@@ -167,7 +167,7 @@ public sealed class MediaServiceTests
         await harness.Service.UploadAsync(
             ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
 
-        Assert.Equal(Contributor, harness.Repository.Inserted.Single().UploadedByUserId);
+        Assert.Equal(Contributor, harness.Repository.Inserted.Single().CreatedBy);
     }
 
     [Fact]
@@ -485,7 +485,7 @@ public sealed class MediaServiceTests
         Location = "North ridge",
         ActivityDate = new DateOnly(2026, 3, 14),
         Type = type,
-        CreatedByUserId = owner,
+        CreatedBy = owner,
     };
 
     private static Media Item(
@@ -493,7 +493,7 @@ public sealed class MediaServiceTests
         {
             Id = id,
             ActivityId = ActivityId,
-            UploadedByUserId = uploader,
+            CreatedBy = uploader,
             Kind = Constant.MediaKind.Image,
             BlobPath = $"blobs/{id}",
             ContentType = "image/png",
@@ -517,7 +517,8 @@ public sealed class MediaServiceTests
 
                 // The real rule, not a stand-in: the visibility decision is the thing under test in
                 // the gate tables, and a double here would be asserting the double.
-                new ActivityAccessService(),
+                new ActivityService(
+                    Repository, Storage, new StubUserContext(caller), NullLogger<ActivityService>.Instance),
                 new StubUserContext(caller),
                 new UploadValidationService(),
                 NullLogger<MediaService>.Instance);

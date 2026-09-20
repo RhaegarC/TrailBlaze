@@ -17,7 +17,6 @@ namespace TrailBlaze.Repository.Migrations
                 {
                     Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     ActivityId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                    UploadedByUserId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                     Kind = table.Column<string>(type: "nvarchar(16)", maxLength: 16, nullable: false),
                     BlobPath = table.Column<string>(type: "nvarchar(512)", maxLength: 512, nullable: false),
                     ContentType = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),

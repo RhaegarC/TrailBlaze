@@ -208,12 +208,12 @@ erDiagram
         string Description "nullable"
         string Type "Public | Shared | Private"
         string CoverImageBlobPath "nullable, container by Type"
-        string CreatedByUserId "the caller's id, a plain column"
+        string CreatedBy "the caller's id, from EntityBase"
     }
     Media {
         string Id PK "GUID, app-assigned"
         string ActivityId "names activities.Id, a plain column"
-        string UploadedByUserId "who added this item"
+        string CreatedBy "who added this item, from EntityBase"
         string Kind "Image | Video"
         string BlobPath "always the private container"
         string ContentType
@@ -240,10 +240,10 @@ erDiagram
 | | `Description` | nvarchar(max) | optional |
 | | `Type` | nvarchar(16) | `Public` \| `Shared` \| `Private`; required, defaults to `Public`; **gates reads** |
 | | `CoverImageBlobPath` | nvarchar(512) | optional; container follows `Type` — `covers` (public) for `Public`, `media` (private, SAS) for `Shared`/`Private` |
-| | `CreatedByUserId` | nvarchar(128) | the caller's `users.Id`, stored as a **plain column** — the model declares no foreign keys ([item 23](tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)) |
+| | `CreatedBy` | nvarchar(max) | the caller's `users.Id`, from `EntityBase`'s audit column; a **plain column** — the model declares no foreign keys ([item 23](tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)) |
 | `media` | `Id` | string (GUID) | PK, app-assigned |
 | | `ActivityId` | nvarchar(128) | names `activities.Id`, stored as a **plain column** — no foreign key, as on `activities` above ([item 23](tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)) |
-| | `UploadedByUserId` | nvarchar(128) | names `users.Id`, a **plain column**; **who added this item** — not necessarily the activity's creator |
+| | `CreatedBy` | nvarchar(max) | the caller's `users.Id`, from `EntityBase`'s audit column; **who added this item** — not necessarily the activity's creator |
 | | `Kind` | nvarchar(16) | `Image` \| `Video` |
 | | `BlobPath` | nvarchar(512) | **private** container; served only via SAS. Also holds covers of Shared/Private activities |
 | | `ContentType` | nvarchar(128) | validated allowlist |
@@ -262,7 +262,7 @@ Five consequences follow from the conventions above, and features below depend o
   caller on the list *and* on the detail read. An activity the caller may not see is returned as
   **404, not 403** — a 403 would confirm the row exists, which is itself the fact being withheld.
   Mutations keep the 403 (see "Authentication & authorization").
-- **Media belongs to an activity, not to a person.** `media.UploadedByUserId` exists to group and
+- **Media belongs to an activity, not to a person.** `media.CreatedBy` exists to group and
   attribute items and to decide who may delete one; it never widens or narrows visibility, which
   is the activity's `Type` alone.
 
@@ -286,7 +286,7 @@ is visible the first time an admin action is attempted rather than silent.
 
 Authorization has two independent axes, and keeping them apart is what makes the matrix readable:
 **visibility** (`activities.Type`) decides who may *read* an entry; **ownership**
-(`activities.CreatedByUserId`) decides who may *mutate* it. An admin overrides both.
+(`activities.CreatedBy`) decides who may *mutate* it. An admin overrides both.
 
 **Reading — what a caller receives, by the activity's `Type`:**
 

@@ -104,9 +104,9 @@ test belongs to, is [testing-and-tdd.md](../testing-and-tdd.md)'s subject, not t
 | Project | Bare machine | With the containers |
 |---|---|---|
 | `TrailBlaze.Service.Test` | 107 / 0 / 107 | 107 / 0 / 107 |
-| `TrailBlaze.Repository.Test` | 60 / 53 / 113 | 113 / 0 / 113 |
+| `TrailBlaze.Repository.Test` | 58 / 53 / 111 | 111 / 0 / 111 |
 | `TrailBlaze.Api.Test` | 12 / 0 / 12 | 12 / 0 / 12 |
-| **All three** | **179 / 53 / 232** | **232 / 0 / 232** |
+| **All three** | **177 / 53 / 230** | **230 / 0 / 230** |
 
 Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
 the container tiers skip, and `Category=Container` is the only trait in the solution.

@@ -12,8 +12,8 @@ using TrailBlaze.Repository;
 namespace TrailBlaze.Repository.Migrations
 {
     [DbContext(typeof(TrailBlazeContext))]
-    [Migration("20260920005858_AddMedia")]
-    partial class AddMedia
+    [Migration("20260920035007_DropActivityCreatedByUserId")]
+    partial class DropActivityCreatedByUserId
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -39,11 +39,6 @@ namespace TrailBlaze.Repository.Migrations
 
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CreatedByUserId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
 
                     b.Property<DateTimeOffset>("CreatedOn")
                         .HasColumnType("datetimeoffset");

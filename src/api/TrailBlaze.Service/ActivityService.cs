@@ -1,5 +1,6 @@
 namespace TrailBlaze.Service;
 
+using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 using TrailBlaze.Interface.Infrastructure;
 using TrailBlaze.Interface.Repository;
@@ -12,10 +13,27 @@ using TrailBlaze.Model.DatabaseEntity;
 public sealed class ActivityService(
     IDbRepository dbRepository,
     IStorageRepository storageRepository,
-    IActivityAccessService activityAccess,
     IUserContextService userContext,
     ILogger<ActivityService> logger) : IActivityService
 {
+    /// <inheritdoc/>
+    public Expression<Func<Activity, bool>> VisibleTo(string? caller) =>
+        string.IsNullOrWhiteSpace(caller)
+            ? activity => activity.Type == Constant.ActivityType.Public
+            : activity => activity.Type == Constant.ActivityType.Public
+                || activity.Type == Constant.ActivityType.Shared
+                || activity.CreatedBy == caller;
+
+    /// <inheritdoc/>
+    public bool CanRead(Activity activity, string? caller)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        // Compiled from the expression the queries use rather than restated in C#: a second copy of
+        // an access rule is a second rule.
+        return VisibleTo(caller).Compile()(activity);
+    }
+
     /// <inheritdoc/>
     public IReadOnlyDictionary<string, string[]> Validate(IActivityInput input)
     {
@@ -78,7 +96,7 @@ public sealed class ActivityService(
                 Type = draft.Type,
 
                 // From the request in flight, never the body, which has no property for it.
-                CreatedByUserId = caller,
+                CreatedBy = caller,
             };
 
             await dbRepository.CreateAsync(activity);
@@ -126,7 +144,7 @@ public sealed class ActivityService(
             int skip = (int)Math.Min((long)appliedPage * appliedSize, int.MaxValue);
 
             (List<Activity> items, int total) = await dbRepository.GetPageAsync<Activity>(
-                activityAccess.VisibleTo(caller), NewestFirst, skip, appliedSize);
+                VisibleTo(caller), NewestFirst, skip, appliedSize);
 
             logger.LogInformation(
                 "Listed {Count} of {Total} activities for page {Page}.", items.Count, total, appliedPage);
@@ -223,10 +241,8 @@ public sealed class ActivityService(
     /// Takes an activity's media with it, whichever uploader contributed each item.
     /// </summary>
     /// <remarks>
-    /// Done here rather than by a cascade, because the model declares no foreign keys: without this
-    /// the rows would outlive their activity, holding blobs nothing can reach and a count the cap
-    /// would keep counting. An owner deleting their entry is never blocked by media someone else
-    /// contributed, which is the point of removing them by hand.
+    /// The model declares no foreign keys, so nothing cascades this: without it the rows would
+    /// outlive their activity, holding blobs nothing can reach.
     /// </remarks>
     /// <param name="activityId">The activity being deleted.</param>
     private async Task RemoveMediaAsync(string activityId)
@@ -241,58 +257,35 @@ public sealed class ActivityService(
 
         await dbRepository.DeleteAsync<Media>([.. items.Select(item => item.Id)]);
 
-        // Rows first, then blobs: this order can at worst leave an unreferenced blob, which is
-        // inert, where the reverse can leave a row naming bytes that are already gone.
+        // Rows first, then blobs: this order leaves at worst an unreferenced blob, which nothing
+        // shows, where the reverse leaves a row naming bytes that are already gone.
         foreach (Media item in items)
         {
             await storageRepository.DeleteAsync(Constant.StorageContainer.Media, item.BlobPath);
         }
     }
 
-    /// <summary>
-    /// The live row, or null for an id that is unknown or already deleted — the soft-delete filter
-    /// makes the second case indistinguishable from the first, deliberately.
-    /// </summary>
-    /// <param name="id"></param>
-    /// <returns></returns>
+    /// <summary>The live row, or null for an id that is unknown or already deleted — the soft-delete
+    /// filter makes the second case indistinguishable from the first, deliberately.</summary>
     private async Task<Activity?> FindAsync(string id) =>
         await dbRepository.GetAsync<Activity>(row => row.Id == id);
 
-    /// <summary>
-    /// Ordering by creation, newest first, with the id as a tie-break so the order is total and a
-    /// row cannot appear on two pages or fall between them.
-    /// </summary>
-    /// <param name="query"></param>
-    /// <returns></returns>
+    /// <summary>The id is the tie-break, so the order is total and a row cannot appear on two pages
+    /// or fall between them.</summary>
     private static IOrderedQueryable<Activity> NewestFirst(IQueryable<Activity> query) =>
         query.OrderByDescending(activity => activity.CreatedOn)
             .ThenByDescending(activity => activity.Id);
 
-    /// <summary>
-    /// Whitespace is absence, not a value: it reaches the column as empty once trimmed.
-    /// </summary>
-    /// <param name="value"></param>
-    /// <param name="message"></param>
-    /// <returns></returns>
+    /// <summary>Whitespace is absence, not a value.</summary>
     private static string? Missing(string? value, string message) =>
         string.IsNullOrWhiteSpace(value) ? message : null;
 
-    /// <summary>
-    /// Inclusive, and measured on the trimmed value — the length the column must hold.
-    /// </summary>
-    /// <param name="value"></param>
-    /// <param name="cap"></param>
-    /// <param name="message"></param>
-    /// <returns></returns>
+    /// <summary>Inclusive, and measured on the trimmed value — the length the column must hold.</summary>
     private static string? TooLong(string? value, int cap, string message) =>
         value is not null && value.Trim().Length > cap ? message : null;
 
-    /// <summary>
-    /// One field, two possible objections, so a blank field one character too long reports both.
-    /// </summary>
-    /// <param name="errors"></param>
-    /// <param name="field"></param>
-    /// <param name="message"></param>
+    /// <summary>One field, two possible objections, so a blank field one character too long reports
+    /// both.</summary>
     private static void AddIf(Dictionary<string, string[]> errors, string field, string? message)
     {
         if (message is null)
@@ -305,12 +298,7 @@ public sealed class ActivityService(
             : [message];
     }
 
-    /// <summary>
-    /// The response shape, with the cover path withheld from a caller who has no token.
-    /// </summary>
-    /// <param name="activity"></param>
-    /// <param name="includeCoverPath"></param>
-    /// <returns></returns>
+    /// <summary>The response shape, with the cover path withheld from a caller who has no token.</summary>
     private static ActivityResponse ToResponse(Activity activity, bool includeCoverPath) => new()
     {
         Id = activity.Id,

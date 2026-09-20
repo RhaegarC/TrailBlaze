@@ -122,7 +122,7 @@ public sealed class ActivityPagingTests(TrailBlazeDatabaseFixture fixture)
             scope.ServiceProvider.GetRequiredService<TrailBlazeContext>());
 
         return await repository.GetPageAsync<Activity>(
-            row => row.CreatedByUserId == owner && row.Type == type,
+            row => row.CreatedBy == owner && row.Type == type,
             query => query.OrderByDescending(row => row.CreatedOn).ThenByDescending(row => row.Id),
             skip,
             take);
@@ -140,7 +140,7 @@ public sealed class ActivityPagingTests(TrailBlazeDatabaseFixture fixture)
             Location = "North ridge",
             ActivityDate = RidgeDate,
             Type = type,
-            CreatedByUserId = owner,
+            CreatedBy = owner,
         }).ToList();
 
         await repository.CreateAsync(rows);

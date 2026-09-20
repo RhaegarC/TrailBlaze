@@ -33,7 +33,7 @@ public sealed class ActivityServiceTests
         ActivityOutcome outcome = await Service(repository).CreateAsync(Valid());
 
         Assert.Equal(ActivityOutcomeKind.Completed, outcome.Kind);
-        Assert.Equal(Caller, repository.Created!.CreatedByUserId);
+        Assert.Equal(Caller, repository.Created!.CreatedBy);
     }
 
     [Fact]
@@ -445,7 +445,6 @@ public sealed class ActivityServiceTests
         new(
             repository ?? new RecordingRepository(),
             storage ?? new RecordingStorage(),
-            new ActivityAccessService(),
             new StubUserContext(caller),
             NullLogger<ActivityService>.Instance);
 
@@ -468,7 +467,7 @@ public sealed class ActivityServiceTests
             Location = "North ridge",
             ActivityDate = Date,
             Type = type,
-            CreatedByUserId = owner ?? Caller,
+            CreatedBy = owner ?? Caller,
             CreatedOn = createdOn,
             CoverImageBlobPath = coverPath,
         };
@@ -478,7 +477,7 @@ public sealed class ActivityServiceTests
     {
         Id = name,
         ActivityId = "the-activity",
-        UploadedByUserId = Caller,
+        CreatedBy = Caller,
         Kind = Constant.MediaKind.Image,
         BlobPath = $"blobs/{name}",
         ContentType = "image/png",

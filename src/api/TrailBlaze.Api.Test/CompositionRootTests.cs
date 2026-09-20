@@ -49,9 +49,6 @@ public sealed class CompositionRootTests
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IActivityService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IMediaService>());
 
-        // Singleton, and resolved here for the same reason as the rest: a registration that cannot
-        // be built is not a startup failure but a 500 on the first request that needs it.
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IActivityAccessService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUploadValidationService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUserContextService>());
     }
