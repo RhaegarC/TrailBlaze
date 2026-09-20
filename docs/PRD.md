@@ -51,8 +51,9 @@ specified in [src/api/STANDARD.md](../src/api/STANDARD.md) §3 and §10, and enf
 *how* it is shaped.
 
 Deployment: the API runs on **Azure Container Apps** from the image `src/api/Dockerfile` builds;
-the web app runs on **Azure Static Web Apps**, deployed by GitHub workflow. There is no
-`docker-compose.yml` — neither target consumes a multi-service local stack, so there is none.
+the web app runs on **Azure Static Web Apps**, deployed by GitHub workflow. Neither target
+consumes a multi-service local stack, so no compose file here orchestrates a deployment:
+`src/api/docker-compose.yml` runs the API locally, for development and a pre-Azure stage.
 Azure SQL Database, Azure Blob and Entra ID are **real cloud resources** in every *deployed*
 environment — the API never points at a local stand-in where it runs.
 
@@ -69,7 +70,9 @@ the whole of the exception. [STANDARD.md](../src/api/STANDARD.md) §6 carries th
 **The test tier is the exception for tests, and it is deliberate (Decisions #5 and #6).** `dotnet test`
 runs against containers started by `src/api/docker-compose.test.yml` — SQL Edge and Azurite —
 because a test that asserts against a fake asserts about the fake. That file starts **no
-application process**; it is not the local multi-service stack the sentence above rules out.
+application process**, and it is not the stack the paragraph above describes: the two are separate
+compose projects on separate ports, so `dotnet test` sees neither the API nor a schema that stack
+applied.
 
 ### Current state vs. target
 
@@ -94,7 +97,7 @@ far along its feature is — a feature's own progress lives in the
 | Area | Target (this document) | Code today | Closes in |
 |---|---|---|---|
 | Database engine | **Azure SQL Server** | SQL Server through EF Core (`Microsoft.EntityFrameworkCore.SqlServer`); migrations and snapshot generated against it | feature 01 |
-| API hosting | ACA from a container image | `src/api/Dockerfile` builds the image; no `docker-compose.yml`, because neither target consumes a local multi-service stack | feature 01 |
+| API hosting | ACA from a container image | `src/api/Dockerfile` builds the image; `src/api/docker-compose.yml` runs it locally against container engines, which neither target consumes | feature 01 |
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
 | Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers and the filters are in [testing-and-tdd.md](testing-and-tdd.md); the counts are in [00-mission-1-sprint.md](features/00-mission-1-sprint.md) | feature 01 |
 | Blob abstraction | `IStorageRepository`, three containers, no fake | `IStorageRepository` in `TrailBlaze.Interface`, one Azure adapter in `TrailBlaze.Repository`, exercised by the storage tier against Azurite | feature 01 |
@@ -406,14 +409,17 @@ sequenced before anything consumes these paths (features 10 and 11 both do).
 
 ## Deployment
 
-**No reverse proxy, no local multi-service stack.** The API is an image on **Azure Container
-Apps**, built from `src/api/Dockerfile`; the web app is a static build on **Azure Static Web
-Apps**, deployed by GitHub workflow. There is no `docker-compose.yml` — neither target consumes
-one, and local development is `dotnet run` against the real cloud resources.
+**No reverse proxy.** The API is an image on **Azure Container Apps**, built from
+`src/api/Dockerfile`; the web app is a static build on **Azure Static Web Apps**, deployed by GitHub
+workflow. Neither target consumes a compose file, so nothing started alongside the application is
+part of a deployment. For a developer, `src/api/docker-compose.yml` runs the API against container
+engines on `http://localhost:8080` — a local convenience, and neither a deployment artifact nor a
+claim about one — while `dotnet run` against the real cloud resources remains the other path.
 
 Everything the API talks to is a real cloud resource reached by configuration: **Azure SQL
 Database** (which has no container image to run locally), **Azure Blob** and **Entra ID**. Secrets
-therefore live in user-secrets locally and in pipeline variables for deployment.
+therefore live in user-secrets or in the gitignored `src/api/.env` for the local stack, and in
+pipeline variables for deployment.
 
 **The test tier is the exception, and it is a different thing from a local stack.** `dotnet test`
 starts `src/api/docker-compose.test.yml`, which brings up SQL Edge and Azurite purely so the

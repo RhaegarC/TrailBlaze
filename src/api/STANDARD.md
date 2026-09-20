@@ -446,10 +446,10 @@ then user-secrets, then environment variables, then command line. Later sources 
 - **Every deployed environment runs against the real Azure SQL Database, not a local stand-in.**
   Azure SQL Database is managed and has no image to run, and the API is deployed to Azure
   Container Apps from `src/api/Dockerfile`, so the SQL Server's firewall must allow the caller.
-  There is no `docker-compose.yml` and none is wanted — neither deployment target consumes a
-  local multi-service stack, so a compose file claiming to stand in for one would be fiction.
-  (`docker-compose.test.yml` is not that: it starts no application process, serves only the test
-  tier, and §10 covers it.)
+  `docker-compose.yml` exists, and is not a deployment artifact: neither deployment target consumes
+  a local multi-service stack, so it stands in for a local development stage rather than for one.
+  It runs the API itself, which `docker-compose.test.yml` deliberately does not — that file starts
+  no application process, serves only the test tier, and §10 covers it.
 
   **Scoped 2026-09-19: `dotnet run` may point at a SQL Edge container on loopback.** A developer's
   user-secret `DbConnection` names `Server=127.0.0.1,1433;Database=TrailBlaze`, which is a
@@ -457,12 +457,15 @@ then user-secrets, then environment variables, then command line. Later sources 
   environments take the pipeline's `DbConnection`, which names Azure SQL, and no container is
   reachable from ACA — so this is an exception with a boundary, not a rule that moved.
 
-  **The container is not the test tier's, and the two contend for the same port.** Both bind
-  `127.0.0.1:1433`, so only one can be up, and while the dev container holds the port a
+  **The hand-started container is not the test tier's, and the two contend for the same port.**
+  Both bind `127.0.0.1:1433`, so only one can be up, and while the dev container holds the port a
   `dotnet test` run reaches *it* — which is safe only because the tier owns one database,
   `TrailBlazeTest`, and drops nothing outside it. Stop the dev container to get the isolated stack
   back. Do not point the test tier at the dev database deliberately: that name is the only thing
   bounding what it drops, and a schema in use is exactly what it has no reason to preserve.
+  `docker-compose.yml` is a third thing again and contends with neither: it publishes `14330` and
+  `10010`, and the API reaches both engines by compose service name rather than through a host
+  binding at all.
 
   **What the exception costs** is that Azure SQL Edge is not Azure SQL Database. A behaviour
   depending on the managed engine's version, collation, or certificate is no longer exercised
@@ -471,22 +474,27 @@ then user-secrets, then environment variables, then command line. Later sources 
 
 - **A deployed environment's connection string carries `Encrypt=True` without
   `TrustServerCertificate=True`**, since a managed Azure SQL server presents a real certificate
-  and there is nothing self-signed to accept. **Two exceptions, both narrow, and both on
-  loopback:** the test tier, and the local-dev container above. Azure SQL Edge serves a
-  self-signed certificate while `Microsoft.Data.SqlClient` 6.x encrypts by default, so a string
-  aimed at the container must carry `TrustServerCertificate=True` or `Encrypt=Optional`. That
-  keyword never appears in `appsettings.json`, and the one user-secret that carries it names
-  `127.0.0.1` — an exception that also reaches a real server would be the bug this rule exists to
-  prevent, so the host is part of the exception and not incidental to it.
+  and there is nothing self-signed to accept. **The exception is a host name that cannot name a
+  real server** — loopback, or a name resolving only inside a local stack's own network. Azure SQL
+  Edge serves a self-signed certificate while `Microsoft.Data.SqlClient` 6.x encrypts by default,
+  so a string aimed at such a host must carry `TrustServerCertificate=True` or `Encrypt=Optional`.
+  That keyword never appears in `appsettings.json`, and the strings that carry it name `127.0.0.1`
+  or the compose service name `azure-sql-edge` — an exception that also reaches a real server would
+  be the bug this rule exists to prevent, so the host is part of the exception and not incidental
+  to it. Widened from loopback-only on 2026-09-20, and the boundary is checkable rather than a
+  matter of taste: **if DNS outside the stack resolves the name, it is outside the exception.**
 
   The test tier's half is enforced rather than merely written down —
   `TrailBlaze.Repository.Test`'s `TestEnvironment` parses a `TRAILBLAZE_SQL_CONNECTION` pointing
   at a loopback host and refuses a string that lacks the keyword, because the failure it prevents
-  is a certificate error that names neither the certificate nor the missing keyword. **The
-  local-dev half is not enforced, and that is a gap rather than a decision**: nothing stops a
-  user-secret naming a real server from carrying the keyword, and the check that would — refuse
-  `TrustServerCertificate=True` on a non-loopback `DbConnection` at the composition root — is not
-  written. Recorded here so the asymmetry between the two halves is visible.
+  is a certificate error that names neither the certificate nor the missing keyword. **The other
+  half is not enforced, and the widening above did not close it**: nothing stops a string naming a
+  real server from carrying the keyword, and the check that would — refuse
+  `TrustServerCertificate=True` on a `DbConnection` whose host resolves outside the stack, at the
+  composition root — is not written. It is not written because a DNS lookup at boot is itself a
+  boot-time network dependency, and from inside the compose network the name is unresolvable by
+  construction, so the check could not run where it is most needed. Recorded here so the asymmetry,
+  and the reason it stands, both stay visible.
 
 - **A missing required setting fails at startup with a message naming the setting** — not with
   a null reference when the first request arrives, and not with an exception naming a local

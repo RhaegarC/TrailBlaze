@@ -50,8 +50,8 @@ in [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md), which is thei
 ## Running it locally
 
 The API refuses to start without its required settings (`DbConnection`, `BlobConnection`,
-`AllowedOrigins`), so there is no zero-configuration boot. Locally they come from user-secrets —
-never from `appsettings.json` or `launchSettings.json`, which are version-controlled:
+`AllowedOrigins`), so there is no zero-configuration boot. For a host `dotnet run` they come from
+user-secrets — never from `appsettings.json` or `launchSettings.json`, which are version-controlled:
 
 ```bash
 cd src/api/TrailBlaze.Api
@@ -95,25 +95,47 @@ dotnet user-secrets set "DbConnection" "Server=127.0.0.1,1433;Database=TrailBlaz
 
 Note the differences from the Azure string, and that each is deliberate: the host is `127.0.0.1`
 rather than a real server, and it carries `TrustServerCertificate=True` because SQL Edge serves a
-self-signed certificate. Both are part of a **loopback-only exception** — [STANDARD.md](src/api/STANDARD.md)
-§6 states it, and states that the keyword must never reach a string that names a real server. The
+self-signed certificate. Both are part of the exception [STANDARD.md](src/api/STANDARD.md) §6 states
+— a host name that cannot name a real server, whether loopback or a name resolving only inside a
+local stack's own network (the stack below reaches its engine as `azure-sql-edge`, the second kind).
+The boundary is checkable: if DNS outside the stack resolves the name, it is outside the exception.
+The
 `-v` mount is what makes the database survive a container recreate; without it, `docker rm` takes
 the schema with it. `--shm-size 1g` is not optional either: the engine fails opaquely on the 64 MB
 default.
 
-The container is separate from the test tier's. `src/api/docker-compose.test.yml` starts its own
-SQL Edge for `dotnet test`, and both bind `127.0.0.1:1433`, so only one can run at a time. While
-the dev container holds the port, a test run reaches *it*; that is safe — the tier owns one
-database, `TrailBlazeTest`, and never touches `TrailBlaze` — but stop the dev container to get the
-isolated stack back.
+That container is separate from the two compose files. `src/api/docker-compose.test.yml` starts its
+own SQL Edge for `dotnet test`, and both it and the container above bind `127.0.0.1:1433`, so only
+one of those two can run at a time. While the dev container holds the port, a test run reaches
+*it*; that is safe — the tier owns one database, `TrailBlazeTest`, and never touches `TrailBlaze` —
+but stop the dev container to get the isolated stack back. The stack below binds neither port, so
+it contends with neither.
 
-There is no `docker-compose.yml`, and none is wanted: the API is deployed to **Azure Container
-Apps** from the image `src/api/Dockerfile` builds, and the web app to **Azure Static Web Apps** by
-its own workflow, and neither consumes a local multi-service stack. `src/api/docker-compose.test.yml`
-is not a local stack — it starts **no application process**, only the two containers the test tier
-talks to, and it is documented in [testing-and-tdd.md](docs/testing-and-tdd.md). The command above
-is a `docker run` rather than a compose service for the same reason: nothing in the deployment
-reads it, so there is no stack for compose to describe.
+**Or run the whole stack, API included:**
+
+```bash
+cd src/api
+cp .env.example .env          # then fill in MSSQL_SA_PASSWORD
+docker compose up -d --build
+curl -sS http://localhost:8080/api/Activity
+```
+
+`up` blocks until the schema is applied and the blob containers exist, because the API is not
+allowed to start against an unmigrated database and never migrates on boot itself. Both are
+one-shot services in that file: `Dockerfile.migrate` builds the migrations into an `efbundle` and
+runs it, and `blob-init` creates the three containers. The API then
+serves on `http://localhost:8080` in Development, so `/openapi/v1.json` is available. The engines
+publish on `14330` and `10010` rather than `1433` and `10000`, which is what lets this, the test
+tier and the container above all run at once; nothing in the stack reads those bindings — the API
+reaches both engines by service name over the compose network.
+
+This is a **local convenience, not a deployment artifact.** The API is deployed to **Azure
+Container Apps** from the image `src/api/Dockerfile` builds, and the web app to **Azure Static Web
+Apps** by its own workflow; neither consumes a compose file, and a deployed environment still takes
+the pipeline's `DbConnection` and a real storage account. `docker-compose.test.yml` is a third
+thing again — it starts **no application process**, only the two containers the test tier talks to,
+and [testing-and-tdd.md](docs/testing-and-tdd.md) documents it. The `docker run` path above stays
+for a host `dotnet run`, which is the tighter loop while you are editing the API.
 
 Against a real server, three things to arrange before the first run, all of them outside the app:
 
@@ -129,10 +151,10 @@ Against a real server, three things to arrange before the first run, all of them
 
 Against the local container the first two do not apply: there is no firewall rule to add, and the
 command above creates the database. The third still does — a local database does not stand in for
-storage, and `BlobConnection` is required at startup either way, so point it at a real account or
-at an Azurite container of your own. Nothing in this repository starts one for the application;
-the Azurite in `docker-compose.test.yml` belongs to the test tier, which is why it has no volume
-and drops the blobs it writes.
+storage, and `BlobConnection` is required at startup either way. The stack starts an Azurite and
+creates the three containers for you; a host `dotnet run` outside it has neither, so point that one
+at a real account or at an Azurite of your own. The Azurite in `docker-compose.test.yml` is the
+test tier's and stays out of this: it has no volume and drops the blobs it writes.
 
 **Schema changes are not applied by the API.** Migrations run in the deployment pipeline, before a
 new revision takes traffic — Azure Container Apps runs several replicas, and replicas migrating
