@@ -11,15 +11,9 @@ Produce a concise sprint status report for TrailBlaze:
 2. **Sprint DoD** — report the Definition of Done items in
    `docs/features/00-mission-1-sprint.md`, checked against what is actually complete. Read the
    criteria from that file; do not carry a list of them here, where it would drift.
-3. **Debt queue** — read the open table in [docs/tech-debt/00-debt-log.md](../../docs/tech-debt/00-debt-log.md)
-   and report its size, how many items are `— (orphaned)`, and any item whose `Discharges via` names
-   a feature that has since been **archived without discharging it**. That last check is the one
-   that matters: a feature file moving to `archive/` is not evidence it closed the items it owned,
-   and nothing else watches the seam — a feature can archive green while the item it was going to
-   discharge silently becomes nobody's.
-4. **Git state** — current branch, recent commits (`git log --oneline -5`), open `feature/*`,
-   `fix/*` and `debt/*` branches, and any open pull requests (`gh pr list`).
-5. **Next actions** — recommend the next feature to pick up and any blocked DoD items.
+3. **Git state** — current branch, recent commits (`git log --oneline -5`), open `feature/*`
+   and `fix/*` branches, and any open pull requests (`gh pr list`).
+4. **Next actions** — recommend the next feature to pick up and any blocked DoD items.
 
 Present as a short table plus a two-line "next action" summary.
 

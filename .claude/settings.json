@@ -80,7 +80,6 @@
       "Bash(grep -cE '^#{3,4} ' docs/PRD.md)",
       "Bash(grep -nE '^#{2,4} ' docs/PRD.md)",
       "Bash(grep -n 'Open items\\\\|^## \\\\|^### \\\\|no `fetch`\\\\|no `fetch` and no MSAL\\\\|not a mock\\\\|a mock' docs/features/00-mission-1-sprint.md)",
-      "Bash(sed -i 's|]\\(\\\\.\\\\./00-debt-log\\\\.md\\)|]\\(00-debt-log.md\\)|g' *.md)",
       "Bash(sed -i 's|]\\(\\\\.\\\\./features/archive/01-foundation\\\\.md\\)|]\\(../../features/archive/01-foundation.md\\)|g' archive/*.md)"
     ],
     "additionalDirectories": [

@@ -9,9 +9,8 @@ given — not to justify the rule, but because a rule whose reasoning is missing
 "simplified" away by the next person.
 
 **Reading it:** sections 1–2 are the layout and the one workflow you will use most. Sections
-3–9 are the rules by area. Section 10 is testing, 11 is CI, and **12 points at the tech-debt
-register, which lists the places this standard and the code do not yet agree** — read that one
-before trusting the rest blindly.
+3–9 are the rules by area. Section 10 is testing, 11 is CI, and **12 says what a rule here means
+when the code has not caught up with it** — read that one before trusting the rest blindly.
 
 ---
 
@@ -324,19 +323,16 @@ rather than wholesale:
 
 One consequence of that split is easy to miss and is **not** yet right: nothing assigns
 `LastModifiedOn` on insert, so a row that has never been updated stores `default(DateTimeOffset)` —
-the year 1 — rather than a real instant. Do not rely on the column being populated; see item
-[20](../../docs/tech-debt/20-lastmodified-unset-on-insert.md), which also carries the decision about
-which way to fix it.
+the year 1 — rather than a real instant. Do not rely on the column being populated.
 
 A value written in a repository method beforehand is therefore **discarded on the same save** — with
 `CreatedBy` the one exception, assigned with `??=`, so a caller replaying known data can set it and
 keep it. That is the same discretion the key rule above gives to imports.
 
 Writing these by hand is not redundant but **wrong**: it leaves dead code that reads as though it
-were load-bearing. That was the defect in
-[item 01](../../docs/tech-debt/archive/01-audit-columns-have-two-writers.md), where
-`DatabaseRepository.DeleteAsync` wrote `LastModifiedOn` and `LastModifiedBy = "sys"` into a save the
-interceptor restamped anyway. Those two assignments are gone and the method now sets only
+were load-bearing. That was the defect in `DatabaseRepository.DeleteAsync`, which wrote
+`LastModifiedOn` and `LastModifiedBy = "sys"` into a save the interceptor restamped anyway. Those two
+assignments are gone and the method now sets only
 `IsDeleted`, which is the whole of what a soft delete does. See
 section 5 for what `Actor` resolves to and why it is not always the caller.
 
@@ -355,10 +351,9 @@ section 5 for what `Actor` resolves to and why it is not always the caller.
   `(TableName, EntityId)` and one on `Timestamp`. Add the index when you add the query, not
   after the table is large.
 - **The `DbContext` is scoped and is not thread-safe.** Never share one across concurrent
-  tasks, and never start a task inside a loop that touches it. See
-  [item 02](../../docs/tech-debt/02-deleteasync-n-round-trips.md) of the tech-debt register for the
-  batch-write bug in the repository that this rule is aimed at — one `FindAsync` awaited per id,
-  with no transaction around the batch.
+  tasks, and never start a task inside a loop that touches it. This rule is aimed at the
+  batch-write bug in the repository: one `FindAsync` awaited per id, with no transaction around the
+  batch.
 - **Never put a raw `IQueryable` on a repository interface.**
 
 ---
@@ -617,8 +612,7 @@ each one catches a specific regression that had already happened once.
 > `azure-sql-edge` and `azure-storage-edge`, started by `docker-compose.test.yml` — and every test
 > that needs one is tagged `Category=Container` and **skips** when it cannot reach it.
 > `TrailBlaze.Api.Test` stays offline. `TrailBlaze.Service.Test` holds offline reflection
-> assertions and nothing else; where a service-layer claim that needs a store runs is still open
-> ([tech-debt 25](../../docs/tech-debt/25-service-test-tier-is-empty.md)).
+> assertions and nothing else; where a service-layer claim that needs a store runs is still open.
 
 ### Two tiers, and which one runs when
 
@@ -635,9 +629,9 @@ back to the emulator and needs no secret.
 in [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md), which is their only home. No count
 belongs here**: the counts are in
 [00-mission-1-sprint.md](../../docs/features/00-mission-1-sprint.md), and nowhere else. A number
-restated in four documents goes stale in four, and it did, repeatedly — the record is
-[item 19](../../docs/tech-debt/19-doc-indexes-drifted.md). This section keeps the claim, which is
-what a reviewer needs; the sprint file keeps the measurement, which is what has to be re-run.
+restated in four documents goes stale in four, and it did, repeatedly. This section keeps the claim,
+which is what a reviewer needs; the sprint file keeps the measurement, which is what has to be
+re-run.
 
 ### Rules
 
@@ -658,7 +652,7 @@ what a reviewer needs; the sprint file keeps the measurement, which is what has 
   Do not write a test that cannot fail to make the change look finished. Record what you ran and what
   you observed in a `Verification:` line, and state in the pull request why there is no test. **A
   verified claim and a tested claim are different strengths of claim**, and blurring them is worse
-  than either; the tech-debt register marks its items with exactly this three-way split.
+  than either.
 - **Name the condition and the expected result**: `An_unauthenticated_request_is_recorded_as_anonymous`,
   not `TestActor2`.
 - **One behaviour per test.** Use `[Theory]` for the same behaviour across inputs.
@@ -691,18 +685,17 @@ project names must keep that job green.**
 
 ## 12. Where the code and this standard do not yet agree
 
-**That list is [docs/tech-debt/](../../docs/tech-debt/00-debt-log.md), and this section holds no
-copy of it.**
+**This standard states the target, not the current state, and no list of the difference exists
+here.** Treat a rule below as what the code is *supposed* to do; where it does not, the code is what
+runs, and nothing in this repository will tell you which rules are in which category. Read the code
+before relying on a claim made here.
 
-The register's table is the only statement of what is open and what has closed; a section here that
-mirrored its Status column was a second home for the same fact, and the two duly disagreed. **File
-debt there** — not in a feature file, and not as a passing note in a pull request either. A claim
-recorded in two places is a claim that will disagree with itself.
-
-The register's numbers **01–12** are this section's former items, in the same order, and they never
-change — so a reference to "§12.N" written before the move still resolves. Each item's `Source:`
-line carries the number it used to be; what those twelve said, and which of them were simply wrong,
-is in the item files.
+**When you find a divergence, close it or report it — do not file it.** A divergence that is failing
+now, or that would let private media or an Entra object id reach the wrong caller, is a **bug**:
+`/capture bug` and the `bug-fix` agent, Critical by default. Anything else — the code and the
+standard disagree while every caller still sees correct behaviour — belongs in the pull request that
+found it: fix it there, or state it there and hand it to the owner of that area. A claim recorded in
+two places is a claim that will disagree with itself, which is why this section holds no table.
 
 
 ---
@@ -722,7 +715,7 @@ is in the item files.
 - [ ] `dotnet build` and `dotnet test` pass. (`dotnet test` with nothing configured **skips** the
       container tiers rather than failing them, so a green run on a bare machine is a skip, not a
       pass — run §10's commands with the containers up before calling the suite green.) CI would
-      hold this too, and there is none yet — [item 11](../../docs/tech-debt/11-no-ci-pipeline.md).
+      hold this too, and there is none yet — see §11.
 - [ ] `python3 scripts/doc-assert.py` passes. It asserts the documentation's invariants — links
       resolve, volatile facts have one home, the indexes cover what they index, status lines match
       their location — and none of that is visible in a diff.

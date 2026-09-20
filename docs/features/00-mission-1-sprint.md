@@ -49,11 +49,11 @@ table](../PRD.md#current-state-vs-target) states capability rather than progress
 | # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
 |---|---|---|---|---|
 | 01 | [foundation](archive/01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations applied by the pipeline; `Dockerfile` for the ACA image; `IStorageRepository` abstraction; config for Azure Blob | archived — merged in PR #3. The in-memory storage fake it shipped was deleted on 2026-09-18 ([testing-and-tdd.md](../testing-and-tdd.md)) |
-| 02 | [entra-auth](archive/02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | archived — merged in PR #4, **tests deferred**, so unfinished: the profile slice is implemented and unproven ([item 12](../tech-debt/12-feature-02-tests-deferred.md)) |
+| 02 | [entra-auth](archive/02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | archived — merged in PR #4, **tests deferred**, so unfinished: the profile slice is implemented and unproven |
 | 03 | [the role column](archive/03-admin-seeding.md) | 02 | `Role` stored on `users`, defaulting to `User` and closed to `User`/`Admin`; one admin set by hand; role readable by the authorization path | archived — merged in PR #12, and unlike 02 its tests exist. **The server-side role read the authorization path needs does not exist yet** — it was built and removed in review as unconsumed, and [09](09-permission-enforcement.md) adds it |
 | 04 | [activity-crud](archive/04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. Plus the **anonymous paged list** — newest entry first, `pageSize` clamped, visibility-scoped. **Who may mutate is 09's; the payload and the detail read are 05's** | archived — merged in PR #15. The list applies the read half of the visibility rule; **the admin branch is not implemented** (no role is readable), and no mutation is authorized |
 | 05 | [public-activity-list](05-public-activity-list.md) | 04 | The read surface's payload and second read: the cover URL, the media count and the creator's display name on a list item; `GET /api/activity/{id}` applying the visibility rule as a **404**; an admin branch that is blocked on a readable role | not started |
-| 06 | [media-upload](06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 50 per contributor per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | in progress |
+| 06 | [media-upload](archive/06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 50 per contributor per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | archived — merged in PR #17. Upload, metadata listing and item deletion work; **the administrator among the permitted deleters is not implemented** (no role is readable, so it lands with 09), and **fetching the bytes is 07's** |
 | 07 | [sas-delivery](07-sas-delivery.md) | 06 | `GET /api/media/{id}/url` mints a **short-lived SAS URL**, and **only** for an authenticated caller — rejected before any blob operation otherwise | not started |
 | 08 | [cover-images](08-cover-images.md) | 04 | Cover is a **separate upload** whose container **follows the activity's `Type`** — public `covers` for `Public`, private `media` otherwise; a `Type` change across that line **moves** the cover. Never derived from private media | not started |
 | 09 | [permission-enforcement](09-permission-enforcement.md) | 03, 04 | **Two axes enforced in one service**: visibility gates reads, ownership gates mutations, `Admin` overrides both. Anonymous denied everywhere except the two public read endpoints. Media upload is the axis crossing — allowed to any caller who can read the activity | not started |
@@ -72,7 +72,7 @@ table](../PRD.md#current-state-vs-target) states capability rather than progress
       non-zero test count** — a green run over zero discovered tests does not count, and was the
       state when this line was written. The counts are below; a skipped test is not a passing one
 - [ ] Entra auth: backend validates bearer tokens; users auto-provisioned; exactly one admin
-      — open on the token half, whose tests were deferred ([item 12](../tech-debt/12-feature-02-tests-deferred.md))
+      — open on the token half, whose tests were deferred
 - [ ] Self-service profile complete: the caller can edit display name, bio, theme and language and
       upload an avatar, on their own row only, with `Role` not writable through the profile route
 - [ ] Activity CRUD complete with validation (title, location, calendar-date `ActivityDate`) and
@@ -97,9 +97,9 @@ table](../PRD.md#current-state-vs-target) states capability rather than progress
 **This table is the only place the counts are written down**, and it is a measurement rather than a
 derivation: each row is what a run printed, read off the summary as `Passed / Skipped / Total`. They
 were previously restated in the README, the PRD, STANDARD §10 and the test strategy, and went stale
-in all four whenever a feature added a test ([item 19](../tech-debt/19-doc-indexes-drifted.md) is the
-record of what that cost). Update them here and stop. How the tiers are shaped, and which one a new
-test belongs to, is [testing-and-tdd.md](../testing-and-tdd.md)'s subject, not this file's.
+in all four whenever a feature added a test. Update them here and stop. How the tiers are shaped, and
+which one a new test belongs to, is [testing-and-tdd.md](../testing-and-tdd.md)'s subject, not this
+file's.
 
 | Project | Bare machine | With the containers |
 |---|---|---|
@@ -115,17 +115,12 @@ the container tiers skip, and `Category=Container` is the only trait in the solu
 
 - **Figma export defects, not export timing.** The export exists in `src/web/`, so feature 10 is no
   longer blocked on its *arrival* — it is blocked on the export being **fixed in Figma Make and
-  re-exported**. [Item 15](../tech-debt/15-web-app-cannot-call-the-api.md) owns that defect list,
-  including which entries are re-export fixes rather than doc gaps; this file does not restate them.
+  re-exported**. Which of its defects are re-export fixes rather than gaps in this documentation is a
+  question for that work; this file does not carry the list.
 - **Azure credentials in CI** — **re-stamped 2026-09-18, and the gap is narrower than this said.**
   The storage tier no longer needs credentials at all: it runs the real `AzureBlobStorageRepository`
   against the Azurite container, which carries no secret, so CI proves the blob implementation
   without an Azure account. What still needs real credentials is the much smaller set of claims only
   a real account can settle — its certificate, its ACL behaviour, and its API-version acceptance —
-  plus feature 11's end-to-end tier.
-  [Item 11](../tech-debt/11-no-ci-pipeline.md) owns the pipeline decision and
-  [item 12](../tech-debt/12-feature-02-tests-deferred.md) the three assertions that need it.
-- **Known divergences live in the debt register.** [docs/tech-debt/00-debt-log.md](../tech-debt/00-debt-log.md)
-  is the single list of what the code does not yet do as the standard says. Nothing in that category
-  is filed here or in a feature file any more — a claim in two places is a claim that will disagree
-  with itself.
+  plus feature 11's end-to-end tier. There is no CI pipeline to run any of it yet; STANDARD §11
+  describes the target and records that it is not built.

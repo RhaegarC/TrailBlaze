@@ -37,7 +37,7 @@ where I went and when.
 - [x] `activities` matches the PRD data model. Its own columns are `Title`, `Location`,
       `ActivityDate` (`date`), `Description` (nullable), `Type` (`nvarchar(16)`), `CoverImageBlobPath`
       (nullable) and `CreatedByUserId` (the caller's id as a plain column — the model declares no
-      foreign keys, [item 23](../../tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)); `Id` and the remaining audit and soft-delete
+      foreign keys); `Id` and the remaining audit and soft-delete
       columns come from `EntityBase` (the PRD draws them once), so `IsDeleted` is present and the
       global query filter applies to this table
 - [x] Routes exist for `POST /api/activity`, `GET /api/activity/{id}`,
@@ -140,8 +140,7 @@ is not covered by any tier, and is called out rather than implied.**
   the service, so the answer is the **500** the unreachable store produces, and neither the 401 of an
   authorized-only route nor the 404 of a route that does not exist. **The host has no authentication
   scheme unless `TenantId` and `Audience` are configured**, and in that state an `[Authorize]` route
-  answers 500 — see [item 28](../../tech-debt/28-unconfigured-auth-answers-500.md) — so these tests wire
-  both.
+  answers 500 — so these tests wire both.
 - Paging and visibility (`TrailBlaze.Service.Test`) — offline: the defaults, the 100 clamp, the
   fallback for a non-positive size, the saturating skip on a page past the end, the reported total,
   the anonymous and signed-in predicates compiled and applied to rows, and the ordering. The
@@ -162,10 +161,9 @@ is not covered by any tier, and is called out rather than implied.**
   the API tier cannot authenticate without an Entra tenant, so no test drives
   `ActivityService` → `IDbRepository` → SQL Server end to end. The service's wiring is asserted
   against a recording double and the store's behaviour through direct repository calls; the seam
-  *between* them is asserted by neither. This is the gap
-  [item 25](../../tech-debt/25-service-test-tier-is-empty.md) records, now closed in part: the
-  request-decided claims run offline in this tier and the store outcomes run in the repository tier,
-  with the seam the remaining cost.
+  *between* them is asserted by neither. That gap is closed in part: the request-decided claims run
+  offline in this tier and the store outcomes run in the repository tier, with the seam the remaining
+  cost.
 - The calendar-date assertions compare the raw `date` value, not a `DateTime` with a `Kind`, so the
   test cannot pass or fail on the runner's local timezone.
 

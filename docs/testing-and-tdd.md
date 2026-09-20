@@ -23,12 +23,12 @@ either.
 
 **What that leaves is a seam.** No tier drives a service → `IDbRepository` → SQL Server in one run, so
 a service's wiring is asserted against a recording double and the store's behaviour through direct
-repository calls, and neither test would catch the two being wired to each other wrongly.
-[Item 25](tech-debt/25-service-test-tier-is-empty.md) owns that gap.
+repository calls, and neither test would catch the two being wired to each other wrongly. Nothing in
+the suite closes that seam today.
 
 **Which product behaviour the suite covers, and which it does not, is status rather than standard.**
-It is written down once, in [00-mission-1-sprint.md](features/00-mission-1-sprint.md) and the
-[debt register](tech-debt/00-debt-log.md). This document says how a test is written and where it runs:
+It is written down once, in [00-mission-1-sprint.md](features/00-mission-1-sprint.md).
+This document says how a test is written and where it runs:
 it names no feature and carries no count, because a count restated here went stale here every time a
 feature added a test.
 
@@ -60,8 +60,8 @@ storage tier — which runs on a bare machine too, since storage falls back to t
 no secret.
 
 A protected route needs a configured tenant and audience, or the host answers **500 rather than 401**:
-with no scheme there is nothing to challenge with.
-[Item 28](tech-debt/28-unconfigured-auth-answers-500.md) owns that.
+with no scheme there is nothing to challenge with. That is a defect rather than a design, and no test
+catches it today.
 
 ## What still runs offline, and why it is worth keeping
 
@@ -218,9 +218,8 @@ so that such a change is not forced into a test that cannot fail
   in the pull request why there is no test. **Do not invent a test that cannot fail** to make the
   change look finished.
 
-A verified claim and a tested claim are different strengths of claim, and the
-[debt register](tech-debt/00-debt-log.md) labels every item with which of the three applies rather
-than letting them read alike.
+A verified claim and a tested claim are different strengths of claim, and blurring them is worse than
+either.
 
 ## Commands
 

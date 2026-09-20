@@ -171,23 +171,23 @@ originally said. Each is recorded here rather than only in code.
    configuration state rather than a working default; and it produced two failure modes nobody
    wants — a replica that boots healthy with no administrator because the database was briefly
    unreachable, and a soft-deleted row for the configured id that blocks every subsequent start
-   (found by running it, and filed as debt 28 against the seeder). Removing the seeder removed the
-   defect with it, and item 28 was deleted rather than fixed.
+   (found by running it). Removing the seeder removed the defect with it.
    What replaces it is one `UPDATE` a person runs against the deployed database. That is a weaker
    guarantee in one respect — nothing stops a deployment from having no administrator — and the
    trade is taken deliberately: the failure is visible the first time an admin action is attempted,
    and it is visible to the person who owns the credential, rather than being a silent rewrite of a
    privilege column that no one asked for. The role stays readable from the row, by way of the
    profile response; what this feature asserts is that it is readable from nowhere else.
-3. **The service test tier stays as `develop` has it, and this feature withdraws its earlier answer
-   to [tech-debt 25](../../tech-debt/25-service-test-tier-is-empty.md).** As first written, this feature
+3. **The service test tier stays as `develop` has it, and this feature withdraws its earlier answer.**
+   As first written, this feature
    gave `TrailBlaze.Service.Test` a `ProjectReference` to `TrailBlaze.Repository.Test` and four
-   container tests with it, and recorded that decision against item 25's recommendation of the
-   opposite split. Those four tests were `CallerRoleTests`, and they went with the service they
+   container tests with it, and recorded that decision against the recommendation of the opposite
+   split. Those four tests were `CallerRoleTests`, and they went with the service they
    tested. Reverting the `csproj` rather than leaving an unreferenced package behind means this PR
-   no longer touches that file at all, and item 25 stays open with its recommendation unanswered —
+   no longer touches that file at all, and the question of where a service-layer test that needs a
+   store should live stays open with that recommendation unanswered —
    which is the correct state, because **a project reference taken to support tests that were then
-   deleted is not an answer to the question, it is a leftover.** The question item 25 asks is real
+   deleted is not an answer to the question, it is a leftover.** That question is real
    and the next feature that puts real logic in the service tier is the one that should answer it,
    on its own evidence.
 4. **Nothing in the application writes `Admin`.** With the seeder gone there is no code path that
