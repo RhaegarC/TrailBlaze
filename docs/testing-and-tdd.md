@@ -197,8 +197,8 @@ storage assertion in this suite is an assertion about a fake.
   edit/delete, admin override, and anonymous denial on exactly the two public read endpoints.
 - **SAS URL issuance** — that an unauthenticated or unauthorized caller is rejected *before* any
   blob operation happens, and that expiry is bounded.
-- **Upload validation** — content-type allowlist, size caps, and per-activity count cap, each
-  with a rejection test at the boundary.
+- **Upload validation** — content-type allowlist, size caps, and the per-contributor count cap,
+  each with a rejection test at the boundary.
 
 These are the places where a passing test suite is the only evidence the app is not quietly
 serving private media to the wrong person.

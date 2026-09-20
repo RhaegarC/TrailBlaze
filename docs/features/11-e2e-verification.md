@@ -99,10 +99,10 @@ the app assumes, or whether the real tenant issues the token the API validates.
 - [ ] **Admin override**: the admin — the `users` row whose `Role` was set to `Admin` by hand, since
       nothing in the application grants it — signs in and successfully edits and deletes another
       user's activity, including one the admin is not the owner of and that is `Private`
-- [ ] **Delete cascades**: deleting an activity removes its media rows **and** the underlying blobs
-      from the private container, plus its cover blob from whichever container holds it (`covers`
-      or `media`); deleting a single media item removes its row and blob, leaving the activity and
-      its other media intact
+- [ ] **Deletion**: deleting a single media item removes its row and blob, leaving the activity and
+      its other media intact; deleting the **activity** removes neither — it is a soft delete, so
+      its media rows, their blobs and its cover blob from whichever container holds it (`covers` or
+      `media`) all survive, which is what a later restore depends on
 - [ ] **Profile**: the profile screen saves display name, bio, theme, and language via
       `PUT /user/me` and the change persists across a reload; the avatar round-trips through
       `POST`/`DELETE /user/me/avatar` into the **public** `avatars` container, confirmed by a

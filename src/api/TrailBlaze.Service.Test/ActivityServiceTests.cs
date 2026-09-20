@@ -363,69 +363,34 @@ public sealed class ActivityServiceTests
         Assert.Equal([second.Id, first.Id], Ordered(repository, first, second));
     }
 
-    // ---- Deleting an activity's media -----------------------------------------------------
+    // ---- Deleting an activity -------------------------------------------------------------
 
+    /// <summary>
+    /// The delete is soft, so the entry can be restored — and its media with it. Removing the items
+    /// here would bring a restored activity back with none of its pictures.
+    /// </summary>
     [Fact]
-    public async Task Deleting_an_activity_removes_its_media_rows_and_their_blobs()
+    public async Task Deleting_an_activity_leaves_its_media_alone()
     {
-        var repository = new RecordingRepository
-        {
-            Existing = Row(Constant.ActivityType.Public),
-            MediaItems = [MediaRow("one"), MediaRow("two")],
-        };
-        var storage = new RecordingStorage();
+        var repository = new RecordingRepository { Existing = Row(Constant.ActivityType.Public) };
 
-        ActivityOutcome outcome = await Service(repository, storage).DeleteAsync("the-activity");
+        ActivityOutcome outcome = await Service(repository).DeleteAsync("the-activity");
 
         Assert.Equal(ActivityOutcomeKind.Deleted, outcome.Kind);
         Assert.Equal(["the-activity"], repository.DeletedActivities);
-        Assert.Equal(["one", "two"], repository.DeletedMedia);
-        Assert.Equal(["blobs/one", "blobs/two"], storage.Deleted);
-    }
-
-    /// <summary>
-    /// The order the cascade was written in, asserted rather than asserted-about: a blob removed
-    /// before its row would leave a row naming bytes that are already gone, which a reader sees as
-    /// a broken item. The reverse failure leaves an unreferenced blob, which nothing shows.
-    /// </summary>
-    [Fact]
-    public async Task Every_media_row_is_gone_before_the_first_blob_is_touched()
-    {
-        var repository = new RecordingRepository
-        {
-            Existing = Row(Constant.ActivityType.Public),
-            MediaItems = [MediaRow("one"), MediaRow("two")],
-        };
-
-        await Assert.ThrowsAsync<NotSupportedException>(
-            () => Service(repository, new RecordingStorage { RefuseDeletes = true })
-                .DeleteAsync("the-activity"));
-
-        Assert.Equal(["one", "two"], repository.DeletedMedia);
+        Assert.Empty(repository.DeletedMedia);
     }
 
     [Fact]
-    public async Task An_activity_with_no_media_reaches_no_blob_store()
+    public async Task An_id_that_names_no_activity_deletes_nothing()
     {
-        var repository = new RecordingRepository { Existing = Row(Constant.ActivityType.Public) };
-        var storage = new RecordingStorage();
+        var repository = new RecordingRepository();
 
-        await Service(repository, storage).DeleteAsync("the-activity");
-
-        Assert.Empty(storage.Deleted);
-    }
-
-    [Fact]
-    public async Task An_id_that_names_no_activity_removes_no_media()
-    {
-        var repository = new RecordingRepository { MediaItems = [MediaRow("one")] };
-        var storage = new RecordingStorage();
-
-        ActivityOutcome outcome = await Service(repository, storage).DeleteAsync("the-activity");
+        ActivityOutcome outcome = await Service(repository).DeleteAsync("the-activity");
 
         Assert.Equal(ActivityOutcomeKind.NotFound, outcome.Kind);
+        Assert.Empty(repository.DeletedActivities);
         Assert.Empty(repository.DeletedMedia);
-        Assert.Empty(storage.Deleted);
     }
 
     // ---- Scaffolding ----------------------------------------------------------------------
@@ -440,11 +405,9 @@ public sealed class ActivityServiceTests
 
     private static ActivityService Service(
         IDbRepository? repository = null,
-        IStorageRepository? storage = null,
         string? caller = Caller) =>
         new(
             repository ?? new RecordingRepository(),
-            storage ?? new RecordingStorage(),
             new StubUserContext(caller),
             NullLogger<ActivityService>.Instance);
 
@@ -471,19 +434,6 @@ public sealed class ActivityServiceTests
             CreatedOn = createdOn,
             CoverImageBlobPath = coverPath,
         };
-
-    /// <summary>An item on the activity, with the id and blob path the assertions above read.</summary>
-    private static Media MediaRow(string name) => new()
-    {
-        Id = name,
-        ActivityId = "the-activity",
-        CreatedBy = Caller,
-        Kind = Constant.MediaKind.Image,
-        BlobPath = $"blobs/{name}",
-        ContentType = "image/png",
-        SizeBytes = 32,
-        OriginalFileName = $"{name}.png",
-    };
 
     private static string[] Ordered(RecordingRepository repository, params Activity[] rows) =>
         [.. repository.OrderBy!(rows.AsQueryable()).Select(row => row.Id)];
@@ -528,8 +478,6 @@ public sealed class ActivityServiceTests
         /// <summary>The row the delete path loads, or null for an id that names nothing.</summary>
         public Activity? Existing { get; set; }
 
-        public List<Media> MediaItems { get; set; } = [];
-
         public List<string> DeletedActivities { get; } = [];
 
         public List<string> DeletedMedia { get; } = [];
@@ -554,20 +502,20 @@ public sealed class ActivityServiceTests
             return Task.FromResult((PageItems.Cast<T>().ToList(), PageTotal));
         }
 
-        // Answered only for the two reads the delete path performs, so the rest of the contract
-        // stays refused and no test can lean on a read this double does not model.
+        // Answered only for the read the delete path performs, so the rest of the contract stays
+        // refused and no test can lean on a read this double does not model.
         public Task<T?> GetAsync<T>(Expression<Func<T, bool>> predicate) where T : class =>
             typeof(T) == typeof(Activity)
                 ? Task.FromResult((T?)(object?)Existing)
                 : throw new NotSupportedException(NoReads);
 
         public Task<List<T>> GetListAsync<T>(Expression<Func<T, bool>> predicate) where T : class =>
-            typeof(T) == typeof(Media)
-                ? Task.FromResult(MediaItems.Cast<T>().ToList())
-                : throw new NotSupportedException(NoReads);
+            throw new NotSupportedException(NoReads);
 
         public Task<int> CreateAsync<T>(List<T> items) => throw new NotSupportedException(NoWrites);
 
+        // Records by type, so media the delete path should not be touching shows up in an assertion
+        // rather than being absorbed into the activity's own list.
         public Task<int> DeleteAsync<T>(List<string> ids) where T : EntityBase
         {
             if (typeof(T) == typeof(Media))
@@ -595,61 +543,5 @@ public sealed class ActivityServiceTests
         private const string NoReads = "This double answers no reads.";
 
         private const string NoWrites = "This double answers no writes.";
-    }
-
-    /// <summary>
-    /// Records the blobs it was asked to remove and stores nothing.
-    /// </summary>
-    /// <remarks>
-    /// It stands in for no storage behaviour — it holds no bytes, mints no URL and moves nothing —
-    /// and supports one claim only: that a step which should not reach storage did not. Whether a
-    /// blob is really gone is a question for the container tier, which talks to a real account.
-    /// </remarks>
-    private sealed class RecordingStorage : IStorageRepository
-    {
-        public List<string> Deleted { get; } = [];
-
-        /// <summary>Makes the first removal fail, which is how a test asks what had already happened
-        /// by the time the store was reached.</summary>
-        public bool RefuseDeletes { get; set; }
-
-        public Task<string> UploadAsync(
-            string container,
-            string path,
-            Stream content,
-            string contentType,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException(NoStorage);
-
-        public Task DeleteAsync(
-            string container,
-            string path,
-            CancellationToken cancellationToken = default)
-        {
-            if (RefuseDeletes)
-            {
-                throw new NotSupportedException(NoStorage);
-            }
-
-            Deleted.Add(path);
-            return Task.CompletedTask;
-        }
-
-        public Task<Uri> CreateReadUrlAsync(
-            string container,
-            string path,
-            TimeSpan lifetime,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException(NoStorage);
-
-        public Uri CreatePublicUrl(string container, string path) =>
-            throw new NotSupportedException(NoStorage);
-
-        public Task<string> MoveAsync(
-            string sourceContainer,
-            string sourcePath,
-            string destinationContainer,
-            string destinationPath,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException(NoStorage);
-
-        private const string NoStorage = "This double records calls and stores nothing.";
     }
 }

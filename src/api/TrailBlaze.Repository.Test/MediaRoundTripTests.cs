@@ -9,7 +9,7 @@ using TrailBlaze.Repository.Test.TestSupport;
 
 /// <summary>
 /// An item of media written and read back through a real SQL Server, and the counted insert that
-/// enforces the per-activity cap.
+/// enforces the per-contributor cap.
 /// </summary>
 /// <remarks>
 /// <see cref="MediaModelTests"/> says what the schema <em>is</em>; these say what happens to a row.
@@ -22,6 +22,12 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
 {
     /// <summary>A size no <c>int</c> column could hold, so a narrowed column fails here.</summary>
     private const long VideoSize = Constant.Upload.VideoSizeCapBytes;
+
+    /// <summary>The uploader every cap test counts, and the one the seeded rows belong to.</summary>
+    private const string Ada = "oid-ada";
+
+    /// <summary>A second contributor on the same activity, who the cap must not count against Ada.</summary>
+    private const string Grace = "oid-grace";
 
     [SkippableFact]
     public async Task An_item_survives_the_round_trip()
@@ -110,11 +116,11 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
         await Assert.ThrowsAsync<DbUpdateException>(() => Repository(scope).CreateAsync(rogue));
     }
 
-    // ---- The per-activity cap --------------------------------------------------------------
+    // ---- The per-contributor cap -----------------------------------------------------------
 
     /// <summary>
-    /// The boundary the cap is: the twentieth item lands and the twenty-first is refused, with the
-    /// count taken over rows that are live.
+    /// The boundary the cap is: the last item under it lands and the next is refused, with the count
+    /// taken over rows that are live.
     /// </summary>
     /// <remarks>
     /// Seeded to one below the limit rather than to the limit, so the two halves are the two answers
@@ -126,36 +132,37 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
         Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
 
         string activityId = Guid.NewGuid().ToString();
-        await SeedAsync(activityId, Constant.MediaLimit.PerActivity - 1);
+        await SeedAsync(activityId, Constant.MediaLimit.PerContributorPerActivity - 1);
 
         using IServiceScope scope = fixture.CreateScope();
         DatabaseRepository repository = Repository(scope);
 
         bool admitted = await repository.CreateIfUnderAsync(
-            Item(activityId, "twentieth.png", Constant.MediaKind.Image, 32),
-            row => row.ActivityId == activityId,
-            Constant.MediaLimit.PerActivity);
+            Item(activityId, "last-in.png", Constant.MediaKind.Image, 32),
+            row => row.ActivityId == activityId && row.CreatedBy == Ada,
+            Constant.MediaLimit.PerContributorPerActivity);
 
         bool refused = await repository.CreateIfUnderAsync(
-            Item(activityId, "twenty-first.png", Constant.MediaKind.Image, 32),
-            row => row.ActivityId == activityId,
-            Constant.MediaLimit.PerActivity);
+            Item(activityId, "one-too-many.png", Constant.MediaKind.Image, 32),
+            row => row.ActivityId == activityId && row.CreatedBy == Ada,
+            Constant.MediaLimit.PerContributorPerActivity);
 
         Assert.True(admitted);
         Assert.False(refused);
 
         // The refusal wrote nothing, which is the half that matters: an insert that happened and
         // reported failure would still be a row over the cap.
-        Assert.Equal(Constant.MediaLimit.PerActivity, await CountAsync(activityId));
+        Assert.Equal(Constant.MediaLimit.PerContributorPerActivity, await CountAsync(activityId));
     }
 
     /// <summary>
-    /// Five uploads racing for the last place in an activity leave it full rather than over.
+    /// Five uploads racing for the last place in one contributor's allowance leave it full rather
+    /// than over.
     /// </summary>
     /// <remarks>
     /// <b>The one test that fails if the isolation level is dropped.</b> Under read committed every
-    /// racer counts the same nineteen rows, every one decides there is room, and the activity ends
-    /// over its cap; a serializable transaction is what makes the count and the insert one decision.
+    /// racer counts the same rows, every one decides there is room, and the contributor ends over
+    /// their cap; a serializable transaction is what makes the count and the insert one decision.
     /// How many racers are turned away, and whether one of them is a deadlock victim the engine
     /// picked, is not this test's subject — the count is, and it is bounded on both sides so the
     /// assertion cannot pass by nothing having happened.
@@ -166,7 +173,7 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
         Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
 
         string activityId = Guid.NewGuid().ToString();
-        int seeded = Constant.MediaLimit.PerActivity - 1;
+        int seeded = Constant.MediaLimit.PerContributorPerActivity - 1;
         await SeedAsync(activityId, seeded);
 
         Task<bool>[] racers =
@@ -179,8 +186,8 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
                 {
                     return await Repository(scope).CreateIfUnderAsync(
                         Item(activityId, $"racer-{index}.png", Constant.MediaKind.Image, 32),
-                        row => row.ActivityId == activityId,
-                        Constant.MediaLimit.PerActivity);
+                        row => row.ActivityId == activityId && row.CreatedBy == Ada,
+                        Constant.MediaLimit.PerContributorPerActivity);
                 }
                 catch (Exception)
                 {
@@ -193,7 +200,7 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
         bool[] answers = await Task.WhenAll(racers);
         int rows = await CountAsync(activityId);
 
-        Assert.InRange(rows, seeded, Constant.MediaLimit.PerActivity);
+        Assert.InRange(rows, seeded, Constant.MediaLimit.PerContributorPerActivity);
 
         // Every admittance wrote exactly one row and every refusal wrote none, which is what ties
         // the answers to the table rather than to each other.
@@ -210,16 +217,39 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
 
         string full = Guid.NewGuid().ToString();
         string empty = Guid.NewGuid().ToString();
-        await SeedAsync(full, Constant.MediaLimit.PerActivity);
+        await SeedAsync(full, Constant.MediaLimit.PerContributorPerActivity);
 
         using IServiceScope scope = fixture.CreateScope();
 
         bool admitted = await Repository(scope).CreateIfUnderAsync(
             Item(empty, "first.png", Constant.MediaKind.Image, 32),
-            row => row.ActivityId == empty,
-            Constant.MediaLimit.PerActivity);
+            row => row.ActivityId == empty && row.CreatedBy == Ada,
+            Constant.MediaLimit.PerContributorPerActivity);
 
         Assert.True(admitted);
+    }
+
+    /// <summary>
+    /// The count is also the contributor's, so media is collaborative rather than a shared budget: a
+    /// second contributor is admitted to an activity Ada has filled.
+    /// </summary>
+    [SkippableFact]
+    public async Task One_contributor_being_full_does_not_fill_the_activity()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
+
+        string activityId = Guid.NewGuid().ToString();
+        await SeedAsync(activityId, Constant.MediaLimit.PerContributorPerActivity);
+
+        using IServiceScope scope = fixture.CreateScope();
+
+        bool admitted = await Repository(scope).CreateIfUnderAsync(
+            Item(activityId, "grace-first.png", Constant.MediaKind.Image, 32, Grace),
+            row => row.ActivityId == activityId && row.CreatedBy == Grace,
+            Constant.MediaLimit.PerContributorPerActivity);
+
+        Assert.True(admitted);
+        Assert.Equal(1, await CountAsync(activityId, Grace));
     }
 
     /// <summary>
@@ -233,7 +263,7 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
         Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
 
         string activityId = Guid.NewGuid().ToString();
-        List<Media> seeded = await SeedAsync(activityId, Constant.MediaLimit.PerActivity);
+        List<Media> seeded = await SeedAsync(activityId, Constant.MediaLimit.PerContributorPerActivity);
 
         using (IServiceScope deleting = fixture.CreateScope())
         {
@@ -244,17 +274,17 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
 
         bool admitted = await Repository(scope).CreateIfUnderAsync(
             Item(activityId, "replacement.png", Constant.MediaKind.Image, 32),
-            row => row.ActivityId == activityId,
-            Constant.MediaLimit.PerActivity);
+            row => row.ActivityId == activityId && row.CreatedBy == Ada,
+            Constant.MediaLimit.PerContributorPerActivity);
 
         Assert.True(admitted);
     }
 
     /// <summary>
     /// A removed item leaves the read path and stays a row, which is what separates the soft delete
-    /// the cascade performs from a delete. The activity's own rows are asserted in
-    /// <see cref="ActivityRoundTripTests"/>; this is the media half, because the cascade relies on
-    /// the filter applying to this type at all.
+    /// the repository performs from a delete. The activity's own rows are asserted in
+    /// <see cref="ActivityRoundTripTests"/>; this is the media half, and it is what frees the
+    /// contributor's place under the cap.
     /// </summary>
     [SkippableFact]
     public async Task A_removed_item_leaves_the_read_path_and_stays_in_the_table()
@@ -283,6 +313,48 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
         Assert.True(withheld.IsDeleted);
     }
 
+    /// <summary>
+    /// An activity's deletion does not reach its media. The delete is soft, so the pictures have to
+    /// outlive it and come back with it when it is restored; the service no longer removes them, and
+    /// nothing in the schema does either, since no foreign key exists. Both halves are asserted, so
+    /// the test cannot pass by the activity having survived.
+    /// </summary>
+    [SkippableFact]
+    public async Task An_activitys_deletion_leaves_its_media_alive()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
+
+        var activity = new Activity
+        {
+            Title = "Ridge walk",
+            Location = "North ridge",
+            ActivityDate = new DateOnly(2026, 3, 14),
+            Type = Constant.ActivityType.Public,
+            CreatedBy = Ada,
+        };
+
+        Media item;
+
+        using (IServiceScope writing = fixture.CreateScope())
+        {
+            DatabaseRepository repository = Repository(writing);
+            await repository.CreateAsync(activity);
+
+            item = Item(activity.Id, "ridge.png", Constant.MediaKind.Image, 4_096);
+            await repository.CreateAsync(item);
+        }
+
+        using (IServiceScope deleting = fixture.CreateScope())
+        {
+            await Repository(deleting).DeleteAsync<Activity>([item.ActivityId]);
+        }
+
+        using IServiceScope reading = fixture.CreateScope();
+
+        Assert.Null(await Repository(reading).GetAsync<Activity>(row => row.Id == item.ActivityId));
+        Assert.NotNull(await Repository(reading).GetAsync<Media>(row => row.Id == item.Id));
+    }
+
     // ---- Scaffolding -----------------------------------------------------------------------
 
     private static DatabaseRepository Repository(IServiceScope scope) =>
@@ -290,10 +362,10 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
 
     /// <summary>Rows written with the audit stamps the interceptor would have set, since the cap
     /// counts what is live rather than what was stamped.</summary>
-    private async Task<List<Media>> SeedAsync(string activityId, int count)
+    private async Task<List<Media>> SeedAsync(string activityId, int count, string createdBy = Ada)
     {
         List<Media> rows =
-            [.. Enumerable.Range(0, count).Select(index => Item(activityId, $"{index}.png", Constant.MediaKind.Image, 32))];
+            [.. Enumerable.Range(0, count).Select(index => Item(activityId, $"{index}.png", Constant.MediaKind.Image, 32, createdBy))];
 
         using IServiceScope scope = fixture.CreateScope();
         await Repository(scope).CreateAsync(rows);
@@ -301,26 +373,32 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
         return rows;
     }
 
-    private async Task<int> CountAsync(string activityId)
+    /// <summary>This contributor's live rows on one activity — the set the cap is taken over.</summary>
+    private async Task<int> CountAsync(string activityId, string createdBy = Ada)
     {
         using IServiceScope scope = fixture.CreateScope();
 
         return await scope.ServiceProvider
             .GetRequiredService<TrailBlazeContext>()
             .Media
-            .CountAsync(row => row.ActivityId == activityId);
+            .CountAsync(row => row.ActivityId == activityId && row.CreatedBy == createdBy);
     }
 
-    private static Media Item(string activityId, string fileName, string kind, long sizeBytes) => new()
-    {
-        ActivityId = activityId,
-        CreatedBy = "oid-ada",
-        Kind = kind,
-        BlobPath = $"{activityId}/{Guid.NewGuid():N}{Path.GetExtension(fileName)}",
-        ContentType = kind == Constant.MediaKind.Video ? "video/mp4" : "image/png",
-        SizeBytes = sizeBytes,
-        OriginalFileName = fileName,
-    };
+    private static Media Item(
+        string activityId,
+        string fileName,
+        string kind,
+        long sizeBytes,
+        string createdBy = Ada) => new()
+        {
+            ActivityId = activityId,
+            CreatedBy = createdBy,
+            Kind = kind,
+            BlobPath = $"{activityId}/{Guid.NewGuid():N}{Path.GetExtension(fileName)}",
+            ContentType = kind == Constant.MediaKind.Video ? "video/mp4" : "image/png",
+            SizeBytes = sizeBytes,
+            OriginalFileName = fileName,
+        };
 
     /// <summary>A single value from one statement, over the context's own connection, so the answer
     /// comes from the engine rather than from EF's view of the model.</summary>

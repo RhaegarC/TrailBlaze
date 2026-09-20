@@ -91,8 +91,9 @@ public sealed class MediaModelTests
     /// <remarks>
     /// The PRD draws <c>ActivityId</c> as an FK and the model declares no foreign keys at all (see
     /// the debt register). The difference is a behaviour rather than a diagram: with a relationship,
-    /// EF would cascade an activity's deletion into its media, which is not what the product asks
-    /// for — <c>ActivityService</c> removes the media itself.
+    /// EF would reach an activity's media from the activity, and an activity's deletion would take
+    /// them with it — which the product does not ask for, since deleting an activity is recoverable
+    /// and its media has to survive with it.
     /// </remarks>
     [Fact]
     public void Both_references_are_columns_and_not_relationships()

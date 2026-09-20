@@ -99,7 +99,7 @@ far along its feature is — a feature's own progress lives in the
 | Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers and the filters are in [testing-and-tdd.md](testing-and-tdd.md); the counts are in [00-mission-1-sprint.md](features/00-mission-1-sprint.md) | feature 01 |
 | Blob abstraction | `IStorageRepository`, three containers, no fake | `IStorageRepository` in `TrailBlaze.Interface`, one Azure adapter in `TrailBlaze.Repository`, exercised by the storage tier against Azurite | feature 01 |
 | Activity table | the data model below | `activities` exists, migrated by `AddActivities`, with its check-constrained `Type`. The CRUD routes and the anonymous paged list are implemented, the list applying the read half of the visibility rule; **who may mutate an entry is not yet enforced**, and an admin still pages what a user pages because no role is read | feature 04 |
-| Media table | the data model below | `Media` exists, migrated by `AddMedia`, with its check-constrained `Kind` and an index on `ActivityId`. Upload, metadata listing, deletion and the activity-delete cascade are implemented, gated on the read rule; **the administrator is not enforced** — nothing reads a role, so an admin contributes and deletes as an ordinary user until feature 09 | feature 06 |
+| Media table | the data model below | `Media` exists, migrated by `AddMedia`, with its check-constrained `Kind` and an index on `ActivityId`. Upload, metadata listing and item deletion are implemented, gated on the read rule; **the administrator is not enforced** — nothing reads a role, so an admin contributes and deletes as an ordinary user until feature 09 | feature 06 |
 | Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | all five exist, bounded to the lengths in the data model | feature 02 |
 | Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | all four routes exist and return DTOs, and are **untested** ([02-entra-auth.md](features/archive/02-entra-auth.md#testing-status)) | feature 02 |
 | Administrator | one admin, set by hand; role read from the row, never from a claim | `users.Role` is not null, defaults to `User`, and is check-constrained to the closed set. Nothing in the application seeds, promotes or writes it — [03-admin-seeding.md](features/archive/03-admin-seeding.md#decisions) records why | feature 03 |
@@ -159,10 +159,10 @@ Every requirement decision from the grilling session, in order:
 | 21 | Admin surface | **Elevated rights only** — no dedicated admin screens |
 | 22 | Backend vs. frontend sequencing | **API-first**; Figma integration is its own late feature |
 | 23 | Public list behaviour | **Paginated, newest entry first, no search**. `page` is a zero-based index defaulting to 0; `pageSize` defaults to 10 and is clamped to 100 rather than refused |
-| 24 | Upload limits | **~20 media per activity**, images ≤ 10 MB, videos ≤ 200 MB |
+| 24 | Upload limits | **50 media per contributor per activity**, images ≤ 10 MB, videos ≤ 200 MB. *The count was raised from 20 and re-scoped from per-activity to per-contributor-per-activity on 2026-09-20, at feature 06's review: media is collaborative (#27), so a single shared budget would let one person fill an activity everyone contributes to* |
 | 25 | Date representation | **Calendar date only** — no time, no timezone, no UTC-midnight conversion |
 | 26 | Per-activity visibility | **`Type` ∈ {`Public`, `Shared`, `Private`}**, required, defaulting to `Public`. `Public` = anonymous may read; `Shared` = signed-in users only; `Private` = the owner only (and admins). Visibility gates **reading**; it never gates media, which needs sign-in at every level (#2). Added from the Figma export, 2026-09-15 — this supersedes the earlier flat "everything is public-read" model and reverses the earlier rejection of private entries in the shared feed, which was rejected on the assumption that private meant *separate journals* |
-| 27 | Media is collaborative | **Any signed-in user who can see an activity may add media to it**, not only its owner. Each `media` row records its **uploader**, and the detail view groups items by uploader. Deletion is allowed to the **uploader, the activity's owner, or an admin**. The 20-per-activity cap (#24) is unchanged and counts the activity's items regardless of uploader |
+| 27 | Media is collaborative | **Any signed-in user who can see an activity may add media to it**, not only its owner. Each `media` row records its **uploader**, and the detail view groups items by uploader. Deletion is allowed to the **uploader, the activity's owner, or an admin**. The cap (#24) bounds what one contributor adds to one activity, not the activity's total — the same collaboration this decision establishes is why it is counted that way |
 | 28 | User profile & preferences | **Display name, bio, avatar, theme and language are stored server-side per user** and edited on a profile screen. Avatar lives in the **public** `avatars` container. Theme ∈ {`Dark`, `Light`}, language ∈ {`en`, `zh`}; both are presentation preferences and carry no authorization meaning |
 | 29 | Cover container follows visibility | A cover is uploaded **directly into the container its activity's visibility requires**: `covers` (public) for a Public activity, `media` (private, SAS-served) for Shared and Private ones. Changing an activity's `Type` across that line **moves the cover** — see "Media storage & delivery". #14's rule that a cover is its own upload and is never derived from private media stands unchanged |
 | 30 | Anonymous payload scope | The anonymous response may carry the activity's **media count** and its **creator's display name**. It may **not** carry a user id, a blob path, a SAS URL, or any per-item media field. Relaxes the stricter rule feature 05 originally stated, which forbade the count as media-derived |
@@ -363,8 +363,9 @@ secrecy. Unauthenticated requests to the SAS endpoint must fail with 401 before 
 operation is attempted.
 
 Validation on upload: content type against an allowlist, size against the caps in Decision #24,
-and a count check against the activity's existing media — counted across **all** uploaders, since
-media is collaborative (Decision #27).
+and a count check against **the contributor's own** existing media on the activity — media is
+collaborative (Decision #27), so the cap bounds what one person adds to an entry rather than what
+everyone together adds.
 
 ## API surface
 
@@ -374,7 +375,7 @@ media is collaborative (Decision #27).
 | `GET` | `/api/activity/{id}` | anonymous | The same payload for one entry. **404** for an entry the caller may not read |
 | `POST` | `/api/activity` | user | Create — `Type` required, defaulting to `Public` |
 | `PUT` | `/api/activity/{id}` | owner/admin | Update, including `Type` — crossing the public line **moves the cover** |
-| `DELETE` | `/api/activity/{id}` | owner/admin | Delete (cascades media) |
+| `DELETE` | `/api/activity/{id}` | owner/admin | Soft delete — the entry leaves the read path and its media rows and blobs are left untouched, so a restore brings the media back with it |
 | `POST` | `/api/activity/{id}/cover` | owner/admin | Upload/replace cover → `covers` (public) if the activity is `Public`, otherwise `media` (private, SAS) |
 | `GET` | `/api/activity/{id}/media` | anyone who can read the activity | Media metadata, each item carrying its uploader |
 | `POST` | `/api/activity/{id}/media` | any signed-in caller who can read the activity | Upload image/video → private container (collaborative, Decision #27) |

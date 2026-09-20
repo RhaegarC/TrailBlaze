@@ -232,12 +232,12 @@ public sealed class MediaServiceTests
     }
 
     /// <summary>
-    /// The cap counted is the activity's and not the contributor's, which is the difference between
-    /// a collaborative list and twenty files each: the predicate is run here against a row of this
-    /// activity and a row of another one, rather than described.
+    /// The cap counted is one contributor's items on one activity, which is neither the activity's
+    /// total nor the contributor's everywhere: the predicate is run here against three rows rather
+    /// than described.
     /// </summary>
     [Fact]
-    public async Task The_limit_is_counted_over_the_activity_and_not_the_contributor()
+    public async Task The_limit_is_counted_over_the_contributor_and_the_activity()
     {
         var harness = new Harness();
 
@@ -246,10 +246,10 @@ public sealed class MediaServiceTests
 
         Func<Media, bool> counted = harness.Repository.Counted!.Compile();
 
-        Assert.Equal(Constant.MediaLimit.PerActivity, harness.Repository.Cap);
+        Assert.Equal(Constant.MediaLimit.PerContributorPerActivity, harness.Repository.Cap);
         Assert.True(counted(Item("mine", Contributor)));
-        Assert.True(counted(Item("theirs", Stranger)));
-        Assert.False(counted(new Media { ActivityId = "another-activity" }));
+        Assert.False(counted(Item("theirs", Stranger)));
+        Assert.False(counted(new Media { ActivityId = "another-activity", CreatedBy = Contributor }));
     }
 
     // ---- A blob that never landed ---------------------------------------------------------
@@ -518,7 +518,7 @@ public sealed class MediaServiceTests
                 // The real rule, not a stand-in: the visibility decision is the thing under test in
                 // the gate tables, and a double here would be asserting the double.
                 new ActivityService(
-                    Repository, Storage, new StubUserContext(caller), NullLogger<ActivityService>.Instance),
+                    Repository, new StubUserContext(caller), NullLogger<ActivityService>.Instance),
                 new StubUserContext(caller),
                 new UploadValidationService(),
                 NullLogger<MediaService>.Instance);

@@ -14,7 +14,7 @@ not exist.
 |---|---|---|
 | [PRD — data model](../PRD.md#data-model), ER diagram | `CreatedByUserId`, `ActivityId`, `UploadedByUserId` drawn as `FK` | `CreatedByUserId` fixed 2026-09-19 by feature 04; the two `media` ones open |
 | [PRD — data model](../PRD.md#data-model), column table | those three rows read **FK →** another table's id | `activities.CreatedByUserId` fixed 2026-09-19 by feature 04; the two `media` rows open |
-| [PRD — API surface](../PRD.md#api-surface) | `DELETE /api/activity/{id}` — "Delete (cascades media)" | open |
+| [PRD — API surface](../PRD.md#api-surface) | `DELETE /api/activity/{id}` — "Delete (cascades media)" | fixed 2026-09-20 — and the route now says something else entirely: see the update below |
 | [04 — acceptance criteria](../features/archive/04-activity-crud.md#acceptance-criteria) | `CreatedByUserId` **FK** → `users.Id` | fixed 2026-09-19 |
 | [04 — tests](../features/archive/04-activity-crud.md#tests-tdd) | the **FK** to `users.Id` is asserted from the EF model; "the cascade to media rows is a mapping" | fixed 2026-09-19 |
 | [06 — dependencies](../features/06-media-upload.md#dependencies) | 04's **FK gives the cascade delete** | fixed 2026-09-19 |
@@ -29,6 +29,22 @@ grep -rn "HasForeignKey|HasOne|HasMany|OnDelete" src/api/TrailBlaze.Repository
 
 Every entity table stands alone. `AuditLog` is deliberately not an `EntityBase`, and nothing else
 declares a relationship or a navigation property.
+
+## Update 2026-09-20 — the behaviour this item assumed was decided the other way
+
+**The premise in "Why it matters" is no longer the product's.** That section argued the absence of
+an FK turned the cascade into service work that had to be written and tested. Feature 06's review
+removed the cascade instead: `IDbRepository.DeleteAsync` is a soft delete (item
+[02](02-deleteasync-n-round-trips.md) says so, and this item's own "Out of scope" noted it), so
+deleting an activity is recoverable — and media removed alongside it could not be recovered with it.
+`ActivityService.DeleteAsync` now removes the activity alone, and a restore brings the media back.
+The PRD's route note and 06's criterion and dependency bullet were corrected to say that in the same
+change.
+
+**What that leaves open here is only the two `media` `FK →` labels** in the PRD's ER diagram and
+column table. The cascade half of this item is discharged — not by writing the mechanism it
+predicted, but by the product declining it — and the close checklist below is annotated rather than
+ticked, so the reasoning is visible to whoever closes this.
 
 ## Why it matters
 
@@ -107,8 +123,8 @@ that is wrong.
 ## Close checklist
 
 - [x] No spec claims a foreign key or cascade the model does not declare — 2026-09-19
-- [ ] The PRD's three `FK →` labels, its ER diagram and its "cascades media" route note are corrected
-- [ ] Feature 06's delete criterion states the mechanism that actually removes the media rows
-- [ ] The mechanism is tested, including the cross-uploader case the criterion names
+- [ ] The PRD's **two** remaining `FK →` labels in the `media` rows and the ER diagram are corrected *(the third, on the route note, is done — it now states the soft delete, 2026-09-20)*
+- [x] Feature 06's delete criterion states what the delete actually does — 2026-09-20 (it leaves the media standing, and the criterion says so)
+- [x] The behaviour is tested, whichever way it was decided — 2026-09-20 (unit: the delete reaches no media; container: an activity's deletion leaves its media rows live)
 - [x] The `doc-assertion` test exists and goes red when a spec is reverted — 2026-09-19
 - [ ] Moved to `archive/`, row updated in [00-debt-log.md](00-debt-log.md)

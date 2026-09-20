@@ -73,7 +73,7 @@ public static class Constant
             $"The file must be one of: {string.Join(", ", Upload.MediaContentTypes)}.";
 
         public static readonly string MediaLimitReached =
-            $"An activity can hold at most {MediaLimit.PerActivity} media items.";
+            $"You can add at most {MediaLimit.PerContributorPerActivity} media items to an activity.";
     }
 
     public static class ConfigKey
@@ -314,13 +314,14 @@ public static class Constant
     }
 
     /// <summary>
-    /// How many items one activity may carry (Decision #24).
+    /// How many items one contributor may add to one activity (Decision #24).
     /// </summary>
     public static class MediaLimit
     {
-        /// <summary>Counted across every uploader, because media is collaborative: the cap is the
-        /// activity's, not the contributor's (Decision #27).</summary>
-        public const int PerActivity = 20;
+        /// <summary>One contributor's items on one activity, not the activity's total: media is
+        /// collaborative (Decision #27), so the cap bounds what one person adds rather than what
+        /// everyone together adds.</summary>
+        public const int PerContributorPerActivity = 50;
     }
 
     /// <summary>

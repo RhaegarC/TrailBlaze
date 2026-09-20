@@ -12,7 +12,6 @@ using TrailBlaze.Model.DatabaseEntity;
 /// <inheritdoc/>
 public sealed class ActivityService(
     IDbRepository dbRepository,
-    IStorageRepository storageRepository,
     IUserContextService userContext,
     ILogger<ActivityService> logger) : IActivityService
 {
@@ -225,7 +224,8 @@ public sealed class ActivityService(
                 return ActivityOutcome.NotFound();
             }
 
-            await RemoveMediaAsync(id);
+            // Its media rows and blobs are left standing: the delete is soft, so the activity can be
+            // restored and its media with it.
             await dbRepository.DeleteAsync<Activity>([id]);
 
             return ActivityOutcome.Deleted();
@@ -234,34 +234,6 @@ public sealed class ActivityService(
         {
             logger.LogError(ex, "Deleting activity {ActivityId} failed.", id);
             throw;
-        }
-    }
-
-    /// <summary>
-    /// Takes an activity's media with it, whichever uploader contributed each item.
-    /// </summary>
-    /// <remarks>
-    /// The model declares no foreign keys, so nothing cascades this: without it the rows would
-    /// outlive their activity, holding blobs nothing can reach.
-    /// </remarks>
-    /// <param name="activityId">The activity being deleted.</param>
-    private async Task RemoveMediaAsync(string activityId)
-    {
-        List<Media> items =
-            await dbRepository.GetListAsync<Media>(row => row.ActivityId == activityId);
-
-        if (items.Count == 0)
-        {
-            return;
-        }
-
-        await dbRepository.DeleteAsync<Media>([.. items.Select(item => item.Id)]);
-
-        // Rows first, then blobs: this order leaves at worst an unreferenced blob, which nothing
-        // shows, where the reverse leaves a row naming bytes that are already gone.
-        foreach (Media item in items)
-        {
-            await storageRepository.DeleteAsync(Constant.StorageContainer.Media, item.BlobPath);
         }
     }
 

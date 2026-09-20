@@ -87,9 +87,12 @@ public sealed class MediaService(
             };
 
             // The row before the bytes, counted and inserted as one step, so a caller at the cap is
-            // turned away before any blob exists.
+            // turned away before any blob exists. Counted over this contributor's items on this
+            // activity, which is what the cap bounds.
             bool stored = await dbRepository.CreateIfUnderAsync(
-                media, row => row.ActivityId == activityId, Constant.MediaLimit.PerActivity);
+                media,
+                row => row.ActivityId == activityId && row.CreatedBy == caller,
+                Constant.MediaLimit.PerContributorPerActivity);
 
             if (!stored)
             {
