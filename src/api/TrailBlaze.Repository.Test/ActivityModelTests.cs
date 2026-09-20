@@ -22,7 +22,6 @@ public sealed class ActivityModelTests
     [InlineData(nameof(Activity.Location), 200)]
     [InlineData(nameof(Activity.Type), 16)]
     [InlineData(nameof(Activity.CoverImageBlobPath), 512)]
-    [InlineData(nameof(Activity.CreatedByUserId), 128)]
     public void A_column_is_bounded_to_its_documented_length(string propertyName, int expectedLength) =>
         Assert.Equal(expectedLength, PropertyOf(propertyName).GetMaxLength());
 
@@ -56,12 +55,12 @@ public sealed class ActivityModelTests
     }
 
     /// <summary>
-    /// Non-nullable, because an entry with no author is an entry no one may edit and no one
-    /// may be shown as having written.
+    /// The creator is the shared audit column <see cref="EntityBase.CreatedBy"/>, which every
+    /// <see cref="EntityBase"/> already carries — so an entry has no creator column of its own.
     /// </summary>
     [Fact]
-    public void An_entry_always_names_its_creator() =>
-        Assert.False(PropertyOf(nameof(Activity.CreatedByUserId)).IsNullable);
+    public void The_creator_is_the_shared_audit_column() =>
+        Assert.NotNull(PropertyOf(nameof(Activity.CreatedBy)));
 
     /// <summary>
     /// The closed set is enforced by the engine, not only by the code that writes it.
@@ -87,7 +86,7 @@ public sealed class ActivityModelTests
     /// The creator is a plain column, not a relationship.
     /// </summary>
     /// <remarks>
-    /// The PRD draws <c>CreatedByUserId</c> as an FK and the model declares no foreign keys at
+    /// The PRD draws a creator reference as an FK and the model declares no foreign keys at
     /// all (see the debt register). The two cannot both be true, and the difference is a
     /// behaviour rather than a diagram: with a relationship, EF would cascade a user's deletion
     /// into their entries, and nothing in the product asks for that. Which of the two is wrong

@@ -2,7 +2,7 @@ namespace TrailBlaze.Model.Activity;
 
 /// <summary>An activity as these routes return it.</summary>
 /// <remarks>
-/// Carries no <c>CreatedByUserId</c> and no <c>CreatedOn</c>. Feature 05 decides which caller
+/// Carries no creator and no <c>CreatedOn</c>. Feature 05 decides which caller
 /// may be told the creator's identity — an anonymous response may not be — so this type holds
 /// the field set both callers share rather than a set one of them would have to be trimmed
 /// out of later.

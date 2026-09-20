@@ -1,0 +1,701 @@
+namespace TrailBlaze.Service.Test;
+
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Linq.Expressions;
+using TrailBlaze.Interface.Infrastructure;
+using TrailBlaze.Interface.Repository;
+using TrailBlaze.Interface.Service;
+using TrailBlaze.Model;
+using TrailBlaze.Model.DatabaseEntity;
+using TrailBlaze.Model.Media;
+
+/// <summary>
+/// What an activity's media may be, who may contribute it, and who may remove it.
+/// </summary>
+/// <remarks>
+/// The rules exercised here are decided from the request and the activity alone, which is what makes
+/// them answerable without a store. The one claim this tier cannot make is that a blob really landed
+/// or really went: that needs a real account, and it is asserted in
+/// <c>TrailBlaze.Repository.Test</c>'s container tier instead.
+/// </remarks>
+public sealed class MediaServiceTests
+{
+    private const string Owner = "the-owners-object-id";
+
+    private const string Contributor = "a-contributors-object-id";
+
+    private const string Stranger = "a-strangers-object-id";
+
+    private const string ActivityId = "the-activity";
+
+    private static byte[] Bytes => "trail-blaze"u8.ToArray();
+
+    // ---- What may be stored ---------------------------------------------------------------
+
+    [Theory]
+    [InlineData("image/jpeg", Constant.MediaKind.Image)]
+    [InlineData("image/png", Constant.MediaKind.Image)]
+    [InlineData("image/webp", Constant.MediaKind.Image)]
+    [InlineData("image/gif", Constant.MediaKind.Image)]
+    [InlineData("video/mp4", Constant.MediaKind.Video)]
+    [InlineData("video/quicktime", Constant.MediaKind.Video)]
+    [InlineData("IMAGE/PNG", Constant.MediaKind.Image)]
+    public async Task An_admitted_type_is_stored_under_the_kind_it_belongs_to(
+        string contentType, string kind)
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), contentType, Bytes.Length, "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Equal(kind, harness.Repository.Inserted.Single().Kind);
+        Assert.Equal(contentType, harness.Repository.Inserted.Single().ContentType);
+    }
+
+    [Theory]
+    [InlineData("application/pdf")]
+    [InlineData("text/plain")]
+    [InlineData("video/webm")]
+    [InlineData("image/bmp")]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task A_type_neither_allowlist_admits_is_refused_and_writes_nothing(string? contentType)
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), contentType, Bytes.Length, "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.Rejected, outcome.Kind);
+        Assert.Equal(Constant.Message.MediaTypeNotAllowed, outcome.Errors!["file"].Single());
+        Assert.Empty(harness.Repository.Inserted);
+        Assert.Empty(harness.Storage.Uploads);
+    }
+
+    [Fact]
+    public async Task An_image_exactly_at_the_cap_is_accepted()
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId,
+            new MemoryStream(Bytes),
+            "image/png",
+            Constant.Upload.ImageSizeCapBytes,
+            "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+    }
+
+    [Fact]
+    public async Task An_image_one_byte_over_the_cap_is_refused()
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId,
+            new MemoryStream(Bytes),
+            "image/png",
+            Constant.Upload.ImageSizeCapBytes + 1,
+            "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.Rejected, outcome.Kind);
+        Assert.Equal(Constant.Message.ImageTooLarge, outcome.Errors!["file"].Single());
+        Assert.Empty(harness.Storage.Uploads);
+    }
+
+    [Fact]
+    public async Task A_video_exactly_at_the_cap_is_accepted()
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId,
+            new MemoryStream(Bytes),
+            "video/mp4",
+            Constant.Upload.VideoSizeCapBytes,
+            "ridge.mp4");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+    }
+
+    [Fact]
+    public async Task A_video_one_byte_over_the_cap_is_refused()
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId,
+            new MemoryStream(Bytes),
+            "video/mp4",
+            Constant.Upload.VideoSizeCapBytes + 1,
+            "ridge.mp4");
+
+        Assert.Equal(MediaOutcomeKind.Rejected, outcome.Kind);
+        Assert.Equal(Constant.Message.VideoTooLarge, outcome.Errors!["file"].Single());
+    }
+
+    /// <summary>
+    /// The two directions of one claim: the cap follows the kind, so a single shared cap would fail
+    /// both. A video at 11 MB is over the image cap and admissible; an image at 11 MB is under the
+    /// video cap and refused.
+    /// </summary>
+    [Fact]
+    public async Task Each_kind_is_held_to_its_own_cap_and_not_the_other_one()
+    {
+        var harness = new Harness();
+        long overTheImageCap = Constant.Upload.ImageSizeCapBytes + 1;
+
+        MediaOutcome video = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "video/mp4", overTheImageCap, "ridge.mp4");
+
+        MediaOutcome image = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", overTheImageCap, "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, video.Kind);
+        Assert.Equal(MediaOutcomeKind.Rejected, image.Kind);
+    }
+
+    // ---- What is stored -------------------------------------------------------------------
+
+    [Fact]
+    public async Task An_upload_is_attributed_to_the_caller_and_not_to_the_activity_owner()
+    {
+        var harness = new Harness(caller: Contributor);
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        Assert.Equal(Contributor, harness.Repository.Inserted.Single().CreatedBy);
+    }
+
+    [Fact]
+    public async Task The_item_carries_the_name_the_client_sent()
+    {
+        var harness = new Harness();
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge walk.png");
+
+        Assert.Equal("ridge walk.png", harness.Repository.Inserted.Single().OriginalFileName);
+        Assert.Equal(Bytes.Length, harness.Repository.Inserted.Single().SizeBytes);
+    }
+
+    [Fact]
+    public async Task The_blob_goes_to_the_private_container_under_the_activity()
+    {
+        var harness = new Harness();
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        (string container, string path, string contentType) = harness.Storage.Uploads.Single();
+
+        Assert.Equal(Constant.StorageContainer.Media, container);
+        Assert.StartsWith($"{ActivityId}/", path, StringComparison.Ordinal);
+        Assert.Equal("image/png", contentType);
+
+        // The row names the object that was written, or the item is addressable by nothing.
+        Assert.Equal(path, harness.Repository.Inserted.Single().BlobPath);
+    }
+
+    [Fact]
+    public async Task Every_upload_gets_a_fresh_path()
+    {
+        var harness = new Harness();
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        string[] paths = [.. harness.Storage.Uploads.Select(upload => upload.Path)];
+
+        Assert.NotEqual(paths[0], paths[1]);
+    }
+
+    // ---- The item limit -------------------------------------------------------------------
+
+    [Fact]
+    public async Task An_activity_at_its_limit_is_refused_before_the_blob_is_written()
+    {
+        var harness = new Harness();
+        harness.Repository.RoomForMore = false;
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.LimitReached, outcome.Kind);
+        Assert.Empty(harness.Storage.Uploads);
+        Assert.Empty(harness.Repository.Inserted);
+    }
+
+    /// <summary>
+    /// The cap counted is one contributor's items on one activity, which is neither the activity's
+    /// total nor the contributor's everywhere: the predicate is run here against three rows rather
+    /// than described.
+    /// </summary>
+    [Fact]
+    public async Task The_limit_is_counted_over_the_contributor_and_the_activity()
+    {
+        var harness = new Harness();
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        Func<Media, bool> counted = harness.Repository.Counted!.Compile();
+
+        Assert.Equal(Constant.MediaLimit.PerContributorPerActivity, harness.Repository.Cap);
+        Assert.True(counted(Item("mine", Contributor)));
+        Assert.False(counted(Item("theirs", Stranger)));
+        Assert.False(counted(new Media { ActivityId = "another-activity", CreatedBy = Contributor }));
+    }
+
+    // ---- A blob that never landed ---------------------------------------------------------
+
+    [Fact]
+    public async Task A_blob_that_never_landed_undoes_its_row()
+    {
+        var harness = new Harness();
+        harness.Storage.RefuseUploads = true;
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png"));
+
+        Assert.Equal(
+            [harness.Repository.Inserted.Single().Id], harness.Repository.DeletedMedia);
+    }
+
+    // ---- Who may contribute ---------------------------------------------------------------
+
+    [Theory]
+    [InlineData(null, Constant.ActivityType.Public, Owner, MediaOutcomeKind.NoCaller)]
+    [InlineData(Contributor, Constant.ActivityType.Public, Owner, MediaOutcomeKind.Uploaded)]
+    [InlineData(Contributor, Constant.ActivityType.Shared, Owner, MediaOutcomeKind.Uploaded)]
+    [InlineData(Contributor, Constant.ActivityType.Private, Owner, MediaOutcomeKind.NotFound)]
+    [InlineData(Owner, Constant.ActivityType.Private, Owner, MediaOutcomeKind.Uploaded)]
+    [InlineData(Contributor, Constant.ActivityType.Shared, Contributor, MediaOutcomeKind.Uploaded)]
+    public async Task Any_caller_who_can_read_the_activity_may_contribute_to_it(
+        string? caller, string type, string owner, MediaOutcomeKind expected)
+    {
+        var harness = new Harness(caller);
+        harness.Repository.Activity = Activity(type, owner);
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        Assert.Equal(expected, outcome.Kind);
+    }
+
+    /// <summary>
+    /// Blocked, not skipped: Decision #27 names an administrator as a third principal who may
+    /// contribute, and nothing here can recognize one — <c>IUserContextService</c> carries no role,
+    /// so an administrator is judged as an ordinary user until feature 09. Asserting today's answer
+    /// is what makes the gap fail loudly on the day a role arrives, rather than reading as a rule
+    /// that was implemented whole.
+    /// </summary>
+    [Fact]
+    public async Task An_administrator_is_judged_as_an_ordinary_user_because_no_role_can_be_read()
+    {
+        var harness = new Harness(caller: Stranger);
+        harness.Repository.Activity = Activity(Constant.ActivityType.Private, Owner);
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.NotFound, outcome.Kind);
+    }
+
+    [Fact]
+    public async Task An_activity_that_names_nothing_is_refused_and_writes_nothing()
+    {
+        var harness = new Harness();
+        harness.Repository.Activity = null;
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.NotFound, outcome.Kind);
+        Assert.Empty(harness.Storage.Uploads);
+        Assert.Empty(harness.Repository.Inserted);
+    }
+
+    // ---- Who may read ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(Contributor, Constant.ActivityType.Public, Owner, true)]
+    [InlineData(Contributor, Constant.ActivityType.Shared, Owner, true)]
+    [InlineData(Contributor, Constant.ActivityType.Private, Owner, false)]
+    [InlineData(Owner, Constant.ActivityType.Private, Owner, true)]
+    [InlineData(Contributor, Constant.ActivityType.Shared, Contributor, true)]
+    public async Task Reading_an_activity_a_caller_may_not_see_is_not_found(
+        string? caller, string type, string owner, bool found)
+    {
+        var harness = new Harness(caller);
+        harness.Repository.Activity = Activity(type, owner);
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        Assert.Equal(found, listing.Found);
+    }
+
+    /// <summary>
+    /// No token reads nothing rather than everything: the media surface must not become a way in.
+    /// </summary>
+    [Fact]
+    public async Task Listing_without_a_caller_is_not_found()
+    {
+        var harness = new Harness(caller: null);
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        Assert.False(listing.Found);
+    }
+
+    [Fact]
+    public async Task A_listing_names_each_uploader()
+    {
+        var harness = new Harness();
+        harness.Repository.Items = [Item("one", Contributor), Item("two", Stranger)];
+        harness.Repository.Users =
+        [
+            new User { Id = Contributor, DisplayName = "Ada" },
+            new User { Id = Stranger, DisplayName = "Grace" },
+        ];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        Assert.Equal(
+            ["Ada", "Grace"],
+            listing.Items.Select(item => item.UploaderDisplayName));
+    }
+
+    /// <summary>
+    /// A row whose uploader cannot be found still lists: the item is there, and a missing name is
+    /// not a reason to hide the bytes the caller came for.
+    /// </summary>
+    [Fact]
+    public async Task An_item_whose_uploader_has_no_row_still_lists()
+    {
+        var harness = new Harness();
+        harness.Repository.Items = [Item("one", Contributor)];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        Assert.Single(listing.Items);
+        Assert.Null(listing.Items[0].UploaderDisplayName);
+    }
+
+    [Fact]
+    public async Task A_listing_is_oldest_first()
+    {
+        var harness = new Harness();
+        harness.Repository.Items =
+        [
+            Item("late", Contributor, new DateTimeOffset(2026, 3, 2, 8, 0, 0, TimeSpan.Zero)),
+            Item("early", Contributor, new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero)),
+        ];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        Assert.Equal(["early", "late"], listing.Items.Select(item => item.Id));
+    }
+
+    [Fact]
+    public async Task A_listing_never_carries_a_blob_path()
+    {
+        var harness = new Harness();
+        harness.Repository.Items = [Item("one", Contributor)];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        Assert.DoesNotContain(
+            typeof(MediaResponse).GetProperties(),
+            property => property.Name.Contains("Path", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("one", listing.Items[0].Id);
+    }
+
+    // ---- Who may remove -------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(Contributor, Contributor, Owner, MediaOutcomeKind.Deleted)]
+    [InlineData(Owner, Contributor, Owner, MediaOutcomeKind.Deleted)]
+    [InlineData(Stranger, Contributor, Owner, MediaOutcomeKind.Forbidden)]
+    [InlineData(null, Contributor, Owner, MediaOutcomeKind.NoCaller)]
+    public async Task The_uploader_and_the_activity_owner_may_remove_an_item(
+        string? caller, string uploader, string owner, MediaOutcomeKind expected)
+    {
+        var harness = new Harness(caller);
+        harness.Repository.Activity = Activity(Constant.ActivityType.Shared, owner);
+        harness.Repository.Item = Item("one", uploader);
+
+        MediaOutcome outcome = await harness.Service.DeleteAsync("one");
+
+        Assert.Equal(expected, outcome.Kind);
+    }
+
+    /// <summary>
+    /// Blocked, not skipped, as in the contribution table above: the administrator is Decision #27's
+    /// third principal and cannot be recognized yet.
+    /// </summary>
+    [Fact]
+    public async Task An_administrator_is_judged_as_an_ordinary_user_here_too()
+    {
+        var harness = new Harness(caller: Stranger);
+        harness.Repository.Activity = Activity(Constant.ActivityType.Shared, Owner);
+        harness.Repository.Item = Item("one", Contributor);
+
+        MediaOutcome outcome = await harness.Service.DeleteAsync("one");
+
+        Assert.Equal(MediaOutcomeKind.Forbidden, outcome.Kind);
+    }
+
+    [Fact]
+    public async Task Removing_an_item_removes_its_row_and_then_its_blob()
+    {
+        var harness = new Harness();
+        harness.Repository.Item = Item("one", Contributor);
+
+        MediaOutcome outcome = await harness.Service.DeleteAsync("one");
+
+        Assert.Equal(MediaOutcomeKind.Deleted, outcome.Kind);
+        Assert.Equal(["one"], harness.Repository.DeletedMedia);
+        Assert.Equal(["blobs/one"], harness.Storage.Deleted);
+    }
+
+    [Fact]
+    public async Task An_item_that_names_nothing_removes_nothing()
+    {
+        var harness = new Harness();
+        harness.Repository.Item = null;
+
+        MediaOutcome outcome = await harness.Service.DeleteAsync("one");
+
+        Assert.Equal(MediaOutcomeKind.NotFound, outcome.Kind);
+        Assert.Empty(harness.Storage.Deleted);
+    }
+
+    // ---- Scaffolding ----------------------------------------------------------------------
+
+    private static Activity Activity(string type, string owner) => new()
+    {
+        Id = ActivityId,
+        Title = "Ridge walk",
+        Location = "North ridge",
+        ActivityDate = new DateOnly(2026, 3, 14),
+        Type = type,
+        CreatedBy = owner,
+    };
+
+    private static Media Item(
+        string id, string uploader, DateTimeOffset createdOn = default) => new()
+        {
+            Id = id,
+            ActivityId = ActivityId,
+            CreatedBy = uploader,
+            Kind = Constant.MediaKind.Image,
+            BlobPath = $"blobs/{id}",
+            ContentType = "image/png",
+            SizeBytes = 32,
+            OriginalFileName = $"{id}.png",
+            CreatedOn = createdOn,
+        };
+
+    /// <summary>One activity, one repository and one storage recorder, wired the way the app wires
+    /// them.</summary>
+    private sealed class Harness
+    {
+        public Harness(string? caller = Contributor)
+        {
+            Repository = new RecordingRepository { Activity = Activity(Constant.ActivityType.Public, Owner) };
+            Storage = new RecordingStorage();
+
+            Service = new MediaService(
+                Repository,
+                Storage,
+
+                // The real rule, not a stand-in: the visibility decision is the thing under test in
+                // the gate tables, and a double here would be asserting the double.
+                new ActivityService(
+                    Repository, new StubUserContext(caller), NullLogger<ActivityService>.Instance),
+                new StubUserContext(caller),
+                new UploadValidationService(),
+                NullLogger<MediaService>.Instance);
+        }
+
+        public RecordingRepository Repository { get; }
+
+        public RecordingStorage Storage { get; }
+
+        public MediaService Service { get; }
+    }
+
+    /// <summary>The caller's object id and nothing else.</summary>
+    private sealed class StubUserContext(string? entraObjectId) : IUserContextService
+    {
+        public string? EntraObjectId { get; } = entraObjectId;
+
+        public bool HasActiveRequest => true;
+
+        public string? ActorName => null;
+
+        public string? Email => null;
+
+        public string? IpAddress => null;
+
+        public string? UserAgent => null;
+
+        public string? CorrelationId => null;
+    }
+
+    /// <summary>A repository that records what it was handed and stores nothing.</summary>
+    private sealed class RecordingRepository : IDbRepository
+    {
+        public Activity? Activity { get; set; }
+
+        public Media? Item { get; set; }
+
+        public List<Media> Items { get; set; } = [];
+
+        public List<User> Users { get; set; } = [];
+
+        /// <summary>What the counted insert answers. False is an activity at its limit.</summary>
+        public bool RoomForMore { get; set; } = true;
+
+        public Media? Proposed { get; private set; }
+
+        public List<Media> Inserted { get; } = [];
+
+        public List<string> DeletedMedia { get; } = [];
+
+        public int Cap { get; private set; }
+
+        /// <summary>The predicate the counted insert was given, so a test can run it rather than
+        /// read it.</summary>
+        public Expression<Func<Media, bool>>? Counted { get; private set; }
+
+        public Task<T?> GetAsync<T>(Expression<Func<T, bool>> predicate) where T : class
+        {
+            if (typeof(T) == typeof(Activity))
+            {
+                return Task.FromResult((T?)(object?)Activity);
+            }
+
+            if (typeof(T) == typeof(Media))
+            {
+                return Task.FromResult((T?)(object?)Item);
+            }
+
+            return Task.FromResult((T?)(object?)null);
+        }
+
+        public Task<List<T>> GetListAsync<T>(Expression<Func<T, bool>> predicate) where T : class =>
+            Task.FromResult(
+                typeof(T) == typeof(Media)
+                    ? Items.Cast<T>().ToList()
+                    : Users.Cast<T>().ToList());
+
+        public Task<(List<T> Items, int Total)> GetPageAsync<T>(
+            Expression<Func<T, bool>> predicate,
+            Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+            int skip,
+            int take) where T : class => throw new NotSupportedException(NoReads);
+
+        public Task<int> CreateAsync<T>(T item) => throw new NotSupportedException(NoWrites);
+
+        public Task<int> CreateAsync<T>(List<T> items) => throw new NotSupportedException(NoWrites);
+
+        public Task<bool> CreateIfUnderAsync<T>(
+            T item,
+            Expression<Func<T, bool>> countOf,
+            int cap) where T : class
+        {
+            Proposed = item as Media;
+            Cap = cap;
+            Counted = countOf as Expression<Func<Media, bool>>;
+
+            if (RoomForMore)
+            {
+                Inserted.Add((Media)(object)item);
+            }
+
+            return Task.FromResult(RoomForMore);
+        }
+
+        public Task<int> DeleteAsync<T>(List<string> ids) where T : EntityBase
+        {
+            DeletedMedia.AddRange(ids);
+            return Task.FromResult(ids.Count);
+        }
+
+        public Task<int> UpdateAsync<T>(T item) where T : EntityBase => throw new NotSupportedException(NoWrites);
+
+        public Task<int> UpdateAsync<T>(List<T> items) where T : EntityBase =>
+            throw new NotSupportedException(NoWrites);
+
+        private const string NoReads = "This double answers no paged reads.";
+
+        private const string NoWrites = "This double answers no writes but the inserted item.";
+    }
+
+    /// <summary>
+    /// Records the blobs it was asked to store or remove, and stores nothing.
+    /// </summary>
+    /// <remarks>
+    /// It stands in for no storage behaviour — it holds no bytes, mints no URL and moves nothing —
+    /// and supports one claim only: what the service asked for, and what it did not ask for before
+    /// it refused. Whether the blob is really there is the container tier's question.
+    /// </remarks>
+    private sealed class RecordingStorage : IStorageRepository
+    {
+        public List<(string Container, string Path, string ContentType)> Uploads { get; } = [];
+
+        public List<string> Deleted { get; } = [];
+
+        public bool RefuseUploads { get; set; }
+
+        public Task<string> UploadAsync(
+            string container,
+            string path,
+            Stream content,
+            string contentType,
+            CancellationToken cancellationToken = default)
+        {
+            if (RefuseUploads)
+            {
+                throw new NotSupportedException(NoStorage);
+            }
+
+            Uploads.Add((container, path, contentType));
+            return Task.FromResult(path);
+        }
+
+        public Task DeleteAsync(
+            string container,
+            string path,
+            CancellationToken cancellationToken = default)
+        {
+            Deleted.Add(path);
+            return Task.CompletedTask;
+        }
+
+        public Task<Uri> CreateReadUrlAsync(
+            string container,
+            string path,
+            TimeSpan lifetime,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException(NoStorage);
+
+        public Uri CreatePublicUrl(string container, string path) =>
+            throw new NotSupportedException(NoStorage);
+
+        public Task<string> MoveAsync(
+            string sourceContainer,
+            string sourcePath,
+            string destinationContainer,
+            string destinationPath,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException(NoStorage);
+
+        private const string NoStorage = "This double records calls and stores nothing.";
+    }
+}

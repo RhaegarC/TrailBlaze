@@ -49,6 +49,31 @@ public interface IDbRepository
     Task<int> CreateAsync<T>(T item);
 
     /// <summary>
+    /// Creates an item only while a counted set has room for it, as one atomic step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two statements, not one. A caller that counted, decided, and then inserted would be reading
+    /// a number another request can change between the two — so a per-activity cap checked that way
+    /// admits one row too many exactly when two uploads arrive together, which is the case the cap
+    /// exists for.
+    /// </para>
+    /// <para>
+    /// The transaction is what closes that window, and it is why this is a repository operation
+    /// rather than something a service assembles: the context lives here. Isolation is serializable
+    /// rather than the default, because a range lock is what stops the second reader seeing a count
+    /// the first has not committed yet.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">Item type.</typeparam>
+    /// <param name="item">The item to insert.</param>
+    /// <param name="countOf">Which existing rows count towards the cap.</param>
+    /// <param name="cap">The most rows the set may hold. The insert happens only below it.</param>
+    /// <returns>True when the item was inserted, false when the cap was already reached and
+    /// nothing was written.</returns>
+    Task<bool> CreateIfUnderAsync<T>(T item, Expression<Func<T, bool>> countOf, int cap) where T : class;
+
+    /// <summary>
     /// Create new items.
     /// </summary>
     /// <typeparam name="T">Item type.</typeparam>

@@ -53,7 +53,7 @@ table](../PRD.md#current-state-vs-target) states capability rather than progress
 | 03 | [the role column](archive/03-admin-seeding.md) | 02 | `Role` stored on `users`, defaulting to `User` and closed to `User`/`Admin`; one admin set by hand; role readable by the authorization path | archived — merged in PR #12, and unlike 02 its tests exist. **The server-side role read the authorization path needs does not exist yet** — it was built and removed in review as unconsumed, and [09](09-permission-enforcement.md) adds it |
 | 04 | [activity-crud](archive/04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. Plus the **anonymous paged list** — newest entry first, `pageSize` clamped, visibility-scoped. **Who may mutate is 09's; the payload and the detail read are 05's** | archived — merged in PR #15. The list applies the read half of the visibility rule; **the admin branch is not implemented** (no role is readable), and no mutation is authorized |
 | 05 | [public-activity-list](05-public-activity-list.md) | 04 | The read surface's payload and second read: the cover URL, the media count and the creator's display name on a list item; `GET /api/activity/{id}` applying the visibility rule as a **404**; an admin branch that is blocked on a readable role | not started |
-| 06 | [media-upload](06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 20 per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | not started |
+| 06 | [media-upload](06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 50 per contributor per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | in progress |
 | 07 | [sas-delivery](07-sas-delivery.md) | 06 | `GET /api/media/{id}/url` mints a **short-lived SAS URL**, and **only** for an authenticated caller — rejected before any blob operation otherwise | not started |
 | 08 | [cover-images](08-cover-images.md) | 04 | Cover is a **separate upload** whose container **follows the activity's `Type`** — public `covers` for `Public`, private `media` otherwise; a `Type` change across that line **moves** the cover. Never derived from private media | not started |
 | 09 | [permission-enforcement](09-permission-enforcement.md) | 03, 04 | **Two axes enforced in one service**: visibility gates reads, ownership gates mutations, `Admin` overrides both. Anonymous denied everywhere except the two public read endpoints. Media upload is the axis crossing — allowed to any caller who can read the activity | not started |
@@ -103,10 +103,10 @@ test belongs to, is [testing-and-tdd.md](../testing-and-tdd.md)'s subject, not t
 
 | Project | Bare machine | With the containers |
 |---|---|---|
-| `TrailBlaze.Service.Test` | 53 / 0 / 53 | 53 / 0 / 53 |
-| `TrailBlaze.Repository.Test` | 42 / 44 / 86 | 86 / 0 / 86 |
-| `TrailBlaze.Api.Test` | 9 / 0 / 9 | 9 / 0 / 9 |
-| **All three** | **104 / 44 / 148** | **148 / 0 / 148** |
+| `TrailBlaze.Service.Test` | 105 / 0 / 105 | 105 / 0 / 105 |
+| `TrailBlaze.Repository.Test` | 58 / 55 / 113 | 113 / 0 / 113 |
+| `TrailBlaze.Api.Test` | 12 / 0 / 12 | 12 / 0 / 12 |
+| **All three** | **175 / 55 / 230** | **230 / 0 / 230** |
 
 Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
 the container tiers skip, and `Category=Container` is the only trait in the solution.

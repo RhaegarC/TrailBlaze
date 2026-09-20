@@ -84,7 +84,7 @@ derivation, URL shape — can live here. Every claim that is *about a store* can
 
 | Claim the specs want | Tier that could host it | Currently |
 |---|---|---|
-| feature 06 — the per-activity count cap at 19/20/21 | needs a query, so an engine | `TrailBlaze.Repository.Test` — a store outcome, per the (c) split feature 04 took |
+| feature 06 — the count cap's boundary and the race at it | needs a query, so an engine | `TrailBlaze.Repository.Test` — a store outcome, per the (c) split feature 04 took |
 | feature 06 — a refused upload leaves no orphan blob | needs a listable store | `TrailBlaze.Repository.Test`, same reasoning |
 | feature 08 — the destination container per `Type` | needs an observable store | `TrailBlaze.Repository.Test`, same reasoning |
 | feature 08 — the move leaves the source empty | needs an observable store | `TrailBlaze.Repository.Test`, same reasoning |

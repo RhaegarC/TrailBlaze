@@ -33,7 +33,7 @@ public sealed class ActivityServiceTests
         ActivityOutcome outcome = await Service(repository).CreateAsync(Valid());
 
         Assert.Equal(ActivityOutcomeKind.Completed, outcome.Kind);
-        Assert.Equal(Caller, repository.Created!.CreatedByUserId);
+        Assert.Equal(Caller, repository.Created!.CreatedBy);
     }
 
     [Fact]
@@ -363,6 +363,36 @@ public sealed class ActivityServiceTests
         Assert.Equal([second.Id, first.Id], Ordered(repository, first, second));
     }
 
+    // ---- Deleting an activity -------------------------------------------------------------
+
+    /// <summary>
+    /// The delete is soft, so the entry can be restored — and its media with it. Removing the items
+    /// here would bring a restored activity back with none of its pictures.
+    /// </summary>
+    [Fact]
+    public async Task Deleting_an_activity_leaves_its_media_alone()
+    {
+        var repository = new RecordingRepository { Existing = Row(Constant.ActivityType.Public) };
+
+        ActivityOutcome outcome = await Service(repository).DeleteAsync("the-activity");
+
+        Assert.Equal(ActivityOutcomeKind.Deleted, outcome.Kind);
+        Assert.Equal(["the-activity"], repository.DeletedActivities);
+        Assert.Empty(repository.DeletedMedia);
+    }
+
+    [Fact]
+    public async Task An_id_that_names_no_activity_deletes_nothing()
+    {
+        var repository = new RecordingRepository();
+
+        ActivityOutcome outcome = await Service(repository).DeleteAsync("the-activity");
+
+        Assert.Equal(ActivityOutcomeKind.NotFound, outcome.Kind);
+        Assert.Empty(repository.DeletedActivities);
+        Assert.Empty(repository.DeletedMedia);
+    }
+
     // ---- Scaffolding ----------------------------------------------------------------------
 
     private const string TitleField = nameof(CreateActivityRequest.Title);
@@ -373,8 +403,13 @@ public sealed class ActivityServiceTests
 
     private const string TypeField = nameof(CreateActivityRequest.Type);
 
-    private static ActivityService Service(IDbRepository? repository = null, string? caller = Caller) =>
-        new(repository ?? new RecordingRepository(), new StubUserContext(caller), NullLogger<ActivityService>.Instance);
+    private static ActivityService Service(
+        IDbRepository? repository = null,
+        string? caller = Caller) =>
+        new(
+            repository ?? new RecordingRepository(),
+            new StubUserContext(caller),
+            NullLogger<ActivityService>.Instance);
 
     private static CreateActivityRequest Valid() => new()
     {
@@ -395,7 +430,7 @@ public sealed class ActivityServiceTests
             Location = "North ridge",
             ActivityDate = Date,
             Type = type,
-            CreatedByUserId = owner ?? Caller,
+            CreatedBy = owner ?? Caller,
             CreatedOn = createdOn,
             CoverImageBlobPath = coverPath,
         };
@@ -440,6 +475,13 @@ public sealed class ActivityServiceTests
 
         public int PageTotal { get; set; }
 
+        /// <summary>The row the delete path loads, or null for an id that names nothing.</summary>
+        public Activity? Existing { get; set; }
+
+        public List<string> DeletedActivities { get; } = [];
+
+        public List<string> DeletedMedia { get; } = [];
+
         public Task<int> CreateAsync<T>(T item)
         {
             Created = item as Activity;
@@ -460,16 +502,38 @@ public sealed class ActivityServiceTests
             return Task.FromResult((PageItems.Cast<T>().ToList(), PageTotal));
         }
 
+        // Answered only for the read the delete path performs, so the rest of the contract stays
+        // refused and no test can lean on a read this double does not model.
         public Task<T?> GetAsync<T>(Expression<Func<T, bool>> predicate) where T : class =>
-            throw new NotSupportedException(NoReads);
+            typeof(T) == typeof(Activity)
+                ? Task.FromResult((T?)(object?)Existing)
+                : throw new NotSupportedException(NoReads);
 
         public Task<List<T>> GetListAsync<T>(Expression<Func<T, bool>> predicate) where T : class =>
             throw new NotSupportedException(NoReads);
 
         public Task<int> CreateAsync<T>(List<T> items) => throw new NotSupportedException(NoWrites);
 
-        public Task<int> DeleteAsync<T>(List<string> ids) where T : EntityBase =>
-            throw new NotSupportedException(NoWrites);
+        // Records by type, so media the delete path should not be touching shows up in an assertion
+        // rather than being absorbed into the activity's own list.
+        public Task<int> DeleteAsync<T>(List<string> ids) where T : EntityBase
+        {
+            if (typeof(T) == typeof(Media))
+            {
+                DeletedMedia.AddRange(ids);
+            }
+            else
+            {
+                DeletedActivities.AddRange(ids);
+            }
+
+            return Task.FromResult(ids.Count);
+        }
+
+        public Task<bool> CreateIfUnderAsync<T>(
+            T item,
+            Expression<Func<T, bool>> countOf,
+            int cap) where T : class => throw new NotSupportedException(NoWrites);
 
         public Task<int> UpdateAsync<T>(T item) where T : EntityBase => throw new NotSupportedException(NoWrites);
 
