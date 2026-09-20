@@ -60,6 +60,16 @@ public class DatabaseRepository(TrailBlazeContext context) : IDbRepository
     }
 
     /// <inheritdoc/>
+    public async Task<Dictionary<string, int>> CountByAsync<T>(
+        Expression<Func<T, bool>> predicate,
+        Expression<Func<T, string>> key) where T : class =>
+        await Context.Set<T>()
+            .Where(predicate)
+            .GroupBy(key)
+            .Select(group => new { Key = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.Key, row => row.Count);
+
+    /// <inheritdoc/>
     public async Task<int> CreateAsync<T>(T item)
     {
         ArgumentNullException.ThrowIfNull(item, nameof(item));

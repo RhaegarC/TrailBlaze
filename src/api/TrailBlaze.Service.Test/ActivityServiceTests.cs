@@ -309,30 +309,45 @@ public sealed class ActivityServiceTests
         Assert.False(visible(Row(Constant.ActivityType.Private, owner: SomebodyElse)));
     }
 
+    /// <summary>
+    /// A Public activity's cover lives in the world-readable container, so the anonymous list can
+    /// render it — and it is handed over unsigned, because a SAS on a public blob grants nothing
+    /// the container had not already granted while turning a permanent link into one that dies.
+    /// </summary>
     [Fact]
-    public async Task An_anonymous_page_carries_no_cover_path()
+    public async Task A_public_entrys_cover_reaches_an_anonymous_caller_unsigned()
     {
         var repository = new RecordingRepository
         {
-            PageItems = [Row(Constant.ActivityType.Public, coverPath: "media/cover.jpg")],
+            PageItems = [Row(Constant.ActivityType.Public, coverPath: "covers/ridge.jpg")],
         };
+        var storage = new RecordingStorage();
 
-        ActivityPage page = await Service(repository, caller: null).GetPageAsync(page: 0, pageSize: 10);
+        ActivityPage page = await Service(repository, storage, caller: null).GetPageAsync(page: 0, pageSize: 10);
 
-        Assert.Null(page.Items[0].CoverImageBlobPath);
+        Assert.NotNull(page.Items[0].CoverImageUrl);
+        Assert.Equal(Constant.StorageContainer.Covers, Assert.Single(storage.PublicUrls).Container);
+        Assert.Empty(storage.ReadUrls);
     }
 
+    /// <summary>
+    /// A Shared or Private cover lives in the private container, so the URL is signed and expiring
+    /// — and it is the only way the bytes are reachable at all.
+    /// </summary>
     [Fact]
-    public async Task A_signed_in_page_carries_the_cover_path()
+    public async Task A_shared_entrys_cover_reaches_a_signed_in_caller_signed()
     {
         var repository = new RecordingRepository
         {
-            PageItems = [Row(Constant.ActivityType.Public, coverPath: "media/cover.jpg")],
+            PageItems = [Row(Constant.ActivityType.Shared, coverPath: "media/cover.jpg")],
         };
+        var storage = new RecordingStorage();
 
-        ActivityPage page = await Service(repository).GetPageAsync(page: 0, pageSize: 10);
+        ActivityPage page = await Service(repository, storage).GetPageAsync(page: 0, pageSize: 10);
 
-        Assert.Equal("media/cover.jpg", page.Items[0].CoverImageBlobPath);
+        Assert.NotNull(page.Items[0].CoverImageUrl);
+        Assert.Equal(Constant.StorageContainer.Media, Assert.Single(storage.ReadUrls).Container);
+        Assert.Empty(storage.PublicUrls);
     }
 
     // ---- Ordering -------------------------------------------------------------------------
@@ -361,6 +376,169 @@ public sealed class ActivityServiceTests
         Activity second = Row(Constant.ActivityType.Public, createdOn: Early, id: "bbb");
 
         Assert.Equal([second.Id, first.Id], Ordered(repository, first, second));
+    }
+
+    // ---- Reading one activity -------------------------------------------------------------
+
+    [Theory]
+    [InlineData(Constant.ActivityType.Public, null)]
+    [InlineData(Constant.ActivityType.Public, Caller)]
+    [InlineData(Constant.ActivityType.Shared, Caller)]
+    [InlineData(Constant.ActivityType.Private, Caller)]
+    public async Task An_entry_the_caller_may_read_is_returned(string type, string? caller)
+    {
+        var repository = new RecordingRepository { Existing = Row(type, owner: Caller) };
+
+        ActivityOutcome outcome = await Service(repository, caller: caller).GetAsync("the-activity");
+
+        Assert.Equal(ActivityOutcomeKind.Completed, outcome.Kind);
+        Assert.NotNull(outcome.Activity);
+    }
+
+    /// <summary>
+    /// Not-found rather than forbidden, and carrying no row. An "exists but you may not read it"
+    /// answer would confirm the id names something, which is the fact being withheld.
+    /// </summary>
+    [Theory]
+    [InlineData(Constant.ActivityType.Shared, null)]
+    [InlineData(Constant.ActivityType.Private, SomebodyElse)]
+    public async Task An_entry_the_caller_may_not_read_is_answered_as_absent(string type, string? caller)
+    {
+        var repository = new RecordingRepository { Existing = Row(type, owner: Caller) };
+
+        ActivityOutcome outcome = await Service(repository, caller: caller).GetAsync("the-activity");
+
+        Assert.Equal(ActivityOutcomeKind.NotFound, outcome.Kind);
+        Assert.Null(outcome.Activity);
+    }
+
+    [Fact]
+    public async Task An_id_that_names_no_activity_is_answered_as_absent()
+    {
+        var repository = new RecordingRepository();
+
+        ActivityOutcome outcome = await Service(repository).GetAsync("the-activity");
+
+        Assert.Equal(ActivityOutcomeKind.NotFound, outcome.Kind);
+        Assert.Null(outcome.Activity);
+    }
+
+    /// <summary>
+    /// The count is a read of the media table, so it is gated by the entry's own rule rather than
+    /// being a disclosure of its own: a caller who may not read the entry never causes the count to
+    /// be taken. Asserted on the read not happening, which is stronger than a null field.
+    /// </summary>
+    [Fact]
+    public async Task An_entry_the_caller_may_not_read_is_never_counted()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Private, owner: Caller),
+        };
+
+        await Service(repository, caller: SomebodyElse).GetAsync("the-activity");
+
+        Assert.False(repository.CountedMedia);
+    }
+
+    [Fact]
+    public async Task An_entry_the_caller_may_read_is_counted()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Public, id: "the-activity"),
+            MediaCounts = new() { ["the-activity"] = 2 },
+        };
+
+        ActivityOutcome outcome = await Service(repository).GetAsync("the-activity");
+
+        Assert.Equal(2, outcome.Activity!.MediaCount);
+    }
+
+    // ---- The creator, and the cover URL ---------------------------------------------------
+
+    [Fact]
+    public async Task A_read_names_the_creator_by_display_name()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Public, owner: SomebodyElse),
+            Users = [new User { Id = SomebodyElse, DisplayName = "Ada" }],
+        };
+
+        ActivityOutcome outcome = await Service(repository).GetAsync("the-activity");
+
+        Assert.Equal("Ada", outcome.Activity!.CreatorDisplayName);
+    }
+
+    /// <summary>The id is the client's signal for whether to offer edit controls, so it is the one
+    /// identity field a signed-in caller gets and an anonymous one does not.</summary>
+    [Fact]
+    public async Task An_anonymous_read_of_a_public_entry_carries_no_user_id()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Public, owner: SomebodyElse),
+        };
+
+        ActivityOutcome outcome = await Service(repository, caller: null).GetAsync("the-activity");
+
+        Assert.Equal(ActivityOutcomeKind.Completed, outcome.Kind);
+        Assert.Null(outcome.Activity!.CreatedByUserId);
+    }
+
+    [Fact]
+    public async Task A_signed_in_read_carries_the_creators_id()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Public, owner: SomebodyElse),
+        };
+
+        ActivityOutcome outcome = await Service(repository).GetAsync("the-activity");
+
+        Assert.Equal(SomebodyElse, outcome.Activity!.CreatedByUserId);
+    }
+
+    /// <summary>
+    /// The container is the whole of the public/private answer, so the choice of container *is* the
+    /// choice between an unsigned URL and a signed one.
+    /// </summary>
+    [Theory]
+    [InlineData(Constant.ActivityType.Shared)]
+    [InlineData(Constant.ActivityType.Private)]
+    public async Task A_shared_or_private_entrys_cover_is_signed_and_short_lived(string type)
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(type, owner: Caller, coverPath: "media/cover.jpg"),
+        };
+        var storage = new RecordingStorage();
+
+        await Service(repository, storage).GetAsync("the-activity");
+
+        (string container, string path, TimeSpan lifetime) = Assert.Single(storage.ReadUrls);
+        Assert.Equal(Constant.StorageContainer.Media, container);
+        Assert.Equal("media/cover.jpg", path);
+
+        // The expiry is the real control on a bearer link, so it is bounded rather than merely
+        // positive — a lifetime of a year would satisfy "expiring" and leak the bytes.
+        Assert.InRange(lifetime, TimeSpan.FromMinutes(1), TimeSpan.FromHours(1));
+        Assert.Empty(storage.PublicUrls);
+    }
+
+    [Fact]
+    public async Task An_entry_with_no_cover_mints_no_url()
+    {
+        var repository = new RecordingRepository { Existing = Row(Constant.ActivityType.Public) };
+        var storage = new RecordingStorage();
+
+        ActivityOutcome outcome = await Service(repository, storage).GetAsync("the-activity");
+
+        Assert.Equal(ActivityOutcomeKind.Completed, outcome.Kind);
+        Assert.Null(outcome.Activity!.CoverImageUrl);
+        Assert.Empty(storage.PublicUrls);
+        Assert.Empty(storage.ReadUrls);
     }
 
     // ---- Deleting an activity -------------------------------------------------------------
@@ -405,9 +583,11 @@ public sealed class ActivityServiceTests
 
     private static ActivityService Service(
         IDbRepository? repository = null,
+        IStorageRepository? storage = null,
         string? caller = Caller) =>
         new(
             repository ?? new RecordingRepository(),
+            storage ?? new RecordingStorage(),
             new StubUserContext(caller),
             NullLogger<ActivityService>.Instance);
 
@@ -482,6 +662,16 @@ public sealed class ActivityServiceTests
 
         public List<string> DeletedMedia { get; } = [];
 
+        /// <summary>The <c>users</c> rows the name join resolves against.</summary>
+        public List<User> Users { get; set; } = [];
+
+        /// <summary>How many media rows each activity id carries, as a grouped count would answer.</summary>
+        public Dictionary<string, int> MediaCounts { get; set; } = new();
+
+        /// <summary>Whether the media table was counted at all — the read a caller who may not see
+        /// the entry must never cause.</summary>
+        public bool CountedMedia { get; private set; }
+
         public Task<int> CreateAsync<T>(T item)
         {
             Created = item as Activity;
@@ -510,7 +700,23 @@ public sealed class ActivityServiceTests
                 : throw new NotSupportedException(NoReads);
 
         public Task<List<T>> GetListAsync<T>(Expression<Func<T, bool>> predicate) where T : class =>
-            throw new NotSupportedException(NoReads);
+            typeof(T) == typeof(User)
+                ? Task.FromResult(Users.Cast<T>().ToList())
+                : throw new NotSupportedException(NoReads);
+
+        // Records the ask as well as answering it, so a test can assert the count was never taken
+        // rather than only that the field came back null.
+        public Task<Dictionary<string, int>> CountByAsync<T>(
+            Expression<Func<T, bool>> predicate,
+            Expression<Func<T, string>> key) where T : class
+        {
+            CountedMedia = true;
+
+            return Task.FromResult(
+                typeof(T) == typeof(Media)
+                    ? new Dictionary<string, int>(MediaCounts)
+                    : throw new NotSupportedException(NoReads));
+        }
 
         public Task<int> CreateAsync<T>(List<T> items) => throw new NotSupportedException(NoWrites);
 
@@ -543,5 +749,58 @@ public sealed class ActivityServiceTests
         private const string NoReads = "This double answers no reads.";
 
         private const string NoWrites = "This double answers no writes.";
+    }
+
+    /// <summary>
+    /// Records the URLs the service asked for, and mints a marker in their place.
+    /// </summary>
+    /// <remarks>
+    /// It stands in for no storage behaviour: it holds no bytes and signs nothing, so it cannot
+    /// show that a URL works — the container tier is where that is asked. It supports one claim,
+    /// which is about the ask rather than the blob: which container a cover URL was derived from,
+    /// and whether it was signed rather than handed over plain.
+    /// </remarks>
+    private sealed class RecordingStorage : IStorageRepository
+    {
+        public List<(string Container, string Path)> PublicUrls { get; } = [];
+
+        public List<(string Container, string Path, TimeSpan Lifetime)> ReadUrls { get; } = [];
+
+        public Task<Uri> CreateReadUrlAsync(
+            string container,
+            string path,
+            TimeSpan lifetime,
+            CancellationToken cancellationToken = default)
+        {
+            ReadUrls.Add((container, path, lifetime));
+            return Task.FromResult(new Uri($"https://signed.invalid/{container}/{path}"));
+        }
+
+        public Uri CreatePublicUrl(string container, string path)
+        {
+            PublicUrls.Add((container, path));
+            return new Uri($"https://public.invalid/{container}/{path}");
+        }
+
+        public Task<string> UploadAsync(
+            string container,
+            string path,
+            Stream content,
+            string contentType,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException(NoStorage);
+
+        public Task DeleteAsync(
+            string container,
+            string path,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException(NoStorage);
+
+        public Task<string> MoveAsync(
+            string sourceContainer,
+            string sourcePath,
+            string destinationContainer,
+            string destinationPath,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException(NoStorage);
+
+        private const string NoStorage = "This double records URL asks and stores nothing.";
     }
 }

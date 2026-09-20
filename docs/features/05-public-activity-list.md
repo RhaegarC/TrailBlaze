@@ -1,6 +1,6 @@
 # 05 — Public Activity List
 
-Status: **Not started** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
+Status: **In progress** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../PRD.md) — Decisions #2/#3/#10/#23/#25/#26/#29/#30 + "Media storage & delivery" + "API surface" + "Authentication & authorization".
 
 ## Summary
@@ -40,21 +40,21 @@ reads as entries rather than as anonymous rows.
 
 ## Acceptance criteria
 
-- [ ] `GET /api/activity/{id}` returns 200 for a request carrying **no** bearer token, **for a `Public` entry**
-- [ ] **Detail visibility:** `GET /api/activity/{id}` returns 200 for a caller who may read the entry and **404 for one who may not** — a `Shared` entry to an anonymous caller, a `Private` entry to anyone but its owner and admins. 404 rather than 403, because existence itself is withheld (PRD "Authentication & authorization")
+- [x] `GET /api/activity/{id}` returns 200 for a request carrying **no** bearer token, **for a `Public` entry**
+- [x] **Detail visibility:** `GET /api/activity/{id}` returns 200 for a caller who may read the entry and **404 for one who may not** — a `Shared` entry to an anonymous caller, a `Private` entry to anyone but its owner and admins. 404 rather than 403, because existence itself is withheld (PRD "Authentication & authorization")
 - [ ] **Admin visibility:** an `Admin` reads everything, including entries no other caller may see (Decision #26). **Blocked, not skipped:** the branch reads a role, and no layer exposes one today — `IUserContextService` carries none, and a role's only source is the `users` row. It therefore lands with [09](09-permission-enforcement.md)'s permission work, and until then this criterion stays open and an admin reads what a user reads
-- [ ] Each list item exposes the activity's own fields — `Id`, `Title`, `Location`, `ActivityDate`, `Description`, `Type` — plus the cover image URL, the **media count**, and the **creator's display name** (Decision #30). `CreatedByUserId` is the one further field, and only for an authenticated caller (next criterion)
-- [ ] **No user id ever appears in an anonymous response** — not `CreatedByUserId`, not an uploader id. The creator is named by display name only; under the current key shape a user id *is* the Entra object id (PRD "Current state vs. target", Decision #30)
-- [ ] The anonymous payload carries no media id, blob path, SAS URL, content type, size, or file name. The **count is the only media-derived value permitted**
-- [ ] Authenticated responses **may** carry `CreatedByUserId`, because the client needs it to decide whether to show edit controls; anonymous responses may not. Both shapes are asserted, so the difference is deliberate and reviewed rather than incidental
-- [ ] The payload is asserted by serializing the response model and checking the property set, not by eyeballing a sample response
-- [ ] `ActivityDate` serializes as a calendar date with no time component and no timezone offset — no UTC-midnight conversion (Decision #25)
-- [ ] `Type` is present on every item as one of `Public` / `Shared` / `Private`, so a client renders the badge without a second request
-- [ ] The detail response exposes the same field set as a list item
-- [ ] An unknown activity id returns **404**, never 401 and never 500
-- [ ] **The media count is gated by the same visibility rule as the entry itself** — it is a read of the media table, so a caller who may not read the activity never receives its count. It is a permitted disclosure, not a separate one
-- [ ] An activity whose `CoverImageBlobPath` is null is returned with a null/absent cover URL rather than being filtered out or erroring
-- [ ] The cover URL is a **plain public blob URL for a `Public` activity**, and a **short-lived SAS URL for a `Shared` or `Private`** one — whose cover lives in the private container (Decision #29). A test asserts which container each shape is derived from
+- [x] Each list item exposes the activity's own fields — `Id`, `Title`, `Location`, `ActivityDate`, `Description`, `Type` — plus the cover image URL, the **media count**, and the **creator's display name** (Decision #30). `CreatedByUserId` is the one further field, and only for an authenticated caller (next criterion)
+- [x] **No user id ever appears in an anonymous response** — not `CreatedByUserId`, not an uploader id. The creator is named by display name only; under the current key shape a user id *is* the Entra object id (PRD "Current state vs. target", Decision #30)
+- [x] The anonymous payload carries no media id, blob path, SAS URL, content type, size, or file name. The **count is the only media-derived value permitted**
+- [x] Authenticated responses **may** carry `CreatedByUserId`, because the client needs it to decide whether to show edit controls; anonymous responses may not. Both shapes are asserted, so the difference is deliberate and reviewed rather than incidental
+- [x] The payload is asserted by serializing the response model and checking the property set, not by eyeballing a sample response
+- [x] `ActivityDate` serializes as a calendar date with no time component and no timezone offset — no UTC-midnight conversion (Decision #25)
+- [x] `Type` is present on every item as one of `Public` / `Shared` / `Private`, so a client renders the badge without a second request
+- [x] The detail response exposes the same field set as a list item
+- [x] An unknown activity id returns **404**, never 401 and never 500
+- [x] **The media count is gated by the same visibility rule as the entry itself** — it is a read of the media table, so a caller who may not read the activity never receives its count. It is a permitted disclosure, not a separate one
+- [x] An activity whose `CoverImageBlobPath` is null is returned with a null/absent cover URL rather than being filtered out or erroring
+- [x] The cover URL is a **plain public blob URL for a `Public` activity**, and a **short-lived SAS URL for a `Shared` or `Private`** one — whose cover lives in the private container (Decision #29). A test asserts which container each shape is derived from
 
 ## Tests (TDD)
 
@@ -67,10 +67,16 @@ reads as entries rather than as anonymous rows.
 - Unit (`TrailBlaze.Service.Test`) — the detail read's visibility: a `Public` entry to a caller with no
   token, a `Shared` one to a signed-in caller, a `Private` one to its owner, and **404** for each case
   where the caller may not read it.
-- Integration (`TrailBlaze.Api.Test`): an end-to-end anonymous request with no `Authorization` header
-  for a `Public` entry's detail returning 200 and valid JSON; a `Private` entry's detail returning 404
-  anonymously and under a second user's token, and 200 under its owner's; the serialized list item
-  carrying no user id; `ActivityDate` emitting as `yyyy-MM-dd`.
+- Integration (`TrailBlaze.Api.Test`) — the route predicate, and the rest is unreachable **here**.
+  The detail route admits an anonymous request: it reaches the service, so the answer is the **500**
+  the factory's unreachable store produces, not the 401 of an authorized-only route nor the 404 of a
+  route that does not exist. **The 200 and the 404 the criteria above name are not asserted in this
+  tier**, and cannot be: it has no database to hold a `Public` entry and no Entra tenant to
+  authenticate a second user against. Those are asserted offline in `TrailBlaze.Service.Test`, which
+  drives the same visibility rule with a caller in hand. What is lost with the seam is that
+  `200`/`404` was never observed travelling over HTTP — the status is asserted from the outcome the
+  service returns, and the mapping from outcome to status by
+  `ActivityRouteTests`' protected-route table and 04's list assertion.
 
 **Paging, ordering and the visibility filter are asserted in [04](archive/04-activity-crud.md)'s tiers and are
 not restated here** — they already run, and a second copy of a test is a second thing to keep green.

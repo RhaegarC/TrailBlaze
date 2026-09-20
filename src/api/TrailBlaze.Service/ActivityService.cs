@@ -12,6 +12,7 @@ using TrailBlaze.Model.DatabaseEntity;
 /// <inheritdoc/>
 public sealed class ActivityService(
     IDbRepository dbRepository,
+    IStorageRepository storageRepository,
     IUserContextService userContext,
     ILogger<ActivityService> logger) : IActivityService
 {
@@ -100,7 +101,7 @@ public sealed class ActivityService(
 
             await dbRepository.CreateAsync(activity);
 
-            return ActivityOutcome.Completed(ToResponse(activity, includeCoverPath: true));
+            return ActivityOutcome.Completed((await RespondAsync([activity], caller))[0]);
         }
         catch (Exception ex)
         {
@@ -114,11 +115,19 @@ public sealed class ActivityService(
     {
         try
         {
+            string? caller = userContext.EntraObjectId;
             Activity? activity = await FindAsync(id);
 
-            return activity is null
-                ? ActivityOutcome.NotFound()
-                : ActivityOutcome.Completed(ToResponse(activity, includeCoverPath: true));
+            // An entry the caller may not read is answered as absent rather than forbidden:
+            // confirming the id names something is the fact being withheld, so the two answers have
+            // to be the same one. The admin branch would read a role, and no layer exposes one yet —
+            // it lands with feature 09, and until then an admin reads what a user reads.
+            if (activity is null || !CanRead(activity, caller))
+            {
+                return ActivityOutcome.NotFound();
+            }
+
+            return ActivityOutcome.Completed((await RespondAsync([activity], caller))[0]);
         }
         catch (Exception ex)
         {
@@ -150,8 +159,7 @@ public sealed class ActivityService(
 
             return new ActivityPage
             {
-                // A path is the address a SAS is minted for, so a token-less caller is shown none.
-                Items = [.. items.Select(item => ToResponse(item, includeCoverPath: caller is not null))],
+                Items = await RespondAsync(items, caller),
                 Page = appliedPage,
                 PageSize = appliedSize,
                 Total = total,
@@ -203,7 +211,8 @@ public sealed class ActivityService(
             // Read, changed, written back — never replaced, because UpdateAsync writes every property.
             await dbRepository.UpdateAsync(activity);
 
-            return ActivityOutcome.Completed(ToResponse(activity, includeCoverPath: true));
+            return ActivityOutcome.Completed(
+                (await RespondAsync([activity], userContext.EntraObjectId))[0]);
         }
         catch (Exception ex)
         {
@@ -270,15 +279,79 @@ public sealed class ActivityService(
             : [message];
     }
 
-    /// <summary>The response shape, with the cover path withheld from a caller who has no token.</summary>
-    private static ActivityResponse ToResponse(Activity activity, bool includeCoverPath) => new()
+    /// <summary>Every read's response goes through here, so the two reads cannot grow different
+    /// shapes and the name join and count are one query each rather than one per item.</summary>
+    private async Task<List<ActivityResponse>> RespondAsync(List<Activity> activities, string? caller)
     {
-        Id = activity.Id,
-        Title = activity.Title,
-        Location = activity.Location,
-        ActivityDate = activity.ActivityDate,
-        Description = activity.Description,
-        Type = activity.Type,
-        CoverImageBlobPath = includeCoverPath ? activity.CoverImageBlobPath : null,
-    };
+        if (activities.Count == 0)
+        {
+            return [];
+        }
+
+        Dictionary<string, string?> names = await CreatorNamesAsync(activities);
+        Dictionary<string, int> counts = await MediaCountsAsync(activities);
+
+        var responses = new List<ActivityResponse>(activities.Count);
+
+        foreach (Activity activity in activities)
+        {
+            responses.Add(new ActivityResponse
+            {
+                Id = activity.Id,
+                Title = activity.Title,
+                Location = activity.Location,
+                ActivityDate = activity.ActivityDate,
+                Description = activity.Description,
+                Type = activity.Type,
+                CoverImageUrl = await CoverUrlAsync(activity),
+                MediaCount = counts.GetValueOrDefault(activity.Id),
+                CreatorDisplayName = activity.CreatedBy is { } creator ? names.GetValueOrDefault(creator) : null,
+                CreatedByUserId = caller is null ? null : activity.CreatedBy,
+            });
+        }
+
+        return responses;
+    }
+
+    /// <summary>The creator is named, not identified: the display name is all a caller learns.</summary>
+    private async Task<Dictionary<string, string?>> CreatorNamesAsync(List<Activity> activities)
+    {
+        string[] creatorIds = [.. activities.Select(activity => activity.CreatedBy).OfType<string>().Distinct()];
+
+        List<User> creators = await dbRepository.GetListAsync<User>(user => creatorIds.Contains(user.Id));
+
+        return creators.ToDictionary(user => user.Id, user => user.DisplayName);
+    }
+
+    /// <summary>Counted, never loaded: the caller receives a number and no row.</summary>
+    private async Task<Dictionary<string, int>> MediaCountsAsync(List<Activity> activities)
+    {
+        string[] activityIds = [.. activities.Select(activity => activity.Id)];
+
+        return await dbRepository.CountByAsync<Media>(
+            media => activityIds.Contains(media.ActivityId),
+            media => media.ActivityId);
+    }
+
+    /// <summary>The cover's URL, or null for an entry that has none. The container follows the
+    /// activity's visibility (Decision #29), and the container *is* the public/private answer.</summary>
+    private async Task<string?> CoverUrlAsync(Activity activity)
+    {
+        if (string.IsNullOrWhiteSpace(activity.CoverImageBlobPath))
+        {
+            return null;
+        }
+
+        if (activity.Type == Constant.ActivityType.Public)
+        {
+            return storageRepository
+                .CreatePublicUrl(Constant.StorageContainer.Covers, activity.CoverImageBlobPath)
+                .ToString();
+        }
+
+        Uri signed = await storageRepository.CreateReadUrlAsync(
+            Constant.StorageContainer.Media, activity.CoverImageBlobPath, Constant.CoverUrl.SasLifetime);
+
+        return signed.ToString();
+    }
 }
