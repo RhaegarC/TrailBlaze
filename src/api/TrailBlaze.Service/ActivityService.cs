@@ -382,7 +382,9 @@ public sealed class ActivityService(
                 ActivityDate = activity.ActivityDate,
                 Description = activity.Description,
                 Type = activity.Type,
-                CoverImageUrl = await CoverUrlAsync(activity),
+                CoverImageUrl = string.IsNullOrWhiteSpace(activity.CoverImageBlobPath)
+                    ? null
+                    : await CoverUrlAsync(activity.CoverImageBlobPath, activity.Type),
                 MediaCount = counts.GetValueOrDefault(activity.Id),
                 CreatorDisplayName = activity.CreatedBy is { } creator ? names.GetValueOrDefault(creator) : null,
                 CreatedByUserId = caller is null ? null : activity.CreatedBy,
@@ -412,15 +414,8 @@ public sealed class ActivityService(
             media => media.ActivityId);
     }
 
-    /// <summary>The cover's URL, or null for an entry that has none.</summary>
-    private async Task<string?> CoverUrlAsync(Activity activity) =>
-        string.IsNullOrWhiteSpace(activity.CoverImageBlobPath)
-            ? null
-            : await CoverUrlAsync(activity.CoverImageBlobPath, activity.Type);
-
-    /// <summary>The URL a cover is reached by, from the container its entry's type puts it in
-    /// (Decision #29) — the container *is* the public/private answer. One branch, so an upload and a
-    /// read cannot hand out two different shapes for the same blob.</summary>
+    /// <summary>The URL a cover is reached by, from the container its entry's type requires
+    /// (Decision #29) — the container *is* the public/private answer.</summary>
     private async Task<string> CoverUrlAsync(string path, string type) =>
         CoverContainerFor(type) == Constant.StorageContainer.Covers
             ? storageRepository.CreatePublicUrl(Constant.StorageContainer.Covers, path).ToString()

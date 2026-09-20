@@ -143,11 +143,11 @@ public class ActivityController(
     /// file reaches the service and is answered with the reason a client can act on rather than a
     /// bare 413.
     /// </remarks>
-    /// <param name="id">The activity's id.</param>
+    /// <param name="activityId">The activity's id.</param>
     /// <param name="file">The image.</param>
     /// <returns>The cover's URL, the reasons the upload was refused, or not-found.</returns>
-    [HttpPost("{id}/cover")]
-    public async Task<IActionResult> UploadCover(string id, [FromForm] IFormFile? file)
+    [HttpPost("{activityId}/cover")]
+    public async Task<IActionResult> UploadCover(string activityId, [FromForm] IFormFile? file)
     {
         if (file is null)
         {
@@ -159,7 +159,7 @@ public class ActivityController(
         await using Stream content = file.OpenReadStream();
 
         CoverOutcome outcome = await _activityService.UploadCoverAsync(
-            id, content, file.ContentType, file.Length);
+            activityId, content, file.ContentType, file.Length);
 
         return this.ToActionResult(outcome);
     }

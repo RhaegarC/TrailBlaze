@@ -32,19 +32,19 @@ public sealed class CoverRouteTests
     }
 
     /// <summary>
-    /// The route accepts an id and a file, and nothing else — asserted on the action's own
+    /// The route accepts an activity id and a file, and nothing else — asserted on the action's own
     /// signature, because the absence is the rule: there is no parameter through which a caller
     /// could nominate a blob path or an existing item as the cover, so promoting private media to
     /// public is impossible by construction rather than by a check someone could remove.
     /// </summary>
     [Fact]
-    public void The_cover_route_accepts_an_id_and_a_file_and_nothing_else()
+    public void The_cover_route_accepts_an_activity_id_and_a_file_and_nothing_else()
     {
         ParameterInfo[] parameters = typeof(ActivityController)
             .GetMethod(nameof(ActivityController.UploadCover))!
             .GetParameters();
 
-        Assert.Equal(["id", "file"], parameters.Select(parameter => parameter.Name));
+        Assert.Equal(["activityId", "file"], parameters.Select(parameter => parameter.Name));
 
         // The file is the form part itself rather than a model it binds into, so there is no type
         // between the request and the service for a media id or a path to arrive on either.
