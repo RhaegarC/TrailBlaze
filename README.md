@@ -13,7 +13,6 @@ decides who may *edit* an entry rather than who may read it.
 | [docs/PRD.md](docs/PRD.md) | The product definition — the decisions log, the canonical data model, the permission matrix, and the API surface |
 | [docs/features/00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) | The feature ladder, dependency order, each feature's status, and the Definition of Done |
 | [docs/testing-and-tdd.md](docs/testing-and-tdd.md) | Test tiers and the RED → GREEN → refactor discipline |
-| [docs/tech-debt/00-debt-log.md](docs/tech-debt/00-debt-log.md) | Known divergences between the code and the standard, and who owns each |
 | [docs/features/backlog.md](docs/features/backlog.md) | Ideas that are *not* yet features |
 
 ## Stack
@@ -33,7 +32,7 @@ decides who may *edit* an entry rather than who may read it.
 The workflow lives in `.claude/` and runs on slash commands:
 
 ```
-/capture <kind> NN    # a spec, a bug report, or a debt item
+/capture <kind> NN    # a feature spec or a bug report
 /next                 # pick the lowest-numbered feature and implement it TDD
 /implement NN         # implement a specific feature
 /add-test NN          # RED only — write the missing tests
@@ -154,10 +153,8 @@ pointed somewhere else would migrate the wrong database and report success.
    test containers running everything passes, and with nothing configured the container-backed tests
    **skip** rather than fail — reported rather than hidden, and a skip is not a pass. The counts are
    in [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md), and what is covered against
-   what is not is status, owned by that file's table and the
-   [debt register](docs/tech-debt/00-debt-log.md). Feature 02's slice — the profile routes, avatar
-   upload and upload validator — is **not** covered
-   ([item 12](docs/tech-debt/12-feature-02-tests-deferred.md)). "Green" here means the foundation is
+   what is not is status, owned by that file's table. Feature 02's slice — the profile routes, avatar
+   upload and upload validator — is **not** covered. "Green" here means the foundation is
    green.
 2. **`develop` is not deployable until feature 09 merges.** 09 imposes the ownership and admin
    rules; [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) is where the rule and the

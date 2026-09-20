@@ -176,9 +176,9 @@ tables. They are drawn once, here, rather than repeated in the diagram:
 |---|---|---|
 | `Id` | string (GUID) | PK — **assigned by the application at construction**, not by the database |
 | `CreatedBy` | string, nullable | caller identity at insert |
-| `CreatedOn` | datetimeoffset | stamped by `AuditSaveChangesInterceptor` at insert, then not touched again — so it **is** stamped on every write path. There was a second, dead writer on the delete path; it was deleted ([item 01](tech-debt/archive/01-audit-columns-have-two-writers.md), archived) |
+| `CreatedOn` | datetimeoffset | stamped by `AuditSaveChangesInterceptor` at insert, then not touched again — so it **is** stamped on every write path. There was a second, dead writer on the delete path; it was deleted |
 | `LastModifiedBy` | string, nullable | caller identity at the last update |
-| `LastModifiedOn` | datetimeoffset | set on every update, but **not** at insert — a row that has never been updated carries `default(DateTimeOffset)`, i.e. the year 1: [item 20](tech-debt/20-lastmodified-unset-on-insert.md) |
+| `LastModifiedOn` | datetimeoffset | set on every update, but **not** at insert — a row that has never been updated carries `default(DateTimeOffset)`, i.e. the year 1 |
 | `IsDeleted` | bit, nullable | soft delete — a global query filter hides `true` rows by default |
 
 The `users` row is the one exception to the `Id` rule: see the open key-shape decision below the
@@ -240,9 +240,9 @@ erDiagram
 | | `Description` | nvarchar(max) | optional |
 | | `Type` | nvarchar(16) | `Public` \| `Shared` \| `Private`; required, defaults to `Public`; **gates reads** |
 | | `CoverImageBlobPath` | nvarchar(512) | optional; container follows `Type` — `covers` (public) for `Public`, `media` (private, SAS) for `Shared`/`Private` |
-| | `CreatedBy` | nvarchar(max) | the caller's `users.Id`, from `EntityBase`'s audit column; a **plain column** — the model declares no foreign keys ([item 23](tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)) |
+| | `CreatedBy` | nvarchar(max) | the caller's `users.Id`, from `EntityBase`'s audit column; a **plain column** — the model declares no foreign keys |
 | `media` | `Id` | string (GUID) | PK, app-assigned |
-| | `ActivityId` | nvarchar(128) | names `activities.Id`, stored as a **plain column** — no foreign key, as on `activities` above ([item 23](tech-debt/23-foreign-keys-asserted-that-do-not-exist.md)) |
+| | `ActivityId` | nvarchar(128) | names `activities.Id`, stored as a **plain column** — no foreign key, as on `activities` above |
 | | `CreatedBy` | nvarchar(max) | the caller's `users.Id`, from `EntityBase`'s audit column; **who added this item** — not necessarily the activity's creator |
 | | `Kind` | nvarchar(16) | `Image` \| `Video` |
 | | `BlobPath` | nvarchar(512) | **private** container; served only via SAS. Also holds covers of Shared/Private activities |
@@ -401,9 +401,8 @@ the read-only scope stay single-sourced (feature 07).
 
 The `/user/...` routes are stated here in lowercase for readability; the implemented controller
 uses the ASP.NET `[controller]` token, which yields `/User/me`. That casing divergence is a known
-inconsistency tracked as [item 04](tech-debt/04-usercontroller-route-convention.md), not a second
-route — and its repair is a **breaking route change**, so it is sequenced before anything consumes
-these paths (features 10 and 11 both do).
+inconsistency, not a second route — and its repair is a **breaking route change**, so it is
+sequenced before anything consumes these paths (features 10 and 11 both do).
 
 ## Deployment
 

@@ -11,9 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FEATURES = ROOT / "docs" / "features"
-DEBT = ROOT / "docs" / "tech-debt"
 SPRINT = FEATURES / "00-mission-1-sprint.md"
-REGISTER = DEBT / "00-debt-log.md"
 TEST_STRATEGY = ROOT / "docs" / "testing-and-tdd.md"
 COMMANDS = ROOT / ".claude" / "commands"
 README = ROOT / "README.md"
@@ -21,7 +19,7 @@ STANDARD = ROOT / "src" / "api" / "STANDARD.md"
 REPOSITORY = ROOT / "src" / "api" / "TrailBlaze.Repository"
 SKIP_DIRS = {".git", "node_modules", "bin", "obj", ".gitnexus", ".vs"}
 # Frozen records: they describe a state on a date and are never brought forward.
-ARCHIVED_DIRS = {FEATURES / "archive", DEBT / "archive"}
+ARCHIVED_DIRS = {FEATURES / "archive"}
 
 
 def markdown_files():
@@ -36,7 +34,7 @@ def is_archived(path):
 
 
 def numbered(directory, archived):
-    """`docs/{features,tech-debt}/NN-name.md` as {number: path}, excluding `00`."""
+    """`docs/features/NN-name.md` as {number: path}, excluding `00`."""
     folder = directory / "archive" if archived else directory
     found = {}
     for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
@@ -86,15 +84,13 @@ def counts_have_one_home():
     """A live test count appears only in the sprint file, which owns it.
 
     A count on a dated line is a measurement of a moment rather than a claim about now,
-    and the sprint file's own drift record needs to be able to quote one. Debt items are
-    exempt for the same reason: recording what a run reported, on what date, is the item's
-    function — a register entry is evidence, not a second home.
+    and the sprint file's own drift record needs to be able to quote one.
     """
     pattern = re.compile(r"\b\d+ (?:tests?\b|passed\b|skipped\b)|\bTotal: \d+")
     dated = re.compile(r"\b(?:19|20)\d\d-\d\d-\d\d\b|\bas of\b|\bMeasured\b|\bChecked\b")
     failures = []
     for path in markdown_files():
-        if path == SPRINT or is_archived(path) or DEBT in path.parents:
+        if path == SPRINT or is_archived(path):
             continue
         text = prose(path.read_text(encoding="utf-8"))
         for number, line in enumerate(text.splitlines(), start=1):
@@ -154,51 +150,31 @@ def sprint_table_covers_features():
     return failures
 
 
-def debt_register_is_complete():
-    """Every debt item has a register row, and every register row has an item."""
-    if not REGISTER.exists():
-        return [f"missing {relative(ROOT, REGISTER)}"]
-    text = prose(REGISTER.read_text(encoding="utf-8"))
-    failures = []
-    for archived in (False, True):
-        for number, path in numbered(DEBT, archived).items():
-            prefix = "archive/" if archived else ""
-            if f"{prefix}{path.name}" not in text:
-                failures.append(f"no register row names {relative(ROOT, path)}")
-    for target in re.findall(r"\]\(([^)\s]+\.md)\)", text):
-        if not re.match(r"\d\d-", Path(target).name):
-            continue
-        if not (REGISTER.parent / target).exists():
-            failures.append(f"register links to missing {target}")
-    return failures
-
-
 def status_is_a_lifecycle_marker():
     """A document's `Status:` line marks its lifecycle, and matches where it lives."""
     failures = []
-    for folder, marker in ((FEATURES, "feature"), (DEBT, "item")):
-        for archived in (False, True):
-            for number, path in numbered(folder, archived).items():
-                line = next(
-                    (
-                        l
-                        for l in path.read_text(encoding="utf-8").splitlines()[:6]
-                        if l.startswith("Status:")
-                    ),
-                    None,
+    for archived in (False, True):
+        for number, path in numbered(FEATURES, archived).items():
+            line = next(
+                (
+                    l
+                    for l in path.read_text(encoding="utf-8").splitlines()[:6]
+                    if l.startswith("Status:")
+                ),
+                None,
+            )
+            where = relative(ROOT, path)
+            if line is None:
+                failures.append(f"{where}: no Status: line")
+                continue
+            said = ("archived" in line.lower())
+            if said != archived:
+                failures.append(
+                    f"{where}: Status line says {'archived' if said else 'not archived'}"
+                    f" but the file is {'in' if archived else 'not in'} archive/"
                 )
-                where = relative(ROOT, path)
-                if line is None:
-                    failures.append(f"{where}: no Status: line")
-                    continue
-                said = ("archived" in line.lower())
-                if said != archived:
-                    failures.append(
-                        f"{where}: Status line says {'archived' if said else 'not archived'}"
-                        f" but the file is {'in' if archived else 'not in'} archive/"
-                    )
-                if not archived and re.search(r"\bdone\b|\bmerged\b", line, re.I):
-                    failures.append(f"{where}: {marker} Status line states more than its lifecycle")
+            if not archived and re.search(r"\bdone\b|\bmerged\b", line, re.I):
+                failures.append(f"{where}: feature Status line states more than its lifecycle")
     return failures
 
 
@@ -212,7 +188,7 @@ def no_status_outside_the_sprint_table():
     pattern = re.compile(r"\*\*(?:Not started|In progress|Done|Archived|done|archived)\*\*")
     failures = []
     for path in markdown_files():
-        if path == SPRINT or is_archived(path) or ".claude" in path.parts or DEBT in path.parents:
+        if path == SPRINT or is_archived(path) or ".claude" in path.parts:
             continue
         for number, line in enumerate(prose(path.read_text(encoding="utf-8")).splitlines(), 1):
             if number <= 6 and line.startswith("Status:"):
@@ -238,12 +214,11 @@ def readme_lists_every_command():
 def no_relationship_the_model_does_not_declare():
     """A feature spec may not assert a foreign key or cascade the model does not declare.
 
-    Only the specs are checked. The PRD's own `FK ->` labels are product content and the same
-    debt, filed as `docs/tech-debt/23-foreign-keys-asserted-that-do-not-exist.md`, which owns
-    correcting them with features 04 and 06. The reason the specs cannot wait is that they tell
-    an implementer what to build: a relationship they name but the schema does not have would be
-    silently absent — orphaned rows, unreclaimed blobs, no failing test. The check lifts itself
-    the moment the model declares a relationship.
+    Only the specs are checked. The PRD's own `FK ->` labels are product content and are
+    corrected as they are read, since nothing else owns them. The reason the specs cannot wait
+    is that they tell an implementer what to build: a relationship they name but the schema does
+    not have would be silently absent — orphaned rows, unreclaimed blobs, no failing test. The
+    check lifts itself the moment the model declares a relationship.
     """
     if any(
         re.search(r"HasForeignKey|HasOne\b|HasMany\b|OnDelete|DeleteBehavior", path.read_text(encoding="utf-8"))
@@ -283,7 +258,6 @@ CHECKS = [
     ("The strategy states workflow, not feature status", strategy_names_no_feature),
     ("No document asserts CI that does not exist", ci_is_not_contradicted),
     ("The sprint table covers the feature set", sprint_table_covers_features),
-    ("The debt register is complete and points at real files", debt_register_is_complete),
     ("Status lines are lifecycle markers matching their location", status_is_a_lifecycle_marker),
     ("No document states a feature's status outside the sprint table",
      no_status_outside_the_sprint_table),

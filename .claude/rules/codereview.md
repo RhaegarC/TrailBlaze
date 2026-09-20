@@ -115,9 +115,8 @@ A comment earns its line by saying something the declaration cannot:
 It does not earn a line by:
 
 - restating the signature, the type name, or the body (`/// Gets or sets the name.` on `Name`)
-- arguing. Design reasoning belongs in the commit message, the feature file, the debt register or
-  the PR body — those are documents whose subject is the decision. A comment's subject is the line
-  of code under it
+- arguing. Design reasoning belongs in the commit message, the feature file or the PR body — those
+  are documents whose subject is the decision. A comment's subject is the line of code under it
 - narrating a history (`// Changed in feature 03 to …`) or a choice that no longer has an
   alternative
 - being a paragraph per statement. Three sentences of comment on two lines of code is the pattern
