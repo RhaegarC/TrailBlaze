@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.29.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TrailBlaze.Interface\TrailBlaze.Interface.csproj" />
+    <ProjectReference Include="..\TrailBlaze.Model\TrailBlaze.Model.csproj" />
+  </ItemGroup>
+
+  <!-- The audit interceptor is internal: it is wired up through AddRepositoryPersistence and
+       is not part of the layer's public surface. The tests still need to reach it, and
+       testing a reimplementation of the redaction rules would prove nothing about these
+       ones, so the test assembly is granted access instead. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TrailBlaze.Repository.Test" />
+  </ItemGroup>
+
+</Project>

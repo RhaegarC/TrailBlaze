@@ -67,10 +67,24 @@
       "Bash(node -e \"try{const y=require\\('yaml'\\);const fs=require\\('fs'\\);const d=y.parse\\(fs.readFileSync\\('/d/TecShare/AITraining/repo/.gitlab-ci.yml','utf8'\\)\\);console.log\\('YAML OK'\\);console.log\\('job script lines:',JSON.stringify\\(d['build-and-push-api'].script,null,0\\)\\);}catch\\(e\\){console.log\\('node-yaml unavailable:',e.message.split\\('\\\\n'\\)[0]\\)}\")",
       "Bash(git -C /d/TecShare/AITraining/repo rev-parse --abbrev-ref HEAD)",
       "Bash(git -C /d/TecShare/AITraining/repo diff .claude/settings.json)",
-      "Bash(git commit -m 'ci: Add GitLab pipeline to build & push backend API image *)"
+      "Bash(git commit -m 'ci: Add GitLab pipeline to build & push backend API image *)",
+      "Bash(node .gitnexus/run.cjs detect-changes --scope all --repo . --limit 200)",
+      "Bash(grep -E \"→.*\\\\.cs$\")",
+      "Bash(git worktree *)",
+      "Bash(node .gitnexus/run.cjs detect-changes --scope compare --base-ref develop --repo .)",
+      "Bash(cat > *)",
+      "Bash(gh api *)",
+      "Bash(awk '/^## 12\\\\./,0' src/api/STANDARD.md)",
+      "Bash(python -c ' *)",
+      "Bash(dotnet test *)",
+      "Bash(grep -cE '^#{3,4} ' docs/PRD.md)",
+      "Bash(grep -nE '^#{2,4} ' docs/PRD.md)",
+      "Bash(grep -n 'Open items\\\\|^## \\\\|^### \\\\|no `fetch`\\\\|no `fetch` and no MSAL\\\\|not a mock\\\\|a mock' docs/features/00-mission-1-sprint.md)",
+      "Bash(sed -i 's|]\\(\\\\.\\\\./features/archive/01-foundation\\\\.md\\)|]\\(../../features/archive/01-foundation.md\\)|g' archive/*.md)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\chengmu\\AppData\\Local\\Temp"
+      "C:\\Users\\chengmu\\AppData\\Local\\Temp",
+      "\\tmp"
     ]
   }
 }

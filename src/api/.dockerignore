@@ -1,0 +1,26 @@
+# Everything the Dockerfile does not need, kept out of the build context.
+#
+# `COPY . .` in the Dockerfile copies this whole directory, and without a `.dockerignore` that
+# includes every project's `bin/` and `obj/` — 300 MB of this developer's build output, shipped to
+# the daemon on every build. Worse, `obj/` holds restore artifacts carrying absolute host paths,
+# which is a confusing way for a container build to fail.
+
+**/bin
+**/obj
+
+# Editor and user state the SDK image neither needs nor reads.
+.vs
+.vscode
+*.user
+*.suo
+
+# Secrets and local overrides. `.env` holds the SQL password, so `COPY . .` would ship it to the
+# daemon and into a build layer — and rewriting it would invalidate that layer on every edit.
+.env
+.env.*
+**/appsettings.Local.json
+
+# Stack definitions. Nothing the image builds against reads one, so an edit to a compose file
+# should not invalidate the `COPY . .` layer.
+docker-compose*.yml
+

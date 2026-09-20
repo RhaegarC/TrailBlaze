@@ -1,0 +1,54 @@
+# The schema applier, built as an artifact rather than run at API startup. The API must not
+# migrate on boot — Azure Container Apps runs several replicas and they would race over the same
+# DDL — so this image exists to be run once, before the API is allowed to start.
+#
+# Kept out of the main Dockerfile on purpose: that file is the Azure Container Apps artifact, and
+# a stage only the local stack builds would make a claim the deployment does not make.
+#
+#   docker compose build migrate
+#   docker compose run --rm migrate
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS bundle
+ARG TARGETARCH
+WORKDIR /src
+
+# The SDK image ships no `dotnet ef` and the repository has no tool manifest, so the tool is
+# installed here. `--tool-path` rather than `--global`: a global install lands in
+# `$HOME/.dotnet/tools` and depends on the image having put that on PATH.
+RUN dotnet tool install --tool-path /tools dotnet-ef --version 10.0.12
+
+COPY . .
+
+# `dotnet ef` builds the project but does not restore it, and `**/obj` is kept out of the build
+# context, so without this the bundle fails on a missing `project.assets.json`.
+RUN dotnet restore TrailBlaze.Repository/TrailBlaze.Repository.csproj
+
+# `TrailblazeContextFactory` reads `DbConnection` from the environment and refuses a blank one.
+# Bundling builds the model and opens no connection, so a well-formed credential-free string is
+# enough — passed inline so it never becomes image state.
+#
+# Both --project and --startup-project are the Repository: the migrations, the model snapshot and
+# the design-time factory all live there. With no `Program` to build a host from, the bundle reads
+# the connection string through that factory, which is why none is baked in here.
+#
+# The RID comes from TARGETARCH so the bundle matches the image it lands in on arm64 and x64 alike.
+RUN case "$TARGETARCH" in \
+        amd64) RID=linux-x64 ;; \
+        arm64) RID=linux-arm64 ;; \
+        *) echo "no .NET RID for TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
+    esac \
+ && DbConnection="Server=localhost,1433;Database=TrailBlaze;Integrated Security=true;Encrypt=False" \
+    /tools/dotnet-ef migrations bundle \
+        --project TrailBlaze.Repository \
+        --startup-project TrailBlaze.Repository \
+        --configuration Release \
+        --target-runtime "$RID" \
+        --output /app/efbundle \
+        --force
+
+# `runtime`, not `aspnet`: the bundle resolves the context through the design-time factory, which
+# pulls in no ASP.NET Core. A run that reports a missing assembly means `aspnet:10.0` instead.
+FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
+WORKDIR /app
+COPY --from=bundle /app/efbundle .
+ENTRYPOINT ["/app/efbundle"]

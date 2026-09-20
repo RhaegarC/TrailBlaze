@@ -1,6 +1,6 @@
 # TrailBlaze
 
-A public-read **activity journal**. Anyone can browse activities ordered by date descending with
+A public-read **activity journal**. Anyone can browse activities ordered newest first with
 their cover images; signing in reveals the images and videos each activity carries.
 
 TrailBlaze is one shared feed, not a set of private diaries — everyone posts, and ownership
@@ -10,8 +10,8 @@ decides who may *edit* an entry rather than who may read it.
 
 | Document | What it holds |
 |---|---|
-| [docs/PRD.md](docs/PRD.md) | The product definition — 25 logged decisions, the canonical data model, the permission matrix, and the API surface |
-| [docs/features/00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) | The 11-feature ladder, dependency order, and the Definition of Done |
+| [docs/PRD.md](docs/PRD.md) | The product definition — the decisions log, the canonical data model, the permission matrix, and the API surface |
+| [docs/features/00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) | The feature ladder, dependency order, each feature's status, and the Definition of Done |
 | [docs/testing-and-tdd.md](docs/testing-and-tdd.md) | Test tiers and the RED → GREEN → refactor discipline |
 | [docs/features/backlog.md](docs/features/backlog.md) | Ideas that are *not* yet features |
 
@@ -20,32 +20,167 @@ decides who may *edit* an entry rather than who may read it.
 | Layer | Choice |
 |---|---|
 | Backend | ASP.NET Core 10, layered `Api / Interface / Model / Repository / Service`, each with a sibling xUnit project |
-| Database | SQL Server via EF Core (Testcontainers `mssql` for integration tests) |
+| Database | **Azure SQL Database** via EF Core (`Microsoft.EntityFrameworkCore.SqlServer`; migrations applied by the deployment pipeline) |
 | Media | Azure Blob Storage — a **public** container for cover images, a **private** one for activity media, reached via short-lived SAS URLs |
-| Identity | Entra ID (bearer tokens; users auto-provisioned; one admin seeded) |
+| Identity | Entra ID (bearer tokens; users auto-provisioned on first sign-in; one admin, set by hand in the database) |
 | Frontend | React 19 + Vite + TypeScript + Tailwind, exported from **Figma Make** |
-| Local run | Docker Compose (API + SQL Server) |
+| Hosting | API → **Azure Container Apps** (the `src/api/Dockerfile` image); web → **Azure Static Web Apps** by GitHub workflow |
+| Local run | `dotnet run` from `src/api/TrailBlaze.Api`, settings from user-secrets |
 
 ## Working on it
 
 The workflow lives in `.claude/` and runs on slash commands:
 
 ```
-/capture feature NN   # stress-test an idea into a spec
+/capture <kind> NN    # a feature spec or a bug report
 /next                 # pick the lowest-numbered feature and implement it TDD
 /implement NN         # implement a specific feature
 /add-test NN          # RED only — write the missing tests
+/list-features        # every feature with its priority and status
 /sprint-status        # progress, DoD, branches, open PRs
+/doc-assert           # check the docs' links, indexes and status markers
 /archive NN           # after the PR merges
 ```
 
-Backend tests run from `src/api/` with `dotnet test`.
+Backend tests run from `src/api/` with `dotnet test`. Two containers back the database and storage
+tiers — start them with `docker compose -f docker-compose.test.yml up -d` first, or those tests
+**skip** rather than fail. See [testing-and-tdd.md](docs/testing-and-tdd.md); the current counts are
+in [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md), which is their only home.
 
-## Two things to know before you start
+## Running it locally
 
-1. **`develop` is not deployable until feature 09 merges.** Features 04–08 build the CRUD and
-   media mechanics while every signed-in user can still write anything; 09 imposes the ownership
-   and admin rules. See the sequencing note in the sprint file.
-2. **Azure Blob is real in every environment**, tests included. Unit tests inject an in-memory
-   `IStorageService` fake so the RED → GREEN loop stays offline; a tagged
-   `Category=StorageIntegration` tier exercises the real account and needs credentials.
+The API refuses to start without its required settings (`DbConnection`, `BlobConnection`,
+`AllowedOrigins`), so there is no zero-configuration boot. For a host `dotnet run` they come from
+user-secrets — never from `appsettings.json` or `launchSettings.json`, which are version-controlled:
+
+```bash
+cd src/api/TrailBlaze.Api
+dotnet user-secrets set "DbConnection" "Server=tcp:<server>.database.windows.net,1433;Initial Catalog=TrailBlaze;User ID=<user>;Password=<password>;Encrypt=True;TrustServerCertificate=False"
+dotnet user-secrets set "BlobConnection" "<azure storage account connection string>"
+dotnet run
+```
+
+**The administrator is a database row, not a setting.** Every user the app provisions lands on
+`Role = User`; to make one an admin, sign in and hit `GET /user/me` once so the row exists (the
+app provisions it on first sight of your object id), then update it directly:
+
+```sql
+UPDATE Users SET Role = 'Admin' WHERE Id = '<the Entra object id>';
+```
+
+Nothing in the application seeds, promotes or writes that column. A deployment that never runs this
+statement starts and looks perfectly healthy with no administrator — the failure surfaces the first
+time an admin action is attempted, to the person who owns the credential, rather than as an
+application that rewrites a privilege column on its own at boot.
+[03-admin-seeding.md](docs/features/archive/03-admin-seeding.md#decisions) records why the startup seeder
+that used to do this was removed.
+
+**Or run against a local SQL Edge container** and skip the firewall rule entirely:
+
+```bash
+docker run -d --name tb-azure-sql-edge \
+  -e ACCEPT_EULA=1 -e MSSQL_SA_PASSWORD=<a strong password> \
+  -p 127.0.0.1:1433:1433 \
+  -v <a host directory>:/var/opt/mssql/data \
+  --shm-size 1g \
+  mcr.microsoft.com/azure-sql-edge
+
+cd src/api
+DbConnection="Server=127.0.0.1,1433;Database=TrailBlaze;User Id=sa;Password=<the same password>;Encrypt=True;TrustServerCertificate=True" \
+  dotnet ef database update --project TrailBlaze.Repository
+
+cd TrailBlaze.Api
+dotnet user-secrets set "DbConnection" "Server=127.0.0.1,1433;Database=TrailBlaze;User Id=sa;Password=<the same password>;Encrypt=True;TrustServerCertificate=True"
+```
+
+Note the differences from the Azure string, and that each is deliberate: the host is `127.0.0.1`
+rather than a real server, and it carries `TrustServerCertificate=True` because SQL Edge serves a
+self-signed certificate. Both are part of the exception [STANDARD.md](src/api/STANDARD.md) §6 states
+— a host name that cannot name a real server, whether loopback or a name resolving only inside a
+local stack's own network (the stack below reaches its engine as `azure-sql-edge`, the second kind).
+The boundary is checkable: if DNS outside the stack resolves the name, it is outside the exception.
+The
+`-v` mount is what makes the database survive a container recreate; without it, `docker rm` takes
+the schema with it. `--shm-size 1g` is not optional either: the engine fails opaquely on the 64 MB
+default.
+
+That container is separate from the two compose files. `src/api/docker-compose.test.yml` starts its
+own SQL Edge for `dotnet test`, and both it and the container above bind `127.0.0.1:1433`, so only
+one of those two can run at a time. While the dev container holds the port, a test run reaches
+*it*; that is safe — the tier owns one database, `TrailBlazeTest`, and never touches `TrailBlaze` —
+but stop the dev container to get the isolated stack back. The stack below binds neither port, so
+it contends with neither.
+
+**Or run the whole stack, API included:**
+
+```bash
+cd src/api
+cp .env.example .env          # then fill in MSSQL_SA_PASSWORD
+docker compose up -d --build
+curl -sS http://localhost:8080/api/Activity
+```
+
+`up` blocks until the schema is applied and the blob containers exist, because the API is not
+allowed to start against an unmigrated database and never migrates on boot itself. Both are
+one-shot services in that file: `Dockerfile.migrate` builds the migrations into an `efbundle` and
+runs it, and `blob-init` creates the three containers. The API then
+serves on `http://localhost:8080` in Development, so `/openapi/v1.json` is available. The engines
+publish on `14330` and `10010` rather than `1433` and `10000`, which is what lets this, the test
+tier and the container above all run at once; nothing in the stack reads those bindings — the API
+reaches both engines by service name over the compose network.
+
+This is a **local convenience, not a deployment artifact.** The API is deployed to **Azure
+Container Apps** from the image `src/api/Dockerfile` builds, and the web app to **Azure Static Web
+Apps** by its own workflow; neither consumes a compose file, and a deployed environment still takes
+the pipeline's `DbConnection` and a real storage account. `docker-compose.test.yml` is a third
+thing again — it starts **no application process**, only the two containers the test tier talks to,
+and [testing-and-tdd.md](docs/testing-and-tdd.md) documents it. The `docker run` path above stays
+for a host `dotnet run`, which is the tighter loop while you are editing the API.
+
+Against a real server, three things to arrange before the first run, all of them outside the app:
+
+- the database must **already exist** — this is what the pipeline does rather than an engine
+  limit, and the distinction matters: `dotnet ef database update` *does* create the database when
+  it is absent, which is why the container instructions above need no `CREATE DATABASE` step. A
+  deployed environment's database is provisioned deliberately, not as a side effect of a
+  migration;
+- the SQL Server's firewall must allow the address you connect from;
+- the `covers`, `avatars` and `media` containers must exist in your Azure Storage account — the API
+  reads and writes blobs but never provisions containers, so the first upload otherwise fails with
+  `ContainerNotFound`.
+
+Against the local container the first two do not apply: there is no firewall rule to add, and the
+command above creates the database. The third still does — a local database does not stand in for
+storage, and `BlobConnection` is required at startup either way. The stack starts an Azurite and
+creates the three containers for you; a host `dotnet run` outside it has neither, so point that one
+at a real account or at an Azurite of your own. The Azurite in `docker-compose.test.yml` is the
+test tier's and stays out of this: it has no volume and drops the blobs it writes.
+
+**Schema changes are not applied by the API.** Migrations run in the deployment pipeline, before a
+new revision takes traffic — Azure Container Apps runs several replicas, and replicas migrating
+concurrently at startup race each other over the same DDL. Until that pipeline exists, apply them
+by hand:
+
+```bash
+DbConnection="<the same value>" dotnet ef database update --project src/api/TrailBlaze.Repository
+```
+
+That factory reads `DbConnection` **from the environment only**, and refuses to run without it.
+That is deliberate: with `dotnet ef` now the only thing that migrates, a default that silently
+pointed somewhere else would migrate the wrong database and report success.
+
+## Three things to know before you start
+
+1. **The suite is real but shallow.** `dotnet test` from `src/api/` is green either way: with the two
+   test containers running everything passes, and with nothing configured the container-backed tests
+   **skip** rather than fail — reported rather than hidden, and a skip is not a pass. The counts are
+   in [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md), and what is covered against
+   what is not is status, owned by that file's table. Feature 02's slice — the profile routes, avatar
+   upload and upload validator — is **not** covered. "Green" here means the foundation is
+   green.
+2. **`develop` is not deployable until feature 09 merges.** 09 imposes the ownership and admin
+   rules; [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) is where the rule and the
+   sequencing behind it live.
+3. **Azure Blob is real in every environment**, tests included — there is no `IStorageRepository`
+   fake, so nothing stands in for the real implementation. [testing-and-tdd.md](docs/testing-and-tdd.md)
+   states what that costs and what it buys.

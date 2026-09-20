@@ -41,8 +41,8 @@ git checkout -b feature/[number]-[feature-name]
 
 #### Phase 3: Write Tests First (RED)
 
-1. Create or update test files (in the matching layer's `*.Test` project under `src/api/`) based on acceptance criteria
-2. Write failing tests that define expected behavior — tiers per [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md): backend xUnit (unit, including the in-memory `IStorageService` fake) + EF Core integration against SQL Server
+1. Create or update test files (in the matching layer's `*.Test` project under `src/api/`) based on acceptance criteria. **A test class and each test method carry a single-line `<summary>` and nothing more** — the reasoning behind a test belongs in the feature file or the PR body, not above the assertion.
+2. Write failing tests that define expected behavior — tiers per [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md): offline backend xUnit unit tests, a repository model tier that inspects generated SQL via `ToQueryString()`, and two **`Category=Container`** tiers in `TrailBlaze.Repository.Test` that run the real `AzureBlobStorageRepository` against Azurite and a real `TrailBlazeContext` against SQL Edge. **There is no `IStorageRepository` fake** — a storage behaviour is asserted against a live backend or not at all. Start the containers with `docker compose -f docker-compose.test.yml up -d` from `src/api/`; without them the container tiers **skip** (they never fail), and a skip is not a pass.
 3. Ensure tests fail (validate test correctness)
 4. Test command: `dotnet test` (from `src/api/`)
 
@@ -108,8 +108,11 @@ git push -u origin feature/[number]-[feature-name]
 ### Deployment Notes
 - Any special considerations
 ```
-5. Wait for human review and approval
-6. Do NOT merge without approval
+5. Do not pause between Phase 5 and here to ask for approval — Phases 6–7 run straight through.
+   Review happens in the pull request: report the PR URL and let the user read the diff and
+   leave comments there.
+6. A PR may be merged only once **every** review comment on it has been addressed. Never merge
+   without explicit approval — a PR carrying no comments is still not approval to merge.
 
 #### Phase 8: Archive Feature (After PR Merge)
 
@@ -119,4 +122,4 @@ git push -u origin feature/[number]-[feature-name]
 4. Switch back to `develop` and sync with the remote: `git checkout develop && git pull --prune origin develop`
 5. Delete the merged feature branch locally: `git branch -D feature/[number]-[feature-name]` (the remote branch is auto-deleted when the PR merges)
 
-**Reporting:** when you finish, report a concise summary — feature implemented, test results, files changed — and state clearly which phases you completed. The caller decides whether to stop before commit (Phases 6–7) for explicit user approval; never merge without approval.
+**Reporting:** when you finish, report a concise summary — feature implemented, test results, files changed, and the PR URL — and state clearly which phases you completed. Phases 6–7 run automatically after Phase 5; do not pause before committing to ask for approval. Review happens in the pull request, and a PR may be merged only once every review comment on it has been addressed — never merge without explicit approval.

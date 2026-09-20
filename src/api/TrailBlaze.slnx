@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/TrailBlaze.Test/">
+    <Project Path="TrailBlaze.Api.Test/TrailBlaze.Api.Test.csproj" Id="d960b265-aa2d-4f2c-8886-189f130e4154" />
+    <Project Path="TrailBlaze.Repository.Test/TrailBlaze.Repository.Test.csproj" Id="4fcfd717-a327-44e9-ad64-ed7c377cce11" />
+    <Project Path="TrailBlaze.Service.Test/TrailBlaze.Service.Test.csproj" Id="67253f74-5cb1-4f39-bfe3-513c0a12f10d" />
+  </Folder>
+  <Project Path="TrailBlaze.Api/TrailBlaze.Api.csproj" />
+  <Project Path="TrailBlaze.Interface/TrailBlaze.Interface.csproj" />
+  <Project Path="TrailBlaze.Model/TrailBlaze.Model.csproj" />
+  <Project Path="TrailBlaze.Repository/TrailBlaze.Repository.csproj" />
+  <Project Path="TrailBlaze.Service/TrailBlaze.Service.csproj" />
+</Solution>

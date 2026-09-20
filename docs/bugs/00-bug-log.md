@@ -22,3 +22,8 @@ Numbering is Project #1 (Mission 1 — TrailBlaze Activity Journal).
 reachable without authentication, or where a SAS URL is issued to an unauthorized caller, is
 Critical regardless of how small the repro appears — the whole public-text/private-media split
 rests on that boundary holding. See [.claude/agents/bug-fix.md](../../.claude/agents/bug-fix.md).
+
+**The mirror of that rule is what is *not* a bug.** A divergence nobody can observe — the code and
+the standard disagree, but every caller still sees correct behaviour — does not belong in this log
+and does not get a `fix/*` branch: there is no defect to reproduce and no regression test that could
+fail. The test is an observable one, which is what lets the two be told apart at all.

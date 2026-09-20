@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>D4C866DB-A896-4749-B083-AFD6C1110B3B</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TrailBlaze.Interface\TrailBlaze.Interface.csproj" />
+    <ProjectReference Include="..\TrailBlaze.Model\TrailBlaze.Model.csproj" />
+    <ProjectReference Include="..\TrailBlaze.Repository\TrailBlaze.Repository.csproj" />
+    <ProjectReference Include="..\TrailBlaze.Service\TrailBlaze.Service.csproj" />
+  </ItemGroup>
+	
+  <!-- ServiceExt is internal: it is the composition root's own wiring, not part of the
+       hosted app's surface. The API tests boot the real pipeline, so they need to reach it. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TrailBlaze.Api.Test" />
+  </ItemGroup>
+
+</Project>
