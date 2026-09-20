@@ -37,7 +37,7 @@ the day actually looked like — including on an activity someone else logged, w
 ## Dependencies
 
 - [04-activity-crud](04-activity-crud.md) (an activity exists to attach media to; its delete is **soft**, so it leaves this feature's rows and blobs standing and a restored activity comes back with its media — *corrected 2026-09-20: the delete used to remove them, which traded a recoverable activity for a permanent loss of its pictures*)
-- [05-public-activity-list](../05-public-activity-list.md) (the visibility predicate this feature consults to decide whether the caller may contribute)
+- [05-public-activity-list](05-public-activity-list.md) (the visibility predicate this feature consults to decide whether the caller may contribute)
 - [01-foundation](01-foundation.md) (`IStorageRepository` abstraction; the in-memory fake that shipped with it was deleted on 2026-09-18, so storage is now exercised against a live account in `TrailBlaze.Repository.Test` — see [testing-and-tdd.md](../../testing-and-tdd.md))
 - [02-entra-auth](02-entra-auth.md) (the caller is authenticated; the endpoints are not anonymous)
 
@@ -103,4 +103,4 @@ the day actually looked like — including on an activity someone else logged, w
   to persist. Collapsing a group is client-side state, not a write.
 - No resumable or chunked upload, no background job — one request, capped at 200 MB.
 - No deduplication, no virus scanning, no EXIF/metadata stripping, no media captions or reordering.
-- No media in the anonymous payload — that boundary belongs to feature [05-public-activity-list](../05-public-activity-list.md) and stays closed here.
+- No media in the anonymous payload — that boundary belongs to feature [05-public-activity-list](05-public-activity-list.md) and stays closed here.

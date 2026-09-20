@@ -5,7 +5,7 @@ Source: [PRD](../../PRD.md) — Decisions #10/#11/#12/#25/#26 + "API surface" an
 
 > **Archiving this one does not mean the slice is closed.** It shipped the CRUD mechanics and the
 > anonymous paged list; the payload a list item carries, the detail read and the admin branch of the
-> visibility rule are [05](../05-public-activity-list.md)'s, and who may mutate an entry is
+> visibility rule are [05](05-public-activity-list.md)'s, and who may mutate an entry is
 > [09](../09-permission-enforcement.md)'s. `develop` is not deployable until 09 lands — the
 > sequencing note in the sprint file states why.
 
@@ -18,7 +18,7 @@ optional `Description`, optional `CoverImageBlobPath`, and `Type` — the **visi
 list's sort key, newest entry first. This feature stores `Type` and applies the **read** half of the
 visibility rule to the list; **who may mutate an entry is feature [09](../09-permission-enforcement.md)'s**,
 and the detail read, the cover URL and the enriched payload are
-[05](../05-public-activity-list.md)'s.
+[05](05-public-activity-list.md)'s.
 
 Storing `Type` here rather than in feature 09 is deliberate: it is a column on the activity, so
 it belongs with the other columns. Feature 09 owns the *evaluation* of it on the mutation side.
@@ -172,7 +172,7 @@ is not covered by any tier, and is called out rather than implied.**
 - **This slice is not safe to deploy** — it builds the CRUD mechanics while every authenticated
   caller may still edit or delete anything, and feature **09** adds the ownership and admin rules.
   See the sequencing note in [00-mission-1-sprint.md](../00-mission-1-sprint.md).
-- **The list ships here; what [05](../05-public-activity-list.md) still owns is the payload.** The
+- **The list ships here; what [05](05-public-activity-list.md) still owns is the payload.** The
   cover URL, the media count and the creator's display name are absent from a list item, the detail
   read `GET /api/activity/{id}` is still a plain 200 for any id, and the admin branch of the
   visibility rule is unread. No caller-selectable sort, no search, no filtering (Decision #23) — the
@@ -189,6 +189,6 @@ is not covered by any tier, and is called out rather than implied.**
   here.
 - **`Type` is stored, not enforced, in this slice.** `GET /api/activity/{id}` here returns the
   row for any id; hiding a `Shared` or `Private` entry from a caller who may not read it is the
-  read-filtering rule owned by [05-public-activity-list](../05-public-activity-list.md) and
+  read-filtering rule owned by [05-public-activity-list](05-public-activity-list.md) and
   [09-permission-enforcement](../09-permission-enforcement.md). Splitting it this way keeps the CRUD
   mechanics testable on their own, exactly as the ownership rules are split out.
