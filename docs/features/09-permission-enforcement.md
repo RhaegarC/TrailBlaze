@@ -150,7 +150,7 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
 - No dedicated admin screens (Decision #21): admin is elevated rights in the same routes and UI.
 - **This feature does *not* introduce `activities.Type`; it enforces it.** The column and its
   round-tripping belong to feature [04](archive/04-activity-crud.md) and the read filter to
-  [05](05-public-activity-list.md). What lands here is the *single predicate* the other two
+  [05](archive/05-public-activity-list.md). What lands here is the *single predicate* the other two
   consult, and its application to every remaining route. Stated explicitly because this feature
   is where a reader would expect visibility to be introduced, and looking for it here would make
   the 04 and 05 criteria look like they were missing something.
