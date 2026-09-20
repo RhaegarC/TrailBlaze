@@ -42,7 +42,7 @@ reads as entries rather than as anonymous rows.
 ## Dependencies
 
 - [04-activity-crud](04-activity-crud.md) (activities exist, with `Title`, `Location`, `ActivityDate`, optional `Description`)
-- [08-cover-images](../08-cover-images.md) (populates `CoverImageBlobPath`; the list renders the cover URL this feature projects)
+- [08-cover-images](08-cover-images.md) (populates `CoverImageBlobPath`; the list renders the cover URL this feature projects)
 
 ## Acceptance criteria
 

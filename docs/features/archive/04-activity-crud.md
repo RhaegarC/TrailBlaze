@@ -50,7 +50,7 @@ where I went and when.
       rather than assumed
 - [x] `PUT` may change `Type`; the new value is visible to the next read with no separate
       publish step. Crossing the public line is what triggers the cover move owned by feature
-      [08-cover-images](../08-cover-images.md), so this route must not block or mask that transition
+      [08-cover-images](08-cover-images.md), so this route must not block or mask that transition
 - [x] `POST` sets `CreatedByUserId` from the caller's provisioned `users.Id` and ignores any
       `CreatedByUserId` supplied in the request body
 - [x] `CreatedOn` is set server-side at insert and ignores any client-supplied value

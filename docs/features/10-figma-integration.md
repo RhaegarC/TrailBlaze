@@ -34,7 +34,7 @@ anyone's, through the interface the designer authored rather than a hand-built o
 - [02-entra-auth](archive/02-entra-auth.md) (the profile API — `PUT /user/me`, `POST`/`DELETE /user/me/avatar` — and the profile columns it writes, which the profile screen below consumes)
 - [05-public-activity-list](archive/05-public-activity-list.md) (paged, date-descending list with covers for anonymous callers)
 - [07-sas-delivery](07-sas-delivery.md) (short-lived SAS URLs that make media renderable)
-- [08-cover-images](08-cover-images.md) (cover upload, routed to `covers` or `media` by the activity's `Type`, and the cover URL — plain or SAS — in list/detail responses)
+- [08-cover-images](archive/08-cover-images.md) (cover upload, routed to `covers` or `media` by the activity's `Type`, and the cover URL — plain or SAS — in list/detail responses)
 - [09-permission-enforcement](09-permission-enforcement.md) (the role rules the UI must reflect)
 
 **Blocked until the Figma Make export exists.** Everything this feature depends on can be

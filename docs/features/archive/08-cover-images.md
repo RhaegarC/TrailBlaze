@@ -1,7 +1,14 @@
 # 08 — Cover Images
 
-Status: **In progress** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #2/#13/#14/#24/#26/#29 + "Media storage & delivery" + data-model `activities.CoverImageBlobPath` + "Authentication & authorization".
+Status: **Archived** — merged to `develop` in PR #20 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Source: [PRD](../../PRD.md) — Decisions #2/#13/#14/#24/#26/#29 + "Media storage & delivery" + data-model `activities.CoverImageBlobPath` + "Authentication & authorization".
+
+> **Archiving this one does not mean the slice is closed.** It shipped the upload route, the
+> container rule and the move a visibility change triggers, the last of those proven against a live
+> account; what is absent is the **mutation** rule — any signed-in caller who can read an entry may
+> set its cover, including one they do not own — and that lands with
+> [09](../09-permission-enforcement.md). `develop` is not deployable until it does — the sequencing
+> note in the sprint file states why.
 
 ## Summary
 
@@ -27,9 +34,9 @@ visitors see a picture beside it without any of the activity's private media bec
 
 ## Dependencies
 
-- [04-activity-crud](archive/04-activity-crud.md) (the activity that owns `CoverImageBlobPath`)
-- [05-public-activity-list](archive/05-public-activity-list.md) (the list and detail responses that surface the cover URL to anonymous callers)
-- [01-foundation](archive/01-foundation.md) (`IStorageRepository` abstraction; the in-memory fake and its `Category=StorageIntegration` tag were deleted on 2026-09-18, and storage now runs against a live account in `TrailBlaze.Repository.Test` under `Category=Container`)
+- [04-activity-crud](04-activity-crud.md) (the activity that owns `CoverImageBlobPath`)
+- [05-public-activity-list](05-public-activity-list.md) (the list and detail responses that surface the cover URL to anonymous callers)
+- [01-foundation](01-foundation.md) (`IStorageRepository` abstraction; the in-memory fake and its `Category=StorageIntegration` tag were deleted on 2026-09-18, and storage now runs against a live account in `TrailBlaze.Repository.Test` under `Category=Container`)
 
 ## Acceptance criteria
 
@@ -53,7 +60,7 @@ visitors see a picture beside it without any of the activity's private media bec
 
 ## Tests (TDD)
 
-Tiers below are as [testing-and-tdd.md](../testing-and-tdd.md) describes them; `2026-09-18` marks a
+Tiers below are as [testing-and-tdd.md](../../testing-and-tdd.md) describes them; `2026-09-18` marks a
 bullet whose tier or instrument changed that day, with the operating consequence kept and the
 argument for it left to the PR that made the change. The feature's own **tier question is now
 settled** — see the first two bullets — and what settled it was feature 05's arrival, not a new
@@ -73,7 +80,7 @@ private as claimed*, by fetching it with no credentials. Neither tier is the who
 - **Hot spot (the move — test-first)** — split the same way: `TrailBlaze.Service.Test` asserts the container pair the service moved *between*, per crossing, and `CoverVisibilityMoveTests` (`TrailBlaze.Repository.Test`, `Category=Container`) asserts that the old public URL stops serving while a fresh SAS succeeds. The no-op half — `Shared` ↔ `Private`, and a `Type` change with no cover — is asserted on the double, where "no move was asked for" is a readable fact: a real backend can only report "nothing changed", which a caller that moved the object and moved it back would also satisfy.
 - `TrailBlaze.Service.Test`: the image allowlist accept/reject table including a video type, and the size boundary at exactly 10 MB and 10 MB + 1 byte. *(changed 2026-09-18 — "replacement deletes the previous cover blob" and "a rejected upload leaves the existing cover intact" moved to the container tier and the persistence tier. Both came back with the recording double, which answers them more directly: the delete is asserted as the old path, and the refused replacement as no write at all.)*
 - `TrailBlaze.Service.Test`: the URL shape per type — a plain public URL for `Public`, a SAS for `Shared`/`Private` — asserted on the value the service returns, which needs no store because the branch is decided from the activity's `Type` and the string either carries a signature or does not. **What it cannot show** is the container tier's half: a well-formed SAS produced from the wrong key looks identical here and is only refused on fetch.
-- Integration (`TrailBlaze.Repository.Test`) — **container-backed** (`Category=Container`): `CoverImageBlobPath` genuinely persists on the activity row, read back through a second context against the tier's migrated database ([testing-and-tdd.md](../testing-and-tdd.md)), and an activity created without a cover has none. The media-row half is asserted in `TrailBlaze.Service.Test` instead, on the writes the service made: a cover path shares the private container but never touches a `media` row, and a write the double recorded is a more direct answer than a query after the fact.
+- Integration (`TrailBlaze.Repository.Test`) — **container-backed** (`Category=Container`): `CoverImageBlobPath` genuinely persists on the activity row, read back through a second context against the tier's migrated database ([testing-and-tdd.md](../../testing-and-tdd.md)), and an activity created without a cover has none. The media-row half is asserted in `TrailBlaze.Service.Test` instead, on the writes the service made: a cover path shares the private container but never touches a `media` row, and a write the double recorded is a more direct answer than a query after the fact.
 - Integration (`TrailBlaze.Api.Test`): the cover route turns an anonymous caller away, and accepts an id and a file and nothing else — asserted on the action's own signature, because the absence of a parameter is the rule (criterion 4). *(The list and detail JSON carrying the URL is asserted in `TrailBlaze.Service.Test` as a property set rather than through the host: this tier's connection strings point at nothing, so a list response here is a 500 and never a payload.)*
 - Storage integration (`TrailBlaze.Repository.Test`, tagged `Category=Container`) — **the move as a real round-trip, and the tier no double can replace:** upload to one container, move across the public line, then assert a credential-free GET against the **old** URL now fails while a fresh SAS succeeds — and the reverse, that arriving in `covers` makes an unsigned URL serve the bytes. A recording double can prove the move was *called* with the right pair; only a real backend proves the bytes are actually unreachable, which is the property the whole rule exists to guarantee — and that gap is why this bullet is not negotiable.
 - Storage integration (`TrailBlaze.Repository.Test`, tagged `Category=Container`): **a replaced cover leaves no readable copy** — the old public URL stops serving once the previous blob is deleted. This is the move's failure mode reached by the other route, and it is here for the same reason.
@@ -83,7 +90,7 @@ private as claimed*, by fetching it with no credentials. Neither tier is the who
 - **The separation rule, restated for three containers.** A cover is always a fresh upload and is never derived from the activity's private media (Decision #14). Do not "optimise" this by reusing or re-pointing a `media` blob as a cover — that single change is what would make promoting private bytes to public possible, and it is precisely what this feature exists to prevent. What decides a cover's audience is **where it was uploaded**, never a flag on an item (Decision #13, amended by #29). Note the asymmetry the private container now carries: cover *blobs* of `Shared`/`Private` activities sit beside media blobs, but a cover never becomes a `media` **row**, and a `media` row never becomes a cover — asserted in both directions.
 - No image resizing, cropping, rotation, or thumbnail generation — bytes are stored exactly as uploaded.
 - No cover removal endpoint in v1: replace is the only mutation. (The PRD API surface lists `POST /api/activity/{id}/cover` and no delete route.)
-- **No ownership enforcement.** The visibility gate is here and is 404 for an entry the caller cannot read — a cover is the entry's face, so the rule that governs reading it governs giving it one. What is absent is the *mutation* rule: any signed-in caller who **can read** an activity may set its cover, including one they do not own. Feature [09-permission-enforcement](09-permission-enforcement.md) adds the owner/admin rules. Like 06, this feature is therefore part of the deployability gap — see the sequencing note in [00-mission-1-sprint.md](00-mission-1-sprint.md).
+- **No ownership enforcement.** The visibility gate is here and is 404 for an entry the caller cannot read — a cover is the entry's face, so the rule that governs reading it governs giving it one. What is absent is the *mutation* rule: any signed-in caller who **can read** an activity may set its cover, including one they do not own. Feature [09-permission-enforcement](../09-permission-enforcement.md) adds the owner/admin rules. Like 06, this feature is therefore part of the deployability gap — see the sequencing note in [00-mission-1-sprint.md](../00-mission-1-sprint.md).
 - **No request-size override on the route, unlike the media one, and deliberately.** `UploadMedia` raises Kestrel's body limit and the form parser's multipart limit because a 200 MB video exceeds both defaults, and without raising them the documented 400 would arrive as a bare 413. The image cap runs the other way: 10 MB sits *below* Kestrel's 30 MB and the parser's 128 MB, so the defaults already let an oversize image through to the rule that names the reason. Raising them here would buy nothing and buffer more.
 - No EXIF or metadata stripping on the uploaded image.
 - **Covers belong to activities only** — with one exception added since by Decision #28: user
