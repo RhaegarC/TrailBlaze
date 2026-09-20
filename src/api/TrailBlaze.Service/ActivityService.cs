@@ -13,9 +13,14 @@ using TrailBlaze.Model.DatabaseEntity;
 public sealed class ActivityService(
     IDbRepository dbRepository,
     IStorageRepository storageRepository,
+    IUploadValidationService uploadValidation,
     IUserContextService userContext,
     ILogger<ActivityService> logger) : IActivityService
 {
+    /// <summary>The form field a refused cover reports its reason under — the name the route reads,
+    /// so a client can put the message beside the control that caused it.</summary>
+    private const string FileFormField = "file";
+
     /// <inheritdoc/>
     public Expression<Func<Activity, bool>> VisibleTo(string? caller) =>
         string.IsNullOrWhiteSpace(caller)
@@ -196,6 +201,10 @@ public sealed class ActivityService(
 
             ActivityDraft draft = ActivityDraft.From(request);
 
+            // Read before the assignment, so the cover's container can be compared with the one the
+            // new type requires.
+            string storedType = activity.Type;
+
             activity.Title = draft.Title;
             activity.Location = draft.Location;
             activity.ActivityDate = draft.ActivityDate;
@@ -208,6 +217,8 @@ public sealed class ActivityService(
                 activity.Type = draft.Type;
             }
 
+            await MoveCoverAsync(activity, storedType);
+
             // Read, changed, written back — never replaced, because UpdateAsync writes every property.
             await dbRepository.UpdateAsync(activity);
 
@@ -217,6 +228,74 @@ public sealed class ActivityService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Updating activity {ActivityId} failed.", id);
+            throw;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<CoverOutcome> UploadCoverAsync(
+        string activityId,
+        Stream content,
+        string? contentType,
+        long sizeBytes)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        try
+        {
+            // Refused before the caller is resolved, so a bad image writes nothing and costs no query.
+            string? rejection = uploadValidation.ValidateImage(contentType, sizeBytes);
+
+            if (rejection is not null)
+            {
+                return CoverOutcome.Rejected(
+                    new Dictionary<string, string[]> { [FileFormField] = [rejection] });
+            }
+
+            string? caller = userContext.EntraObjectId;
+
+            if (string.IsNullOrWhiteSpace(caller))
+            {
+                return CoverOutcome.NoCaller();
+            }
+
+            Activity? activity = await FindAsync(activityId);
+
+            // A cover is the entry's face rather than a contribution to it, but the gate is the same
+            // read rule media uses: an entry this caller cannot read is one they cannot give a face
+            // to. Not-found rather than forbidden, for the reason the detail read gives.
+            if (activity is null || !CanRead(activity, caller))
+            {
+                return CoverOutcome.NotFound();
+            }
+
+            // Derived from the entry's type, which a change across the public line moves the blob
+            // for — so the previous cover is in this same container by the time a replace arrives.
+            string container = CoverContainerFor(activity.Type);
+            string? previous = activity.CoverImageBlobPath;
+            string path = CoverPathFor(activityId, contentType!);
+
+            await storageRepository.UploadAsync(container, path, content, contentType!);
+
+            // The row after the bytes, and the old blob after the row. A failure at either step then
+            // leaves an object nothing points at, which is inert, rather than a row pointing at
+            // nothing, which is a broken image.
+            activity.CoverImageBlobPath = path;
+            await dbRepository.UpdateAsync(activity);
+
+            if (!string.IsNullOrWhiteSpace(previous) && previous != path)
+            {
+                await storageRepository.DeleteAsync(container, previous);
+            }
+
+            return CoverOutcome.Uploaded(new CoverResponse
+            {
+                CoverImageUrl = await CoverUrlAsync(path, activity.Type),
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Uploading a cover for activity {ActivityId} failed.", activityId);
             throw;
         }
     }
@@ -333,25 +412,59 @@ public sealed class ActivityService(
             media => media.ActivityId);
     }
 
-    /// <summary>The cover's URL, or null for an entry that has none. The container follows the
-    /// activity's visibility (Decision #29), and the container *is* the public/private answer.</summary>
-    private async Task<string?> CoverUrlAsync(Activity activity)
+    /// <summary>The cover's URL, or null for an entry that has none.</summary>
+    private async Task<string?> CoverUrlAsync(Activity activity) =>
+        string.IsNullOrWhiteSpace(activity.CoverImageBlobPath)
+            ? null
+            : await CoverUrlAsync(activity.CoverImageBlobPath, activity.Type);
+
+    /// <summary>The URL a cover is reached by, from the container its entry's type puts it in
+    /// (Decision #29) — the container *is* the public/private answer. One branch, so an upload and a
+    /// read cannot hand out two different shapes for the same blob.</summary>
+    private async Task<string> CoverUrlAsync(string path, string type) =>
+        CoverContainerFor(type) == Constant.StorageContainer.Covers
+            ? storageRepository.CreatePublicUrl(Constant.StorageContainer.Covers, path).ToString()
+            : (await storageRepository.CreateReadUrlAsync(
+                Constant.StorageContainer.Media, path, Constant.CoverUrl.SasLifetime)).ToString();
+
+    /// <summary>The container a cover belongs in: the public <c>covers</c> for a <c>Public</c> entry,
+    /// the private <c>media</c> for a <c>Shared</c> or <c>Private</c> one. Both private types share a
+    /// container, which is why a change between them has nothing to move.</summary>
+    private static string CoverContainerFor(string type) =>
+        type == Constant.ActivityType.Public
+            ? Constant.StorageContainer.Covers
+            : Constant.StorageContainer.Media;
+
+    /// <summary>The activity's folder, then a fresh name, so a client that cached the previous cover
+    /// is never served these bytes under the old path.</summary>
+    private string CoverPathFor(string activityId, string contentType) =>
+        $"{activityId}/{Guid.NewGuid():N}{uploadValidation.FileExtensionFor(contentType)}";
+
+    /// <summary>
+    /// Moves the cover when an edit crosses the public line, copying it to the container the new type
+    /// requires and deleting the copy the old one left.
+    /// </summary>
+    /// <remarks>
+    /// Before the row is written and never after. The two failures are not symmetric: a move that
+    /// failed after the save would leave a now-<c>Private</c> entry's cover sitting in the public
+    /// container, where it stays fetchable by anyone who ever held the link — the disclosure this
+    /// exists to prevent — whereas a save that failed after the move leaves a broken link and nothing
+    /// readable.
+    /// </remarks>
+    private async Task MoveCoverAsync(Activity activity, string storedType)
     {
-        if (string.IsNullOrWhiteSpace(activity.CoverImageBlobPath))
+        // Nothing to relocate when there is no cover, or when both containers are private: Shared and
+        // Private share `media`, so a change between them is not a change of audience.
+        if (string.IsNullOrWhiteSpace(activity.CoverImageBlobPath)
+            || CoverContainerFor(storedType) == CoverContainerFor(activity.Type))
         {
-            return null;
+            return;
         }
 
-        if (activity.Type == Constant.ActivityType.Public)
-        {
-            return storageRepository
-                .CreatePublicUrl(Constant.StorageContainer.Covers, activity.CoverImageBlobPath)
-                .ToString();
-        }
-
-        Uri signed = await storageRepository.CreateReadUrlAsync(
-            Constant.StorageContainer.Media, activity.CoverImageBlobPath, Constant.CoverUrl.SasLifetime);
-
-        return signed.ToString();
+        activity.CoverImageBlobPath = await storageRepository.MoveAsync(
+            CoverContainerFor(storedType),
+            activity.CoverImageBlobPath,
+            CoverContainerFor(activity.Type),
+            activity.CoverImageBlobPath);
     }
 }

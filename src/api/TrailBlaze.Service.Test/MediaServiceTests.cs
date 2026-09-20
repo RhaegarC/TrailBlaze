@@ -520,6 +520,7 @@ public sealed class MediaServiceTests
                 new ActivityService(
                     Repository,
                     new RecordingStorage(),
+                    new UploadValidationService(),
                     new StubUserContext(caller),
                     NullLogger<ActivityService>.Instance),
                 new StubUserContext(caller),
