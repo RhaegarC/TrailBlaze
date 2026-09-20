@@ -42,6 +42,21 @@ public interface IDbRepository
         int take) where T : class;
 
     /// <summary>
+    /// Counts a filtered set, grouped by a key, without materialising its rows.
+    /// </summary>
+    /// <remarks>
+    /// A grouped aggregate rather than a list the caller counts: reading the rows to produce a
+    /// number would move every one of them through the process to answer with an integer.
+    /// </remarks>
+    /// <typeparam name="T">Item type.</typeparam>
+    /// <param name="predicate">Which rows count.</param>
+    /// <param name="key">What they are grouped by.</param>
+    /// <returns>A count per distinct key. A key with no matching rows is absent, not zero.</returns>
+    Task<Dictionary<string, int>> CountByAsync<T>(
+        Expression<Func<T, bool>> predicate,
+        Expression<Func<T, string>> key) where T : class;
+
+    /// <summary>
     /// Create new item.
     /// </summary>
     /// <param name="item">Item.</param>

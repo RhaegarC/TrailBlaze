@@ -62,7 +62,11 @@ public class ActivityController(
     /// Reads one activity.
     /// </summary>
     /// <param name="id">The activity's id.</param>
-    /// <returns>The activity, or not-found for an id that is unknown or already deleted.</returns>
+    /// <returns>The activity, or not-found for an id that is unknown, already deleted, or not
+    /// readable by this caller.</returns>
+    /// <remarks>Reachable without a token; what the caller may not read is answered 404 by the
+    /// service, so the route admits the request before that judgement is made.</remarks>
+    [AllowAnonymous]
     [HttpGet("{id}")]
     public async Task<IActionResult> Get(string id)
     {

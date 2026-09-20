@@ -280,6 +280,19 @@ public static class Constant
     }
 
     /// <summary>
+    /// How long a cover URL stays valid when the bytes are private.
+    /// </summary>
+    /// <remarks>
+    /// A SAS is a bearer token, so the expiry is the real control rather than the URL's secrecy.
+    /// Feature 07 mints the media equivalent on terms of its own — two numbers, not one.
+    /// </remarks>
+    public static class CoverUrl
+    {
+        /// <summary>The lifetime of a `Shared` or `Private` entry's cover link.</summary>
+        public static readonly TimeSpan SasLifetime = TimeSpan.FromMinutes(15);
+    }
+
+    /// <summary>
     /// The values <c>Media.Kind</c> accepts. Derived from the content type rather than sent, so
     /// a caller cannot label a video an image — and the engine enforces the set with
     /// <c>CK_Media_Kind</c>, as it does for an activity's type.

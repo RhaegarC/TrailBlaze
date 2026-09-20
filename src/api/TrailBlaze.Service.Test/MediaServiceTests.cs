@@ -518,7 +518,10 @@ public sealed class MediaServiceTests
                 // The real rule, not a stand-in: the visibility decision is the thing under test in
                 // the gate tables, and a double here would be asserting the double.
                 new ActivityService(
-                    Repository, new StubUserContext(caller), NullLogger<ActivityService>.Instance),
+                    Repository,
+                    new RecordingStorage(),
+                    new StubUserContext(caller),
+                    NullLogger<ActivityService>.Instance),
                 new StubUserContext(caller),
                 new UploadValidationService(),
                 NullLogger<MediaService>.Instance);
@@ -595,6 +598,13 @@ public sealed class MediaServiceTests
                 typeof(T) == typeof(Media)
                     ? Items.Cast<T>().ToList()
                     : Users.Cast<T>().ToList());
+
+        // The activity reads group media by activity; nothing here exercises that, so it answers
+        // nothing rather than a number a test could lean on.
+        public Task<Dictionary<string, int>> CountByAsync<T>(
+            Expression<Func<T, bool>> predicate,
+            Expression<Func<T, string>> key) where T : class =>
+            throw new NotSupportedException(NoReads);
 
         public Task<(List<T> Items, int Total)> GetPageAsync<T>(
             Expression<Func<T, bool>> predicate,

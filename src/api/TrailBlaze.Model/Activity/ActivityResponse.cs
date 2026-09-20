@@ -1,11 +1,12 @@
 namespace TrailBlaze.Model.Activity;
 
+using System.Text.Json.Serialization;
+
 /// <summary>An activity as these routes return it.</summary>
 /// <remarks>
-/// Carries no creator and no <c>CreatedOn</c>. Feature 05 decides which caller
-/// may be told the creator's identity — an anonymous response may not be — so this type holds
-/// the field set both callers share rather than a set one of them would have to be trimmed
-/// out of later.
+/// Carries the creator's display name and a media count, and nothing else about either: no user
+/// id, no blob path, no media id, content type, size or file name. The count is the one
+/// media-derived value an anonymous caller may be handed (Decision #30).
 /// </remarks>
 public sealed record ActivityResponse
 {
@@ -22,7 +23,17 @@ public sealed record ActivityResponse
 
     public required string Type { get; init; }
 
-    /// <summary>The stored path, never a URL. Feature 08 fills it in; nothing here writes it, and a
-    /// list response withholds it from a caller who has no token.</summary>
-    public string? CoverImageBlobPath { get; init; }
+    /// <summary>A plain public URL for a <c>Public</c> activity and a short-lived SAS for a
+    /// <c>Shared</c> or <c>Private</c> one, whose cover sits in the private container
+    /// (Decision #29). Null when the activity has no cover.</summary>
+    public string? CoverImageUrl { get; init; }
+
+    public required int MediaCount { get; init; }
+
+    public string? CreatorDisplayName { get; init; }
+
+    /// <summary>Omitted rather than sent as null to a caller with no token — the field's presence
+    /// is what a client reads as permission to offer edit controls.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CreatedByUserId { get; init; }
 }

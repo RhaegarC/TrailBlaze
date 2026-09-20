@@ -11,7 +11,6 @@ public sealed class ActivityRouteTests
     private const string SomeId = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 
     [Theory]
-    [InlineData("GET")]
     [InlineData("POST")]
     [InlineData("PUT")]
     [InlineData("DELETE")]
@@ -37,6 +36,22 @@ public sealed class ActivityRouteTests
         // unreachable store. A 401 would mean the route is not anonymous and a 404 that no such
         // route exists, and this tier has neither a database nor a token to tell those apart
         // any other way.
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+    }
+
+    /// <summary>
+    /// The detail read is the second anonymous route, and it is anonymous rather than filtered:
+    /// what a caller may not read is answered 404, so the route has to admit the request before
+    /// that judgement can be made.
+    /// </summary>
+    [Fact]
+    public async Task The_detail_route_lets_an_anonymous_caller_past_the_door()
+    {
+        await using TrailBlazeApiFactory factory = Configured();
+        using HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage response = await client.GetAsync($"/api/activity/{SomeId}");
+
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
     }
 
