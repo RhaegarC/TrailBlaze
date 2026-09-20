@@ -13,3 +13,14 @@
 .vscode
 *.user
 *.suo
+
+# Secrets and local overrides. `.env` holds the SQL password, so `COPY . .` would ship it to the
+# daemon and into a build layer — and rewriting it would invalidate that layer on every edit.
+.env
+.env.*
+**/appsettings.Local.json
+
+# Stack definitions. Nothing the image builds against reads one, so an edit to a compose file
+# should not invalidate the `COPY . .` layer.
+docker-compose*.yml
+

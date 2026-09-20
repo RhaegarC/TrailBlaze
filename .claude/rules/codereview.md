@@ -7,11 +7,12 @@ and not the developer's laptop.
 
 Ask, of anything that starts up, writes, or holds state:
 
-- **What is it deployed to?** A `docker-compose.yml` was written and then removed: it existed
-  because the inherited scaffold implied a local stack, while the real targets are Azure Container
-  Apps for the API and Azure Static Web Apps for the web app. Neither consumes a compose file, so
-  there was no stack to orchestrate. (`src/api/docker-compose.test.yml` exists and is not that: it
-  starts no application process and is not deployed anywhere.)
+- **What is it deployed to?** The real targets are Azure Container Apps for the API and Azure
+  Static Web Apps for the web app, and neither consumes a compose file — so a compose file in this
+  repository orchestrates something local and never a deployment. There are two, and neither is
+  deployed anywhere: `src/api/docker-compose.yml` runs the API against container engines for
+  development and a pre-Azure stage, and `docker-compose.test.yml` starts no application process at
+  all.
 - **How many of it runs?** A design correct on one instance can be wrong on many. Migrations
   applied by an `IHostedService` at startup were correct until ACA ran several replicas, which race
   each other over the same DDL. Feature 03's startup admin seeder was the second instance of the
@@ -33,6 +34,13 @@ rather than simulated — a real gain, and one that removed two fakes. But one c
 several ACA replicas, an emulator's certificate and ACL behaviour are not a real account's, and no
 test signs in through Entra. **The suite can now speak to engine shape, and still cannot speak to
 deployment shape** — so this question is still asked of the design, not of the test run.
+
+**The local stack is a third thing again, and settles it no more than the test tier does.**
+`docker-compose.yml` boots the real composition root in Development against container engines —
+a genuine gain, since the Api tier cannot authenticate and the repository tiers never cross HTTP.
+But it is one replica, not several; its engine is an emulator; and with no Entra tenant configured
+every `[Authorize]` route, storage included, is unreachable through it. One container is still not
+the shape it will be deployed in.
 
 **How to apply:** when reviewing a change that runs on a host, say which host and how many
 instances, and check the design against that. Do this *before* reviewing the code inside it — two

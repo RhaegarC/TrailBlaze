@@ -233,6 +233,12 @@ dotnet test --filter "Category!=Container"         # the tests touching neither 
 docker compose -f docker-compose.test.yml down
 ```
 
+**`docker-compose.yml` is not part of this, and starting it changes nothing here.** That file is the
+local stack — the API, plus engines on `14330` and `10010` under its own project name — and it is
+neither the file above nor a substitute for it. `dotnet test` with only the stack up still **skips**
+the container tiers, exactly as it does on a bare machine: the skip is about `TrailBlazeTest` and
+Azurite on `1433`/`10000`, not about anything running in Docker.
+
 `.env` is gitignored; [`.env.example`](../src/api/.env.example) is tracked and holds the shape
 without the secret. The SA password reaches the tests two ways — the compose file reads
 `MSSQL_SA_PASSWORD` from `.env`, and `TestEnvironment` composes a connection string from the same
