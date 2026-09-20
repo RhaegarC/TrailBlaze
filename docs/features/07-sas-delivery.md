@@ -18,7 +18,7 @@ image or video that is otherwise private.
 
 ## Dependencies
 
-- [06-media-upload](06-media-upload.md) (the `media` rows and the private blobs being addressed)
+- [06-media-upload](archive/06-media-upload.md) (the `media` rows and the private blobs being addressed)
 - [02-entra-auth](archive/02-entra-auth.md) (caller identity — the endpoint is not anonymous)
 - [01-foundation](archive/01-foundation.md) (`IStorageRepository` abstraction; storage is exercised against a live backend in `TrailBlaze.Repository.Test`)
 

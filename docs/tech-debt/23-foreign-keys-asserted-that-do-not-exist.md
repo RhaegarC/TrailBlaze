@@ -17,8 +17,8 @@ not exist.
 | [PRD — API surface](../PRD.md#api-surface) | `DELETE /api/activity/{id}` — "Delete (cascades media)" | fixed 2026-09-20 — and the route now says something else entirely: see the update below |
 | [04 — acceptance criteria](../features/archive/04-activity-crud.md#acceptance-criteria) | `CreatedByUserId` **FK** → `users.Id` | fixed 2026-09-19 |
 | [04 — tests](../features/archive/04-activity-crud.md#tests-tdd) | the **FK** to `users.Id` is asserted from the EF model; "the cascade to media rows is a mapping" | fixed 2026-09-19 |
-| [06 — dependencies](../features/06-media-upload.md#dependencies) | 04's **FK gives the cascade delete** | fixed 2026-09-19 |
-| [06 — acceptance criteria](../features/06-media-upload.md#acceptance-criteria) | `DELETE /api/activity/{id}` cascades to media rows "(FK cascade)" | fixed 2026-09-19 |
+| [06 — dependencies](../features/archive/06-media-upload.md#dependencies) | 04's **FK gives the cascade delete** | fixed 2026-09-19 |
+| [06 — acceptance criteria](../features/archive/06-media-upload.md#acceptance-criteria) | `DELETE /api/activity/{id}` cascades to media rows "(FK cascade)" | fixed 2026-09-19 |
 
 **The model declares no foreign keys at all.**
 
@@ -49,7 +49,7 @@ ticked, so the reasoning is visible to whoever closes this.
 ## Why it matters
 
 **One of these is an acceptance criterion, and it cannot be met by the mechanism it named.**
-[06's delete criterion](../features/06-media-upload.md#acceptance-criteria) requires that deleting
+[06's delete criterion](../features/archive/06-media-upload.md#acceptance-criteria) requires that deleting
 an activity removes that activity's media rows "regardless of uploader". Written as a cascade, that
 is satisfied by the schema and nothing in the application. With no FK, it is **work the service
 layer must do**, and because it is also an access-control rule — an owner must be able to delete an
