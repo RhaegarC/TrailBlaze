@@ -69,6 +69,26 @@ public interface IActivityService
     Task<ActivityOutcome> UpdateAsync(string id, UpdateActivityRequest request);
 
     /// <summary>
+    /// Stores an image as an activity's cover, replacing any it already has, and points the
+    /// activity at the new one.
+    /// </summary>
+    /// <remarks>
+    /// The destination is decided here rather than by the caller: the container follows the
+    /// activity's <c>Type</c>, and the container is the whole of the public/private answer
+    /// (Decision #29).
+    /// </remarks>
+    /// <param name="activityId">The activity's id.</param>
+    /// <param name="content">The image bytes.</param>
+    /// <param name="contentType">The declared content type, as sent by the client.</param>
+    /// <param name="sizeBytes">The number of bytes the upload carries.</param>
+    /// <returns>The cover's URL, the reasons the upload was refused, or not-found.</returns>
+    Task<CoverOutcome> UploadCoverAsync(
+        string activityId,
+        Stream content,
+        string? contentType,
+        long sizeBytes);
+
+    /// <summary>
     /// Soft-deletes an activity: the row is retained and hidden from every read.
     /// </summary>
     /// <param name="id">The activity's id.</param>

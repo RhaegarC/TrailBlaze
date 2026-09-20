@@ -135,6 +135,36 @@ public class ActivityController(
     }
 
     /// <summary>
+    /// Uploads an activity's cover image, replacing any it already has.
+    /// </summary>
+    /// <remarks>
+    /// No request-size override, unlike the media route: the 10 MB image cap sits below both
+    /// Kestrel's 30 MB body default and the form parser's 128 MB multipart default, so an oversize
+    /// file reaches the service and is answered with the reason a client can act on rather than a
+    /// bare 413.
+    /// </remarks>
+    /// <param name="activityId">The activity's id.</param>
+    /// <param name="file">The image.</param>
+    /// <returns>The cover's URL, the reasons the upload was refused, or not-found.</returns>
+    [HttpPost("{activityId}/cover")]
+    public async Task<IActionResult> UploadCover(string activityId, [FromForm] IFormFile? file)
+    {
+        if (file is null)
+        {
+            // Without this the route would dereference a null and 500. A body with no file part is a
+            // malformed request, which is a 400.
+            return BadRequest(Constant.Message.NoFileUploaded);
+        }
+
+        await using Stream content = file.OpenReadStream();
+
+        CoverOutcome outcome = await _activityService.UploadCoverAsync(
+            activityId, content, file.ContentType, file.Length);
+
+        return this.ToActionResult(outcome);
+    }
+
+    /// <summary>
     /// The metadata of every item an activity carries, oldest first.
     /// </summary>
     /// <param name="activityId">The activity's id.</param>

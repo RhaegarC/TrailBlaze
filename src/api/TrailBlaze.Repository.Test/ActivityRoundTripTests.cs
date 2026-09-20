@@ -160,6 +160,61 @@ public sealed class ActivityRoundTripTests(TrailBlazeDatabaseFixture fixture)
     }
 
     /// <summary>
+    /// Creates the activity, then sets its cover the way the cover route does — as an edit to the
+    /// row rather than a column on the create body.
+    /// </summary>
+    /// <remarks>
+    /// Read back through a scope of its own, so the assertion is about the column rather than about
+    /// the object the writer still holds. What the model tests cannot say: a property declared
+    /// <c>Nullable(512)</c> in the model is not what the migration created, and a round trip is the
+    /// only thing that tells the two apart.
+    /// </remarks>
+    [SkippableFact]
+    public async Task A_cover_path_survives_the_round_trip()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
+
+        string id = (await CreateAsync("Ridge walk")).Id;
+        const string Cover = "the-activity/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg";
+
+        using (IServiceScope covering = fixture.CreateScope())
+        {
+            var repository = new DatabaseRepository(
+                covering.ServiceProvider.GetRequiredService<TrailBlazeContext>());
+
+            Activity stored = (await repository.GetAsync<Activity>(row => row.Id == id))!;
+            stored.CoverImageBlobPath = Cover;
+            await repository.UpdateAsync(stored);
+        }
+
+        using IServiceScope reading = fixture.CreateScope();
+        var reader = new DatabaseRepository(
+            reading.ServiceProvider.GetRequiredService<TrailBlazeContext>());
+
+        Assert.Equal(Cover, (await reader.GetAsync<Activity>(row => row.Id == id))!.CoverImageBlobPath);
+    }
+
+    /// <summary>
+    /// An activity created without a cover has none, which is the state the list payload reports as a
+    /// null URL rather than as an error.
+    /// </summary>
+    [SkippableFact]
+    public async Task An_activity_created_without_a_cover_has_none()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
+
+        Activity written = await CreateAsync("Ridge walk");
+
+        using IServiceScope reading = fixture.CreateScope();
+        var reader = new DatabaseRepository(
+            reading.ServiceProvider.GetRequiredService<TrailBlazeContext>());
+
+        Activity stored = (await reader.GetAsync<Activity>(row => row.Id == written.Id))!;
+
+        Assert.Null(stored.CoverImageBlobPath);
+    }
+
+    /// <summary>
     /// The engine refuses a type outside the closed set, which is the migration's claim and not
     /// the model's: the check constraint is SQL the migration emitted, and this is SQL Server
     /// rejecting a row with it.
