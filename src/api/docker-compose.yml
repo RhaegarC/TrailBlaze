@@ -1,50 +1,17 @@
-# The local stack: the API, the two engines it talks to, and two one-shots that make them usable.
-# For development, for a manual test pass, and for a stage that is exercised before Azure.
-#
-#   cd src/api
-#   cp .env.example .env          # then fill in MSSQL_SA_PASSWORD
-#   docker compose up -d --build
-#   curl -sS http://localhost:8080/api/Activity
-#
-# This is NOT a deployment artifact and neither target consumes it: the API ships as the image
-# `Dockerfile` builds to Azure Container Apps, the web app to Azure Static Web Apps by its own
-# workflow, and a deployed environment still takes the pipeline's `DbConnection` and a real
-# storage account (STANDARD §6). What this replaces is the hand-started `docker run` container in
-# README "Running it locally", which it reproduces and adds the API to.
-#
-# `container_name` is deliberately absent throughout. It is a global name, and
-# `docker-compose.test.yml` already claims `azure-sql-edge` and `azure-storage-edge`; reusing them
-# would make the two stacks mutually exclusive for no reason.
-#
-# `up` blocks until `migrate` and `blob-init` exit zero. That is the design, not a hang.
-
-name: trailblaze
+name: tb-stage
 
 services:
   azure-sql-edge:
     image: mcr.microsoft.com/azure-sql-edge
     environment:
       ACCEPT_EULA: "1"
-      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in src/api/.env}"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in .env}"
     ports:
-      # Loopback, and off 1433 so this, the test tier and a hand-started dev container can all run
-      # at once. Nothing in this file reads this binding -- the API and `migrate` reach the engine
-      # as `azure-sql-edge:1433` over the compose network. It exists so a host client can look.
-      - "127.0.0.1:14330:1433"
+      - "127.0.0.1:1433:1433"
     volumes:
-      # A volume, unlike the test tier: this stack is meant to still be here tomorrow.
-      # `docker compose down -v` is how you start over.
-      #
-      # The parent directory, not `/var/opt/mssql/data`. A named volume on the data directory itself
-      # makes the engine fail at bootstrap with `BootstrapSystemDataDirectories() failure
-      # (HRESULT 0x80070002)` -- it cannot copy its template files into a fresh mount point. A bind
-      # mount there is fine, which is why README's hand-started container uses that path.
-      - mssql-data:/var/opt/mssql
-    # The engine needs more than the 64 MB default /dev/shm, and fails opaquely without it.
+      - tb-stage-mssql-data:/var/opt/mssql
     shm_size: 1gb
     healthcheck:
-      # The image ships no `sqlcmd`, so this can only prove something is listening -- which is why
-      # `migrate` carries its own retry loop rather than trusting this signal alone.
       test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/1433' || exit 1"]
       interval: 5s
       timeout: 5s
@@ -52,13 +19,16 @@ services:
       start_period: 20s
 
   azure-storage-edge:
-    image: mcr.microsoft.com/azure-storage/azurite:3.37.0
-    # Blob only. Queue (10001) and table (10002) are used nowhere in this solution.
-    command: ["azurite", "-l", "/data", "--blobHost", "0.0.0.0"]
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: ["azurite", "-l", "/data", "--blobHost", "0.0.0.0", "--skipApiVersionCheck"]
     ports:
-      - "127.0.0.1:10010:10000"
+      - "127.0.0.1:10000:10000"
+      - "127.0.0.1:10001:10001"
+      - "127.0.0.1:10002:10002"
     volumes:
-      - azurite-data:/data
+      - tb-stage-azurite-data:/data
+    environment:
+      AZURITE_ACCOUNTS: "tbtestaccount:Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
     healthcheck:
       test: ["CMD", "node", "-e",
         "require('net').connect(10000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
@@ -71,22 +41,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.migrate
-    image: trailblaze-migrate:local
+    image: tb-migrate:local
     depends_on:
       azure-sql-edge:
         condition: service_healthy
     environment:
-      # The design-time factory reads this from the environment and refuses to run without it --
-      # the same contract the deployment pipeline uses, and the reason no connection string is
-      # baked into the image.
       DbConnection: "Server=azure-sql-edge,1433;Database=TrailBlaze;User Id=sa;Password=${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in src/api/.env};Encrypt=True;TrustServerCertificate=True"
-      # The bundle otherwise defaults to Development and goes looking for user secrets. Applying
-      # schema has no business in a Development configuration.
       ASPNETCORE_ENVIRONMENT: Production
     entrypoint: ["/bin/sh", "-c"]
-    # A retry loop rather than a bare run: `ConnectRetryCount` defaults to 1 with a 10s interval, so
-    # a single attempt survives only 10s of engine recovery, and the healthcheck above can only
-    # prove the port is open. 30 attempts at 5s covers a cold engine and still fails legibly.
     command:
       - |
         for attempt in $$(seq 1 30); do
@@ -99,16 +61,12 @@ services:
     restart: "no"
 
   blob-init:
-    # The API reads and writes blobs but never provisions containers (README), so something has to.
-    # The only heavy image here, and it is one `az` call repeated three times.
     image: mcr.microsoft.com/azure-cli:2.89.1
     depends_on:
       azure-storage-edge:
         condition: service_healthy
     environment:
-      # Microsoft's published emulator account, a documented constant rather than a credential --
-      # the same one `TestEnvironment.AzuriteKey` carries.
-      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azure-storage-edge:10000/devstoreaccount1;"
+      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=tbtestaccount;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azure-storage-edge:10000/tbtestaccount;"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -122,37 +80,20 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: trailblaze-api:local
+    image: tb-api:local
     depends_on:
-      # Not `service_started`, and not `service_healthy`: the API must not serve a request against
-      # an unmigrated schema, and with a weaker condition it races the migration and 500s on the
-      # first requests -- which reads as flakiness rather than as a missing gate.
       migrate:
         condition: service_completed_successfully
       blob-init:
         condition: service_completed_successfully
-    environment:
-      # Development is what turns on MapOpenApi, the only IsDevelopment branch in Program.cs, and
-      # half the reason a local stage is worth having.
-      ASPNETCORE_ENVIRONMENT: Development
-      DbConnection: "Server=azure-sql-edge,1433;Database=TrailBlaze;User Id=sa;Password=${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in src/api/.env};Encrypt=True;TrustServerCertificate=True"
-      BlobConnection: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azure-storage-edge:10000/devstoreaccount1;"
-      # Defaults to the committed appsettings.Development.json value, so `.env` can repoint CORS at
-      # the web app's origin once feature 10 exists without editing a tracked file.
-      AllowedOrigins: "${AllowedOrigins:-https://localhost:8086,http://localhost:8080}"
-      # Both blank leaves the scheme unwired and every request anonymous, with a startup warning
-      # saying so. There is no development Entra tenant yet, so blank is the honest default --
-      # and it means every [Authorize] route, storage included, cannot be exercised locally.
-      TenantId: "${TenantId:-}"
-      Audience: "${Audience:-}"
+    env_file:
+      - .env
     ports:
       - "127.0.0.1:8080:8080"
-    # A stage environment should survive a Docker Desktop restart. `migrate` does not re-run on
-    # one, which is correct: the schema is already at the same revision.
     restart: unless-stopped
 
 volumes:
-  mssql-data:
-    name: trailblaze-mssql-data
-  azurite-data:
-    name: trailblaze-azurite-data
+  tb-stage-mssql-data:
+    name: tb-stage-mssql-data
+  tb-stage-azurite-data:
+    name: tb-stage-azurite-data

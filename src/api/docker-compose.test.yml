@@ -1,23 +1,3 @@
-# The test tier's two engines. Nothing the application reads points here.
-#
-# Every deployed environment uses the real Azure SQL Database and the real Azure Storage
-# account (STANDARD §6); nothing in appsettings, user-secrets or launchSettings.json names a
-# container. These exist so `dotnet test` can run the persistence and storage tiers against a
-# real engine instead of a fake — see docs/testing-and-tdd.md.
-#
-#   cd src/api
-#   cp .env.example .env          # then fill in MSSQL_SA_PASSWORD
-#   docker compose -f docker-compose.test.yml up -d
-#
-# A container started by hand on these ports cannot be adopted by compose, so `docker compose
-# down` (or `docker rm -f`) it first, or the port bind fails and this file looks broken.
-#
-# A developer's own SQL Edge container (README, "Running it locally") binds the same 1433, so it
-# and this stack exclude each other -- and while it holds the port, `dotnet test` reaches it. That
-# is safe rather than merely tolerated: the tier owns one database, `TrailBlazeTest`, and drops
-# nothing outside it, so a test run leaves a dev database alone. It does mean the two are not
-# isolated, and stopping the dev container is what restores that.
-
 name: trailblaze-tests
 
 services:
@@ -26,26 +6,14 @@ services:
     container_name: azure-sql-edge
     environment:
       ACCEPT_EULA: "1"
-      # No default, deliberately: a password in this file would be a credential in version
-      # control, and the repository forbids that (README, STANDARD §6). It reaches the tests
-      # through the same variable — export it in the shell you run `dotnet test` from.
       MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in src/api/.env}"
     ports:
-      # Loopback only. The engine takes a fixed `sa` password, so binding 0.0.0.0 would put an
-      # open SQL Server on whatever network the machine is attached to.
-      - "127.0.0.1:1433:1433"
-    # The engine needs more than the 64 MB default /dev/shm, and fails opaquely without it.
+      - "127.0.0.1:14330:1433"
     shm_size: 1gb
-    # No volume, on purpose: the database a run keeps for inspection (docs/testing-and-tdd.md)
-    # lives and dies with the container, so `up` always starts from an empty engine.
 
   azure-storage-edge:
     image: mcr.microsoft.com/azure-storage/azurite:3.37.0
     container_name: azure-storage-edge
-    # Blob only. Queue (10001) and table (10002) are used nowhere in this solution, and an
-    # endpoint nothing calls is an endpoint nothing notices has broken.
     command: ["azurite", "-l", "/data", "--blobHost", "0.0.0.0"]
     ports:
-      - "127.0.0.1:10000:10000"
-    # No volume, on purpose: an ephemeral account per `up` means a test run starts from a clean
-    # slate, so "the blob is at this path" can never be satisfied by a previous run's leftovers.
+      - "127.0.0.1:100000:10000"
