@@ -1,5 +1,6 @@
 name: trailblaze-tests
 
+# TestEnvironment.cs reads these ports; `docker-compose.yml` owns 1433 and 10000, so change both files together.
 services:
   azure-sql-edge:
     image: mcr.microsoft.com/azure-sql-edge
@@ -16,4 +17,4 @@ services:
     container_name: azure-storage-edge
     command: ["azurite", "-l", "/data", "--blobHost", "0.0.0.0"]
     ports:
-      - "127.0.0.1:100000:10000"
+      - "127.0.0.1:10010:10000"

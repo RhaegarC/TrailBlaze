@@ -73,7 +73,12 @@ services:
         for container in covers avatars media; do
           az storage container create -n $$container --only-show-errors || exit 1
         done
-        echo "blob-init: covers, avatars and media are present"
+        # The levels AzureStorageFixture.AccessLevelFor sets: covers and avatars are read without a signature, media never is.
+        for container in covers avatars; do
+          az storage container set-permission -n $$container --public-access blob --only-show-errors || exit 1
+        done
+        az storage container set-permission -n media --public-access off --only-show-errors || exit 1
+        echo "blob-init: covers and avatars are public, media is private"
     restart: "no"
 
   api:
