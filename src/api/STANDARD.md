@@ -460,8 +460,10 @@ then user-secrets, then environment variables, then command line. Later sources 
   **The hand-started container is not the test tier's, and the stack is what contends with it.**
   README's `docker run` container and `docker-compose.yml`'s `azure-sql-edge` both bind
   `127.0.0.1:1433`, so only one of those two can be up. The test tier is deliberately off that
-  port: `docker-compose.test.yml` publishes `14330` and `10010`, which is what lets a `dotnet test`
-  run reach the tier's own throwaway engine while either of the others is running. Aim it
+  port: `docker-compose.test.yml` publishes `14330` and `10010` — the `TB_TEST_*_PORT` variables
+  `TestEnvironment` reads under the same names, so a host that needs different ones moves both
+  sides at once. That is what lets a `dotnet test` run reach the tier's own throwaway engine while
+  either of the others is running. Aim it
   elsewhere by force and the tier is still safe, but only because it owns one database,
   `TrailBlazeTest`, and drops nothing outside it — do not point it at the dev database, because
   that name is the only thing bounding what it drops and a schema in use is exactly what it has no
