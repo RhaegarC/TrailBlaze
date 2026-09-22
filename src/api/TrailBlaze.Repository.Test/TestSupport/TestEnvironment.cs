@@ -35,9 +35,22 @@ public static class TestEnvironment
     /// out of <c>src/api/.env</c>, which is why one exported value serves both.</summary>
     public const string PasswordVariable = "MSSQL_SA_PASSWORD";
 
-    /// <summary>Where `docker-compose.test.yml` publishes the engine — its own port, so a
+    /// <summary>The host port `docker-compose.test.yml` publishes the engine on. Exporting it
+    /// is what moves the tier and the containers together.</summary>
+    public const string SqlPortVariable = "TB_TEST_SQL_PORT";
+
+    /// <summary>The host port `docker-compose.test.yml` publishes the emulator's blob service
+    /// on, read the same way as <see cref="SqlPortVariable"/>.</summary>
+    public const string BlobPortVariable = "TB_TEST_BLOB_PORT";
+
+    /// <summary>Where the compose file's own default puts the engine — a port of its own, so a
     /// `docker-compose.yml` stack holding 1433 does not intercept the tier.</summary>
-    private const string ContainerServer = "127.0.0.1,14330";
+    private const string DefaultSqlPort = "14330";
+
+    /// <summary>Where the compose file's own default puts the emulator's blob service.</summary>
+    private const string DefaultBlobPort = "10010";
+
+    private static string ContainerServer => $"127.0.0.1,{Port(SqlPortVariable, DefaultSqlPort)}";
 
     /// <summary>Microsoft's published development key for the Azurite emulator. Public by
     /// design and not a credential — it is a fixed constant of a local emulator, and the
@@ -47,13 +60,12 @@ public static class TestEnvironment
         "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/"
         + "K1SZFPTOtr/KBHBeksoGMGw==";
 
-    /// <summary>The emulator's blob endpoint, which is the only service this solution uses.
-    /// Port 10010 is `docker-compose.test.yml`'s; the stack publishes the emulator's own 10000.</summary>
+    /// <summary>The emulator's blob endpoint, which is the only service this solution uses.</summary>
     public static string AzuriteConnection =>
         "DefaultEndpointsProtocol=http;"
         + "AccountName=devstoreaccount1;"
         + $"AccountKey={AzuriteKey};"
-        + "BlobEndpoint=http://127.0.0.1:10010/devstoreaccount1;";
+        + $"BlobEndpoint=http://127.0.0.1:{Port(BlobPortVariable, DefaultBlobPort)}/devstoreaccount1;";
 
     /// <summary>
     /// The database to test against, or the reason there is none — never both, and never
@@ -128,6 +140,29 @@ public static class TestEnvironment
     private static string? Read(string name) =>
         Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
 
+    /// <summary>The port a variable names, or the compose file's default for that variable.</summary>
+    /// <remarks>
+    /// Rejected here when it is not a port, rather than left to the connection attempt: a URI
+    /// built from <c>abc</c> fails somewhere far from the variable that produced it, which is
+    /// the same opaque failure <see cref="Validate"/> exists to prevent on the SQL side.
+    /// </remarks>
+    private static string Port(string variable, string fallback)
+    {
+        if (Read(variable) is not { } value)
+        {
+            return fallback;
+        }
+
+        if (!int.TryParse(value, out int port) || port is < 1 or > 65535)
+        {
+            throw new InvalidOperationException(
+                $"{variable} is \"{value}\", which is not a TCP port. Set it to the host port "
+                + $"`docker-compose.test.yml` publishes, or unset it to use {fallback}.");
+        }
+
+        return value;
+    }
+
     /// <summary>
     /// Rejects a string that cannot reach the server it names, so the failure is a sentence
     /// rather than an opaque TLS error.
@@ -178,7 +213,7 @@ public static class TestEnvironment
     {
         string host = dataSource.Trim();
 
-        // "tcp:127.0.0.1,14330", "127.0.0.1,14330", "localhost:14330" and "::1" all name the
+        // "tcp:127.0.0.1", "127.0.0.1,1433", "localhost:14330" and "::1" all name the
         // same machine, and the port is never part of the answer.
         if (host.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase))
         {
