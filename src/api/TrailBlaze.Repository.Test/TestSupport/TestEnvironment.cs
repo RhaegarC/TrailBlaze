@@ -35,8 +35,9 @@ public static class TestEnvironment
     /// out of <c>src/api/.env</c>, which is why one exported value serves both.</summary>
     public const string PasswordVariable = "MSSQL_SA_PASSWORD";
 
-    /// <summary>Where the compose file publishes the engine.</summary>
-    private const string ContainerServer = "127.0.0.1,1433";
+    /// <summary>Where `docker-compose.test.yml` publishes the engine — its own port, so a
+    /// `docker-compose.yml` stack holding 1433 does not intercept the tier.</summary>
+    private const string ContainerServer = "127.0.0.1,14330";
 
     /// <summary>Microsoft's published development key for the Azurite emulator. Public by
     /// design and not a credential — it is a fixed constant of a local emulator, and the
@@ -46,12 +47,13 @@ public static class TestEnvironment
         "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/"
         + "K1SZFPTOtr/KBHBeksoGMGw==";
 
-    /// <summary>The emulator's blob endpoint, which is the only service this solution uses.</summary>
+    /// <summary>The emulator's blob endpoint, which is the only service this solution uses.
+    /// Port 10010 is `docker-compose.test.yml`'s; the stack publishes the emulator's own 10000.</summary>
     public static string AzuriteConnection =>
         "DefaultEndpointsProtocol=http;"
         + "AccountName=devstoreaccount1;"
         + $"AccountKey={AzuriteKey};"
-        + "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;";
+        + "BlobEndpoint=http://127.0.0.1:10010/devstoreaccount1;";
 
     /// <summary>
     /// The database to test against, or the reason there is none — never both, and never
@@ -176,7 +178,7 @@ public static class TestEnvironment
     {
         string host = dataSource.Trim();
 
-        // "tcp:127.0.0.1,1433", "127.0.0.1,1433", "localhost:1433" and "::1" all name the
+        // "tcp:127.0.0.1,14330", "127.0.0.1,14330", "localhost:14330" and "::1" all name the
         // same machine, and the port is never part of the answer.
         if (host.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase))
         {
