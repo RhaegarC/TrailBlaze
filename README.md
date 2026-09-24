@@ -177,9 +177,10 @@ pointed somewhere else would migrate the wrong database and report success.
    what is not is status, owned by that file's table. Feature 02's slice — the profile routes, avatar
    upload and upload validator — is **not** covered. "Green" here means the foundation is
    green.
-2. **`develop` is not deployable until feature 09 merges.** 09 imposes the ownership and admin
-   rules; [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) is where the rule and the
-   sequencing behind it live.
+2. **`develop` was not deployable until feature 09 merged, and now is** *(2026-09-24, PR #26)*.
+   09 imposes the ownership and admin rules; [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md)
+   is where the rule and the sequencing behind it live. What is still not deployable is the
+   **frontend** — the `src/web/` export is mock-only until [feature 10](docs/features/10-figma-integration.md).
 3. **Azure Blob is real in every environment**, tests included — there is no `IStorageRepository`
    fake, so nothing stands in for the real implementation. [testing-and-tdd.md](docs/testing-and-tdd.md)
    states what that costs and what it buys.

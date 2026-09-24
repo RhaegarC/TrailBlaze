@@ -30,7 +30,7 @@ is replaced by evidence that a visitor, a user, and an admin each see exactly wh
 This feature exercises the output of every feature before it — 01 through 10 — and cannot pass
 unless they all pass. It is last in the ladder by design.
 
-It also carries one thing that was planned elsewhere: **[09](09-permission-enforcement.md)'s
+It also carries one thing that was planned elsewhere: **[09](archive/09-permission-enforcement.md)'s
 live-pipeline status matrix** — each endpoint driven over the real pipeline with a test token, and
 the **403/404 pair asserted on the same route** *(2026-09-24 — moved here from 09, whose Api tier
 boots against an unreachable connection string and would fail on the connection rather than on the

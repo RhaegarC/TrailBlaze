@@ -7,8 +7,7 @@ Source: [PRD](../../PRD.md) — Decisions #2/#13/#14/#24/#26/#29 + "Media storag
 > container rule and the move a visibility change triggers, the last of those proven against a live
 > account; what is absent is the **mutation** rule — any signed-in caller who can read an entry may
 > set its cover, including one they do not own — and that lands with
-> [09](../09-permission-enforcement.md). `develop` is not deployable until it does — the sequencing
-> note in the sprint file states why.
+> [09](09-permission-enforcement.md), which has now landed. *(2026-09-24 — 09 is merged, in PR #26, so this is satisfied: `develop` is deployable from that commit.)*
 
 ## Summary
 
@@ -90,7 +89,7 @@ private as claimed*, by fetching it with no credentials. Neither tier is the who
 - **The separation rule, restated for three containers.** A cover is always a fresh upload and is never derived from the activity's private media (Decision #14). Do not "optimise" this by reusing or re-pointing a `media` blob as a cover — that single change is what would make promoting private bytes to public possible, and it is precisely what this feature exists to prevent. What decides a cover's audience is **where it was uploaded**, never a flag on an item (Decision #13, amended by #29). Note the asymmetry the private container now carries: cover *blobs* of `Shared`/`Private` activities sit beside media blobs, but a cover never becomes a `media` **row**, and a `media` row never becomes a cover — asserted in both directions.
 - No image resizing, cropping, rotation, or thumbnail generation — bytes are stored exactly as uploaded.
 - No cover removal endpoint in v1: replace is the only mutation. (The PRD API surface lists `POST /api/activity/{id}/cover` and no delete route.)
-- **No ownership enforcement.** The visibility gate is here and is 404 for an entry the caller cannot read — a cover is the entry's face, so the rule that governs reading it governs giving it one. What is absent is the *mutation* rule: any signed-in caller who **can read** an activity may set its cover, including one they do not own. Feature [09-permission-enforcement](../09-permission-enforcement.md) adds the owner/admin rules. Like 06, this feature is therefore part of the deployability gap — see the sequencing note in [00-mission-1-sprint.md](../00-mission-1-sprint.md).
+- **No ownership enforcement.** The visibility gate is here and is 404 for an entry the caller cannot read — a cover is the entry's face, so the rule that governs reading it governs giving it one. What is absent is the *mutation* rule: any signed-in caller who **can read** an activity may set its cover, including one they do not own. Feature [09-permission-enforcement](09-permission-enforcement.md) adds the owner/admin rules. Like 06, this feature is therefore part of the deployability gap — see the sequencing note in [00-mission-1-sprint.md](../00-mission-1-sprint.md).
 - **No request-size override on the route, unlike the media one, and deliberately.** `UploadMedia` raises Kestrel's body limit and the form parser's multipart limit because a 200 MB video exceeds both defaults, and without raising them the documented 400 would arrive as a bare 413. The image cap runs the other way: 10 MB sits *below* Kestrel's 30 MB and the parser's 128 MB, so the defaults already let an oversize image through to the rule that names the reason. Raising them here would buy nothing and buffer more.
 - No EXIF or metadata stripping on the uploaded image.
 - **Covers belong to activities only** — with one exception added since by Decision #28: user

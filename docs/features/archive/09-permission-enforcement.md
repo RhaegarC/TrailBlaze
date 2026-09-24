@@ -1,7 +1,7 @@
 # 09 — Permission Enforcement
 
-Status: **In progress** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #2/#3/#9/#21/#26/#27 + "Authentication & authorization" + "API surface".
+Status: **Archived** — merged to `develop` in PR #26 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Source: [PRD](../../PRD.md) — Decisions #2/#3/#9/#21/#26/#27 + "Authentication & authorization" + "API surface".
 
 ## Summary
 
@@ -34,9 +34,9 @@ the access the PRD grants them — and nothing more by default.
 
 ## Dependencies
 
-- [03-admin-seeding](archive/03-admin-seeding.md) (`users.Role` stored and constrained; the admin is a row
+- [03-admin-seeding](03-admin-seeding.md) (`users.Role` stored and constrained; the admin is a row
   someone sets by hand, so this feature must not assume one exists)
-- [04-activity-crud](archive/04-activity-crud.md) (activities, their `CreatedBy`, and the routes this feature gates)
+- [04-activity-crud](04-activity-crud.md) (activities, their `CreatedBy`, and the routes this feature gates)
 
 Features 05–08 (public list, media upload, SAS delivery, cover images) are **retrofitted** by this
 feature: their endpoints ship permissive and are brought under the matrix here.
@@ -62,10 +62,10 @@ feature: their endpoints ship permissive and are brought under the matrix here.
       not 403, so none of them can be used as a side door to confirm the entry exists. A `Shared`
       entry is reachable by any signed-in caller and not by an anonymous one
       *(2026-09-24 — `GET /api/media/{id}/url` left this list: the route does not exist, and
-      building it is [07](07-sas-delivery.md)'s. The criterion moved there with it.)*
+      building it is [07](../07-sas-delivery.md)'s. The criterion moved there with it.)*
 - [x] `GET /api/activity/{id}/media` returns **401 for anonymous** and, for a signed-in caller,
       follows the activity's visibility — 200 if readable, 404 if not.
-      *(2026-09-24 — `GET /api/media/{id}/url` moved to [07](07-sas-delivery.md), which owns it.)*
+      *(2026-09-24 — `GET /api/media/{id}/url` moved to [07](../07-sas-delivery.md), which owns it.)*
 - [x] `POST /api/activity` returns **401 for anonymous**, 201 for `User` and `Admin`
 - [x] `PUT /api/activity/{id}` returns **401 anonymous / 200 owner / 403 authenticated
       non-owner / 200 `Admin`**
@@ -113,7 +113,7 @@ feature: their endpoints ship permissive and are brought under the matrix here.
 - [x] `GET /health` remains anonymously reachable and returns 200
 - [ ] After this feature merges, every route in the PRD "API surface" table matches its stated
       Auth column, and `develop` is safe to deploy (04–08 alone are not). *Open on two counts:
-      the merge itself, and `GET /api/media/{id}/url`, which [07](07-sas-delivery.md) has still to
+      the merge itself, and `GET /api/media/{id}/url`, which [07](../07-sas-delivery.md) has still to
       build*
 
 **Two claims above are weaker than they read, and both weakenings are deliberate.**
@@ -123,13 +123,13 @@ in and is not built. The other is the status codes. The 401/403/404 statuses are
 the service outcome, the outcome-to-HTTP mapping, and the endpoint table. `TrailBlazeApiFactory`
 boots against an unreachable connection string, so a request carrying a valid token would authenticate
 and then fail on the connection rather than on the rule, which is a red for the wrong reason. **The
-live-pipeline matrix is [feature 11](11-e2e-verification.md)'s**, and it is the same gap that file
+live-pipeline matrix is [feature 11](../11-e2e-verification.md)'s**, and it is the same gap that file
 already carries for 05–08; what lands here is every claim a token is not needed to make.
 
 ## Tests (TDD)
 
 This is a **security hot spot** and must be test-first (RED → GREEN) per
-[docs/testing-and-tdd.md](../testing-and-tdd.md).
+[docs/testing-and-tdd.md](../../testing-and-tdd.md).
 
 - Unit (`TrailBlaze.Service.Test`) — **hot spot (security)**: drive the authorization service with
   an allow/deny **matrix over the PRD permission tables**: for each route,
@@ -146,7 +146,7 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   precisely because the intuitive-but-wrong rule would pass every other test in this file — for
   contribution that is "only the owner may add", and for removal it is "the owner may curate their
   own entry", which is the one review caught.
-- Integration (`TrailBlaze.Api.Test`) — **moved to [feature 11](11-e2e-verification.md)**
+- Integration (`TrailBlaze.Api.Test`) — **moved to [feature 11](../11-e2e-verification.md)**
   *(2026-09-24)*: exercise each endpoint over the real pipeline with a test token, asserting the
   exact status code — 401 unauthenticated, 403 authenticated-but-not-permitted, 404 absent **or
   invisible**, 200/201/204 allowed — and the **403/404 pair on the same route**. The factory boots
@@ -168,14 +168,14 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   database" no longer holds: a lookup that *returns* an owner is an executed query, and the
   repository tier now has a real engine to execute it against.)* `ToQueryString()` remains the offline instrument, at the model tier, where the claim is
   about the generated statement rather than about the row it selects
-  ([testing-and-tdd.md](../testing-and-tdd.md)). It is `AuthorizationLookupTests`, and it asks the
+  ([testing-and-tdd.md](../../testing-and-tdd.md)). It is `AuthorizationLookupTests`, and it asks the
   engine one column at a time rather than restating the rule in a second place.
 - Regression guard: a test asserting the anonymous-allowed route set is exactly
   `GET /api/activity` and `GET /api/activity/{id}`, so a new endpoint added later without an
   explicit decision fails rather than silently defaulting open. `AnonymousReachabilityTests` also
   asserts the other half of default deny — that no controller action carries neither a grant nor an
   authorization attribute — which is the case the closed list cannot see.
-- Regression guard (**moved to [feature 11](11-e2e-verification.md)**, 2026-09-24): a test
+- Regression guard (**moved to [feature 11](../11-e2e-verification.md)**, 2026-09-24): a test
   asserting that no route other than those two returns a **200 to an anonymous caller** for a
   non-`Public` activity. This is the guard that catches a future endpoint which authenticates
   correctly but forgets the visibility predicate — the failure mode that leaving a `Private`
@@ -188,8 +188,8 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   in the PRD, not data-driven grants.
 - No dedicated admin screens (Decision #21): admin is elevated rights in the same routes and UI.
 - **This feature does *not* introduce `activities.Type`; it enforces it.** The column and its
-  round-tripping belong to feature [04](archive/04-activity-crud.md) and the read filter to
-  [05](archive/05-public-activity-list.md). What lands here is the *single predicate* the other two
+  round-tripping belong to feature [04](04-activity-crud.md) and the read filter to
+  [05](05-public-activity-list.md). What lands here is the *single predicate* the other two
   consult, and its application to every remaining route. Stated explicitly because this feature
   is where a reader would expect visibility to be introduced, and looking for it here would make
   the 04 and 05 criteria look like they were missing something.

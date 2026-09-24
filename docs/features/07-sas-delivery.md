@@ -30,7 +30,7 @@ image or video that is otherwise private.
       `Shared` one is reachable by any signed-in caller and not by an anonymous one; a signed-in
       caller who may read the activity gets 200 and one who may not gets **404**, not 403, so the
       route cannot be used as a side door to confirm the entry exists.
-      *(2026-09-24 — moved here from [09](09-permission-enforcement.md), which named this route
+      *(2026-09-24 — moved here from [09](archive/09-permission-enforcement.md), which named this route
       among the ones it gates before the route existed. 09 has landed and its rule is
       `IActivityAuthorizationService`; this route must reach the same service rather than decide
       visibility for itself, which is the one thing 09's single-home criterion forbids.)*
@@ -68,7 +68,7 @@ image or video that is otherwise private.
 ## Notes / non-goals
 
 - **The SAS URL is a bearer token.** Anyone holding the string can read that blob until it expires; the URL's secrecy is not a control, so the **expiry window is the real control**. The consequences this feature accepts: a short TTL, a hard server-side cap, no long-lived SAS values persisted anywhere, no full URLs logged, and no SAS embedded in stored data.
-- **No authorization check here beyond authentication.** Any signed-in user may currently obtain a URL for any media item. The **visibility** gate — a caller who cannot read the activity gets **404**, not a URL (Decisions #26/#29) — was applied to every other route by [09](09-permission-enforcement.md), and the owner/admin rules with it; this route arrives after that and is the one place still holding the gap, because it does not exist yet. *(2026-09-24 — 09 has landed; what it could not do is gate a route nobody has built. The criterion above is where this feature picks the rule up.)* The visibility half is stated here because a private activity's media being mint-able by any signed-in stranger is exactly the leak a reader might assume 05 had already closed.
+- **No authorization check here beyond authentication.** Any signed-in user may currently obtain a URL for any media item. The **visibility** gate — a caller who cannot read the activity gets **404**, not a URL (Decisions #26/#29) — was applied to every other route by [09](archive/09-permission-enforcement.md), and the owner/admin rules with it; this route arrives after that and is the one place still holding the gap, because it does not exist yet. *(2026-09-24 — 09 has landed; what it could not do is gate a route nobody has built. The criterion above is where this feature picks the rule up.)* The visibility half is stated here because a private activity's media being mint-able by any signed-in stranger is exactly the leak a reader might assume 05 had already closed.
 - No revocation list, no one-time-use tokens, and no forced re-mint on download — with a bounded TTL, expiry is the only lever and that is deliberate.
 - No CDN, no range-request tuning, no download throttling or bandwidth accounting.
 - No SAS for a blob in a **public** container (`covers`, `avatars`) — a SAS there would add a
