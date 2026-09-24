@@ -897,6 +897,188 @@ public sealed class ActivityServiceTests
             ["CoverImageUrl"],
             typeof(CoverResponse).GetProperties().Select(property => property.Name).Order());
 
+    // ---- Who may change an entry ----------------------------------------------------------
+    //
+    // Ownership, not visibility, and the two answers are not interchangeable: a caller who may read
+    // the entry is told they may not change it (403), and one who may not read it is told nothing at
+    // all (404). Both are asserted on one route so the pair cannot silently collapse into one.
+
+    [Theory]
+    [InlineData(Constant.ActivityType.Public, ActivityOutcomeKind.Forbidden)]
+    [InlineData(Constant.ActivityType.Shared, ActivityOutcomeKind.Forbidden)]
+    [InlineData(Constant.ActivityType.Private, ActivityOutcomeKind.NotFound)]
+    public async Task Editing_another_users_entry_is_told_the_one_thing_that_is_true(
+        string type, ActivityOutcomeKind expected)
+    {
+        var repository = new RecordingRepository { Existing = Row(type, owner: SomebodyElse) };
+
+        ActivityOutcome outcome = await Service(repository, caller: Caller)
+            .UpdateAsync("the-activity", Update());
+
+        Assert.Equal(expected, outcome.Kind);
+        Assert.Empty(repository.Saved);
+    }
+
+    /// <summary>
+    /// Refused before the body is read, for the reason the id check is first: a caller with no right
+    /// to edit is not owed a field-by-field answer about an edit they were never going to make.
+    /// </summary>
+    [Fact]
+    public async Task A_non_owner_is_refused_before_the_body_is_validated()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Public, owner: SomebodyElse),
+        };
+
+        ActivityOutcome outcome = await Service(repository, caller: Caller)
+            .UpdateAsync("the-activity", new UpdateActivityRequest());
+
+        Assert.Equal(ActivityOutcomeKind.Forbidden, outcome.Kind);
+        Assert.Empty(repository.Saved);
+    }
+
+    [Fact]
+    public async Task The_owner_may_edit_their_own_entry()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Private, owner: Caller),
+        };
+
+        ActivityOutcome outcome = await Service(repository, caller: Caller)
+            .UpdateAsync("the-activity", Update());
+
+        Assert.Equal(ActivityOutcomeKind.Completed, outcome.Kind);
+        Assert.Single(repository.Saved);
+    }
+
+    [Fact]
+    public async Task An_administrator_may_edit_an_entry_they_do_not_own()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Public, owner: SomebodyElse),
+            Users = [new User { Id = Caller, Role = Constant.UserRole.Admin }],
+        };
+
+        ActivityOutcome outcome = await Service(repository, caller: Caller)
+            .UpdateAsync("the-activity", Update());
+
+        Assert.Equal(ActivityOutcomeKind.Completed, outcome.Kind);
+        Assert.Single(repository.Saved);
+    }
+
+    [Theory]
+    [InlineData(Constant.ActivityType.Public, ActivityOutcomeKind.Forbidden)]
+    [InlineData(Constant.ActivityType.Private, ActivityOutcomeKind.NotFound)]
+    public async Task Deleting_another_users_entry_is_told_the_one_thing_that_is_true(
+        string type, ActivityOutcomeKind expected)
+    {
+        var repository = new RecordingRepository { Existing = Row(type, owner: SomebodyElse) };
+
+        ActivityOutcome outcome = await Service(repository, caller: Caller).DeleteAsync("the-activity");
+
+        Assert.Equal(expected, outcome.Kind);
+        Assert.Empty(repository.DeletedActivities);
+    }
+
+    [Fact]
+    public async Task An_administrator_may_delete_an_entry_they_do_not_own()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Private, owner: SomebodyElse),
+            Users = [new User { Id = Caller, Role = Constant.UserRole.Admin }],
+        };
+
+        ActivityOutcome outcome = await Service(repository, caller: Caller).DeleteAsync("the-activity");
+
+        Assert.Equal(ActivityOutcomeKind.Deleted, outcome.Kind);
+        Assert.Equal(["the-activity"], repository.DeletedActivities);
+    }
+
+    /// <summary>
+    /// A cover is the entry's own face rather than a contribution to it, so here the rule is
+    /// ownership and a stranger's read access is not a licence to replace it — the opposite of the
+    /// media route, and the crossing this feature is most likely to get wrong in either direction.
+    /// </summary>
+    [Theory]
+    [InlineData(Constant.ActivityType.Public, CoverOutcomeKind.Forbidden)]
+    [InlineData(Constant.ActivityType.Private, CoverOutcomeKind.NotFound)]
+    public async Task A_non_owner_cannot_give_another_users_entry_a_face(
+        string type, CoverOutcomeKind expected)
+    {
+        var repository = new RecordingRepository { Existing = Row(type, owner: SomebodyElse) };
+        var storage = new RecordingStorage();
+
+        CoverOutcome outcome = await Service(repository, storage, Caller)
+            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+
+        Assert.Equal(expected, outcome.Kind);
+        Assert.Empty(storage.Uploads);
+        Assert.Empty(repository.Saved);
+    }
+
+    [Fact]
+    public async Task The_owner_may_give_their_own_entry_a_face()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Public, owner: Caller),
+        };
+        var storage = new RecordingStorage();
+
+        CoverOutcome outcome = await Service(repository, storage, Caller)
+            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+
+        Assert.Equal(CoverOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Single(storage.Uploads);
+    }
+
+    [Fact]
+    public async Task An_administrator_may_give_any_entry_a_face()
+    {
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Public, owner: SomebodyElse),
+            Users = [new User { Id = Caller, Role = Constant.UserRole.Admin }],
+        };
+        var storage = new RecordingStorage();
+
+        CoverOutcome outcome = await Service(repository, storage, Caller)
+            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+
+        Assert.Equal(CoverOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Single(storage.Uploads);
+    }
+
+    /// <summary>
+    /// The ordering claim: a refusal reaches storage at all — through any member, not only the ones
+    /// a recording double happens to list.
+    /// </summary>
+    /// <remarks>
+    /// The double is purpose-built for this one test and stands in for nothing: it names the member
+    /// it was reached through and returns nothing meaningful, so what it supports is the absence of a
+    /// call rather than the behaviour of a store. That absence cannot be asked of a real backend,
+    /// which is silent about not having been called.
+    /// </remarks>
+    [Fact]
+    public async Task A_refused_change_reaches_storage_not_at_all()
+    {
+        var storage = new NeverReachedStorage();
+        var repository = new RecordingRepository
+        {
+            Existing = Row(Constant.ActivityType.Public, owner: SomebodyElse),
+        };
+
+        CoverOutcome outcome = await Service(repository, storage, Caller)
+            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+
+        Assert.Empty(storage.Reached);
+        Assert.Equal(CoverOutcomeKind.Forbidden, outcome.Kind);
+    }
+
     // ---- The visibility change moves the cover --------------------------------------------
 
     /// <summary>
@@ -1027,13 +1209,19 @@ public sealed class ActivityServiceTests
     private static ActivityService Service(
         IDbRepository? repository = null,
         IStorageRepository? storage = null,
-        string? caller = Caller) =>
-        new(
-            repository ?? new RecordingRepository(),
+        string? caller = Caller)
+    {
+        // One repository for both, so a role a test put on the rows is the role the rule reads.
+        var rows = repository ?? new RecordingRepository();
+
+        return new(
+            rows,
             storage ?? new RecordingStorage(),
             new UploadValidationService(),
+            new ActivityAuthorizationService(rows, new StubUserContext(caller)),
             new StubUserContext(caller),
             NullLogger<ActivityService>.Instance);
+    }
 
     private static CreateActivityRequest Valid() => new()
     {
@@ -1151,12 +1339,25 @@ public sealed class ActivityServiceTests
             return Task.FromResult((PageItems.Cast<T>().ToList(), PageTotal));
         }
 
-        // Answered only for the read the delete path performs, so the rest of the contract stays
+        // Answered only for the two reads the service performs, so the rest of the contract stays
         // refused and no test can lean on a read this double does not model.
-        public Task<T?> GetAsync<T>(Expression<Func<T, bool>> predicate) where T : class =>
-            typeof(T) == typeof(Activity)
-                ? Task.FromResult((T?)(object?)Existing)
-                : throw new NotSupportedException(NoReads);
+        public Task<T?> GetAsync<T>(Expression<Func<T, bool>> predicate) where T : class
+        {
+            if (typeof(T) == typeof(Activity))
+            {
+                return Task.FromResult((T?)(object?)Existing);
+            }
+
+            // The predicate the service built is the one that runs, so a lookup that selected the
+            // wrong row fails here rather than reaching a row this double chose for it.
+            if (typeof(T) == typeof(User))
+            {
+                var matches = (Func<User, bool>)(object)predicate.Compile();
+                return Task.FromResult((T?)(object?)Users.FirstOrDefault(matches));
+            }
+
+            throw new NotSupportedException(NoReads);
+        }
 
         public Task<List<T>> GetListAsync<T>(Expression<Func<T, bool>> predicate) where T : class =>
             typeof(T) == typeof(User)
@@ -1285,6 +1486,62 @@ public sealed class ActivityServiceTests
         {
             Moves.Add((sourceContainer, sourcePath, destinationContainer, destinationPath));
             return Task.FromResult(destinationPath);
+        }
+    }
+
+    /// <summary>
+    /// Records nothing but the fact that it was reached, and names the member it was reached
+    /// through.
+    /// </summary>
+    /// <remarks>
+    /// One test uses it, for one claim: that a refused request touches no storage. It stands in for
+    /// no storage behaviour — it holds no bytes, signs nothing and moves nothing — and it exists
+    /// because <see cref="RecordingStorage"/> can only report the members it knows about, while this
+    /// answers for every one of them at once.
+    /// </remarks>
+    private sealed class NeverReachedStorage : IStorageRepository
+    {
+        public List<string> Reached { get; } = [];
+
+        public Task<Uri> CreateReadUrlAsync(
+            string container,
+            string path,
+            TimeSpan lifetime,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Mark(nameof(CreateReadUrlAsync)));
+
+        public Uri CreatePublicUrl(string container, string path) =>
+            Mark(nameof(CreatePublicUrl));
+
+        public Task<string> UploadAsync(
+            string container,
+            string path,
+            Stream content,
+            string contentType,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Mark(nameof(UploadAsync)).ToString());
+
+        public Task DeleteAsync(
+            string container,
+            string path,
+            CancellationToken cancellationToken = default)
+        {
+            Mark(nameof(DeleteAsync));
+            return Task.CompletedTask;
+        }
+
+        public Task<string> MoveAsync(
+            string sourceContainer,
+            string sourcePath,
+            string destinationContainer,
+            string destinationPath,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Mark(nameof(MoveAsync)).ToString());
+
+        private Uri Mark(string member)
+        {
+            Reached.Add(member);
+            return new Uri("https://never-reached.invalid/");
         }
     }
 }

@@ -1,7 +1,7 @@
 namespace TrailBlaze.Model.Activity;
 
 /// <summary>
-/// Which of the five answers a service call produced.
+/// Which of the six answers a service call produced.
 /// </summary>
 public enum ActivityOutcomeKind
 {
@@ -29,6 +29,13 @@ public enum ActivityOutcomeKind
     /// The request names no caller, so an entry could not be attributed.
     /// </summary>
     NoCaller,
+
+    /// <summary>
+    /// The caller may read the entry but may not change it. Distinct from
+    /// <see cref="NotFound"/>, which withholds the entry's existence instead: one is a refusal the
+    /// caller is told about, the other is a fact they are not.
+    /// </summary>
+    Forbidden,
 }
 
 /// <summary>
@@ -51,7 +58,7 @@ public sealed class ActivityOutcome
     }
 
     /// <summary>
-    /// Which of the five answers this is.
+    /// Which of the six answers this is.
     /// </summary>
     public ActivityOutcomeKind Kind { get; }
 
@@ -99,4 +106,10 @@ public sealed class ActivityOutcome
     /// </summary>
     /// <returns></returns>
     public static ActivityOutcome NoCaller() => new(ActivityOutcomeKind.NoCaller, null, null);
+
+    /// <summary>
+    /// The caller may read the entry but may not change it.
+    /// </summary>
+    /// <returns></returns>
+    public static ActivityOutcome Forbidden() => new(ActivityOutcomeKind.Forbidden, null, null);
 }

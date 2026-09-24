@@ -27,6 +27,7 @@ internal static class ServiceExt
             _ => new AzureBlobStorageRepository(blobConnection));
 
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IActivityAuthorizationService, ActivityAuthorizationService>();
         services.AddScoped<IActivityService, ActivityService>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<IUploadValidationService, UploadValidationService>();
