@@ -26,6 +26,8 @@ public sealed class MediaServiceTests
 
     private const string Stranger = "a-strangers-object-id";
 
+    private const string Admin = "the-administrators-object-id";
+
     private const string ActivityId = "the-activity";
 
     private static byte[] Bytes => "trail-blaze"u8.ToArray();
@@ -289,16 +291,30 @@ public sealed class MediaServiceTests
     }
 
     /// <summary>
-    /// Blocked, not skipped: Decision #27 names an administrator as a third principal who may
-    /// contribute, and nothing here can recognize one — <c>IUserContextService</c> carries no role,
-    /// so an administrator is judged as an ordinary user until feature 09. Asserting today's answer
-    /// is what makes the gap fail loudly on the day a role arrives, rather than reading as a rule
-    /// that was implemented whole.
+    /// Decision #27's third principal, and the reason the override is the role's rather than a
+    /// widening of the read rule: an administrator may contribute to an entry they could not
+    /// otherwise read.
     /// </summary>
     [Fact]
-    public async Task An_administrator_is_judged_as_an_ordinary_user_because_no_role_can_be_read()
+    public async Task An_administrator_may_contribute_to_an_entry_they_could_not_read()
     {
-        var harness = new Harness(caller: Stranger);
+        var harness = new Harness(caller: Admin, isAdmin: true);
+        harness.Repository.Activity = Activity(Constant.ActivityType.Private, Owner);
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+    }
+
+    /// <summary>
+    /// The same id in the same request, judged by the row instead: the only thing separating the
+    /// two answers above and here is what <c>users.Role</c> says.
+    /// </summary>
+    [Fact]
+    public async Task The_same_caller_without_the_admin_role_cannot_contribute_to_that_entry()
+    {
+        var harness = new Harness(caller: Admin);
         harness.Repository.Activity = Activity(Constant.ActivityType.Private, Owner);
 
         MediaOutcome outcome = await harness.Service.UploadAsync(
@@ -419,15 +435,15 @@ public sealed class MediaServiceTests
     // ---- Who may remove -------------------------------------------------------------------
 
     [Theory]
-    [InlineData(Contributor, Contributor, Owner, MediaOutcomeKind.Deleted)]
-    [InlineData(Owner, Contributor, Owner, MediaOutcomeKind.Deleted)]
-    [InlineData(Stranger, Contributor, Owner, MediaOutcomeKind.Forbidden)]
-    [InlineData(null, Contributor, Owner, MediaOutcomeKind.NoCaller)]
-    public async Task The_uploader_and_the_activity_owner_may_remove_an_item(
-        string? caller, string uploader, string owner, MediaOutcomeKind expected)
+    [InlineData(Contributor, Contributor, MediaOutcomeKind.Deleted)]
+    [InlineData(Owner, Contributor, MediaOutcomeKind.Forbidden)]
+    [InlineData(Stranger, Contributor, MediaOutcomeKind.Forbidden)]
+    [InlineData(null, Contributor, MediaOutcomeKind.NoCaller)]
+    public async Task The_uploader_may_remove_an_item_and_the_entries_owner_may_not(
+        string? caller, string uploader, MediaOutcomeKind expected)
     {
         var harness = new Harness(caller);
-        harness.Repository.Activity = Activity(Constant.ActivityType.Shared, owner);
+        harness.Repository.Activity = Activity(Constant.ActivityType.Shared, Owner);
         harness.Repository.Item = Item("one", uploader);
 
         MediaOutcome outcome = await harness.Service.DeleteAsync("one");
@@ -436,11 +452,27 @@ public sealed class MediaServiceTests
     }
 
     /// <summary>
-    /// Blocked, not skipped, as in the contribution table above: the administrator is Decision #27's
-    /// third principal and cannot be recognized yet.
+    /// The administrator is the other principal, and the only one who need not be the uploader to
+    /// remove an item.
     /// </summary>
     [Fact]
-    public async Task An_administrator_is_judged_as_an_ordinary_user_here_too()
+    public async Task An_administrator_may_remove_an_item_they_did_not_upload()
+    {
+        var harness = new Harness(caller: Admin, isAdmin: true);
+        harness.Repository.Activity = Activity(Constant.ActivityType.Shared, Owner);
+        harness.Repository.Item = Item("one", Contributor);
+
+        MediaOutcome outcome = await harness.Service.DeleteAsync("one");
+
+        Assert.Equal(MediaOutcomeKind.Deleted, outcome.Kind);
+    }
+
+    /// <summary>
+    /// A signed-in caller is not thereby permitted: the third principal is nobody, and this is the
+    /// cell that keeps the two above from reading as though any token were enough.
+    /// </summary>
+    [Fact]
+    public async Task A_signed_in_caller_who_is_neither_the_uploader_nor_an_admin_is_forbidden()
     {
         var harness = new Harness(caller: Stranger);
         harness.Repository.Activity = Activity(Constant.ActivityType.Shared, Owner);
@@ -449,6 +481,8 @@ public sealed class MediaServiceTests
         MediaOutcome outcome = await harness.Service.DeleteAsync("one");
 
         Assert.Equal(MediaOutcomeKind.Forbidden, outcome.Kind);
+        Assert.Empty(harness.Storage.Deleted);
+        Assert.Empty(harness.Repository.DeletedMedia);
     }
 
     [Fact]
@@ -506,24 +540,27 @@ public sealed class MediaServiceTests
     /// them.</summary>
     private sealed class Harness
     {
-        public Harness(string? caller = Contributor)
+        public Harness(string? caller = Contributor, bool isAdmin = false)
         {
-            Repository = new RecordingRepository { Activity = Activity(Constant.ActivityType.Public, Owner) };
+            Repository = new RecordingRepository
+            {
+                Activity = Activity(Constant.ActivityType.Public, Owner),
+
+                // Only the caller's own row, and only when the caller holds the role: an id the
+                // repository does not carry is a caller nobody promoted, which is the default.
+                Users = caller is null || !isAdmin
+                    ? []
+                    : [new User { Id = caller, Role = Constant.UserRole.Admin }],
+            };
             Storage = new RecordingStorage();
 
             Service = new MediaService(
                 Repository,
                 Storage,
 
-                // The real rule, not a stand-in: the visibility decision is the thing under test in
-                // the gate tables, and a double here would be asserting the double.
-                new ActivityService(
-                    Repository,
-                    new RecordingStorage(),
-                    new UploadValidationService(),
-                    new StubUserContext(caller),
-                    NullLogger<ActivityService>.Instance),
-                new StubUserContext(caller),
+                // The real rule, not a stand-in: the visibility and ownership decisions are the thing
+                // under test in the gate tables, and a double here would be asserting the double.
+                new ActivityAuthorizationService(Repository, new StubUserContext(caller)),
                 new UploadValidationService(),
                 NullLogger<MediaService>.Instance);
         }
@@ -589,6 +626,14 @@ public sealed class MediaServiceTests
             if (typeof(T) == typeof(Media))
             {
                 return Task.FromResult((T?)(object?)Item);
+            }
+
+            // The predicate the service built is the one that runs, so a lookup that selected the
+            // wrong row would fail here rather than reaching a row this double chose for it.
+            if (typeof(T) == typeof(User))
+            {
+                var matches = (Func<User, bool>)(object)predicate.Compile();
+                return Task.FromResult((T?)(object?)Users.FirstOrDefault(matches));
             }
 
             return Task.FromResult((T?)(object?)null);

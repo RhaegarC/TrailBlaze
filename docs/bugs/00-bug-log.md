@@ -21,7 +21,7 @@ Numbering is Project #1 (Mission 1 — TrailBlaze Activity Journal).
 **Privacy failures are critical by default.** Any bug where an activity's images or videos are
 reachable without authentication, or where a SAS URL is issued to an unauthorized caller, is
 Critical regardless of how small the repro appears — the whole public-text/private-media split
-rests on that boundary holding. See [.claude/agents/bug-fix.md](../../.claude/agents/bug-fix.md).
+rests on that boundary holding. See the `bug-fix` agent, `~/.claude/agents/bug-fix.md`.
 
 **The mirror of that rule is what is *not* a bug.** A divergence nobody can observe — the code and
 the standard disagree, but every caller still sees correct behaviour — does not belong in this log

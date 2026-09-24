@@ -181,9 +181,8 @@ public class ActivityController(
     /// Removes an item: its blob and its row.
     /// </summary>
     /// <remarks>
-    /// Three principals may do this and no fourth (Decision #27): the uploader, the owner of the
-    /// activity the item sits on, and an administrator. The administrator is not among them yet —
-    /// nothing can read a role — so one is judged as an ordinary user today.
+    /// Two principals may do this and no third (Decision #27): the item's uploader, and an
+    /// administrator. Owning the activity the item sits on is not enough.
     /// </remarks>
     /// <param name="mediaId">The item's id.</param>
     /// <returns>No content; not-found for an id that names nothing; forbidden for a caller who can
@@ -208,6 +207,7 @@ public class ActivityController(
         ActivityOutcomeKind.Completed => Ok(outcome.Activity),
         ActivityOutcomeKind.Deleted => NoContent(),
         ActivityOutcomeKind.NotFound => NotFound(),
+        ActivityOutcomeKind.Forbidden => Forbid(),
         ActivityOutcomeKind.NoCaller => Unauthorized(),
         _ => ValidationProblem(
             new ValidationProblemDetails(new Dictionary<string, string[]>(outcome.Errors!))),

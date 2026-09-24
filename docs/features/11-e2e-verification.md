@@ -30,6 +30,14 @@ is replaced by evidence that a visitor, a user, and an admin each see exactly wh
 This feature exercises the output of every feature before it — 01 through 10 — and cannot pass
 unless they all pass. It is last in the ladder by design.
 
+It also carries one thing that was planned elsewhere: **[09](09-permission-enforcement.md)'s
+live-pipeline status matrix** — each endpoint driven over the real pipeline with a test token, and
+the **403/404 pair asserted on the same route** *(2026-09-24 — moved here from 09, whose Api tier
+boots against an unreachable connection string and would fail on the connection rather than on the
+rule. Test-token infrastructure arrives with the tier that can use it, rather than as scaffolding
+in 09.)* The criteria below already assert those statuses as part of the journey; this note is
+here so a reader looking for the bullet in 09 finds where it went.
+
 ## Acceptance criteria
 
 Each is performed against a running stack: the API running from its container image, configured
@@ -83,8 +91,8 @@ the app assumes, or whether the real tenant issues the token the API validates.
       restores a plain public URL that needs no SAS
 - [ ] **Collaborative media**: a second signed-in user adds media to the **first** user's `Public`
       activity and succeeds; the detail view groups the media **by uploader** with working
-      collapse/expand; and the second user's item is deletable by that user, by the activity's
-      owner, and by the admin
+      collapse/expand; and the second user's item is deletable by that user and by the admin — and
+      **not** by the activity's owner, who gets 403 on it (Decision #27, narrowed 2026-09-24)
 - [ ] **Collaboration refused where the caller cannot see the activity**: that same second user
       attempting to add media to a `Private` activity they cannot read is refused with **404**,
       not 403 — and `GET /api/activity/{id}/media` / `GET /api/media/{id}/url` return **404**

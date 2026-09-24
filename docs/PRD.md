@@ -165,7 +165,7 @@ Every requirement decision from the grilling session, in order:
 | 24 | Upload limits | **50 media per contributor per activity**, images ≤ 10 MB, videos ≤ 200 MB. *The count was raised from 20 and re-scoped from per-activity to per-contributor-per-activity on 2026-09-20, at feature 06's review: media is collaborative (#27), so a single shared budget would let one person fill an activity everyone contributes to* |
 | 25 | Date representation | **Calendar date only** — no time, no timezone, no UTC-midnight conversion |
 | 26 | Per-activity visibility | **`Type` ∈ {`Public`, `Shared`, `Private`}**, required, defaulting to `Public`. `Public` = anonymous may read; `Shared` = signed-in users only; `Private` = the owner only (and admins). Visibility gates **reading**; it never gates media, which needs sign-in at every level (#2). Added from the Figma export, 2026-09-15 — this supersedes the earlier flat "everything is public-read" model and reverses the earlier rejection of private entries in the shared feed, which was rejected on the assumption that private meant *separate journals* |
-| 27 | Media is collaborative | **Any signed-in user who can see an activity may add media to it**, not only its owner. Each `media` row records its **uploader**, and the detail view groups items by uploader. Deletion is allowed to the **uploader, the activity's owner, or an admin**. The cap (#24) bounds what one contributor adds to one activity, not the activity's total — the same collaboration this decision establishes is why it is counted that way |
+| 27 | Media is collaborative | **Any signed-in user who can see an activity may add media to it**, not only its owner. Each `media` row records its **uploader**, and the detail view groups items by uploader. Deletion is allowed to the **uploader or an admin**, and to nobody else: owning the activity an item sits on does not carry the right to remove bytes someone else put there *(narrowed 2026-09-24 — this row read "uploader, the activity's owner, or an admin" until feature 09's review; the activity's owner was removed from the list)*. The cap (#24) bounds what one contributor adds to one activity, not the activity's total — the same collaboration this decision establishes is why it is counted that way |
 | 28 | User profile & preferences | **Display name, bio, avatar, theme and language are stored server-side per user** and edited on a profile screen. Avatar lives in the **public** `avatars` container. Theme ∈ {`Dark`, `Light`}, language ∈ {`en`, `zh`}; both are presentation preferences and carry no authorization meaning |
 | 29 | Cover container follows visibility | A cover is uploaded **directly into the container its activity's visibility requires**: `covers` (public) for a Public activity, `media` (private, SAS-served) for Shared and Private ones. Changing an activity's `Type` across that line **moves the cover** — see "Media storage & delivery". #14's rule that a cover is its own upload and is never derived from private media stands unchanged |
 | 30 | Anonymous payload scope | The anonymous response may carry the activity's **media count** and its **creator's display name**. It may **not** carry a user id, a blob path, a SAS URL, or any per-item media field. Relaxes the stricter rule feature 05 originally stated, which forbade the count as media-derived |
@@ -317,7 +317,7 @@ admin pages everything.
 | `DELETE /api/activity/{id}` | ❌ 401 | ❌ 403 | ✅ 204 | ✅ 204 |
 | `POST /api/activity/{id}/cover` | ❌ 401 | ❌ 403 | ✅ 200 | ✅ 200 |
 | `POST /api/activity/{id}/media` | ❌ 401 | ✅ 201 if they can read the activity, ❌ **404** if not | ✅ 201 | ✅ 201 |
-| `DELETE /api/media/{id}` | ❌ 401 | ✅ 204 **if they uploaded it**, ❌ 403 otherwise | ✅ 204 | ✅ 204 |
+| `DELETE /api/media/{id}` | ❌ 401 | ✅ 204 **if they uploaded it**, ❌ 403 otherwise — **and also 403 for the activity's owner** | ✅ 403 unless they uploaded it | ✅ 204 |
 | `PUT /user/me`, `POST` / `DELETE /user/me/avatar` | ❌ 401 | ✅ self only — ❌ 403 for any other user | ✅ self only | ✅ self only |
 
 Media mutation is the one place the two axes cross: **any signed-in user who can see an activity
@@ -383,7 +383,7 @@ everyone together adds.
 | `GET` | `/api/activity/{id}/media` | anyone who can read the activity | Media metadata, each item carrying its uploader |
 | `POST` | `/api/activity/{id}/media` | any signed-in caller who can read the activity | Upload image/video → private container (collaborative, Decision #27) |
 | `GET` | `/api/media/{id}/url` | anyone who can read the activity | Mint a short-lived SAS URL |
-| `DELETE` | `/api/media/{id}` | uploader / activity owner / admin | Delete media (row + blob) |
+| `DELETE` | `/api/media/{id}` | uploader / admin | Delete media (row + blob) |
 | `GET` | `/user/me` | user | The caller's own row, inserted on first call — **already implemented** |
 | `PUT` | `/user/me` | self | Update display name, bio, preferred theme and language |
 | `POST` | `/user/me/avatar` | self | Upload/replace avatar → public `avatars` container |

@@ -29,7 +29,8 @@ decides who may *edit* an entry rather than who may read it.
 
 ## Working on it
 
-The workflow lives in `.claude/` and runs on slash commands:
+The workflow lives in `~/.claude/` — skills, agents and slash commands shared across every
+repository — and runs on slash commands:
 
 ```
 /capture <kind> NN    # a feature spec or a bug report

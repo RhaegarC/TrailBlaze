@@ -1,7 +1,7 @@
 namespace TrailBlaze.Model.Activity;
 
 /// <summary>
-/// Which of the four answers a cover write produced.
+/// Which of the five answers a cover write produced.
 /// </summary>
 public enum CoverOutcomeKind
 {
@@ -16,6 +16,13 @@ public enum CoverOutcomeKind
 
     /// <summary>The request names no caller.</summary>
     NoCaller,
+
+    /// <summary>
+    /// The caller may read the activity but may not give it a face. Distinct from
+    /// <see cref="NotFound"/>: a cover is the entry's own field, so unlike media it is the owner's
+    /// to change and a stranger's read access is not a licence to replace it.
+    /// </summary>
+    Forbidden,
 }
 
 /// <summary>
@@ -38,7 +45,7 @@ public sealed class CoverOutcome
         Errors = errors;
     }
 
-    /// <summary>Which of the four answers this is.</summary>
+    /// <summary>Which of the five answers this is.</summary>
     public CoverOutcomeKind Kind { get; }
 
     /// <summary>The cover as it now stands, set only when <see cref="Kind"/> is
@@ -68,4 +75,8 @@ public sealed class CoverOutcome
     /// <summary>The request names no caller.</summary>
     /// <returns></returns>
     public static CoverOutcome NoCaller() => new(CoverOutcomeKind.NoCaller, null, null);
+
+    /// <summary>The caller may read the activity but may not change its cover.</summary>
+    /// <returns></returns>
+    public static CoverOutcome Forbidden() => new(CoverOutcomeKind.Forbidden, null, null);
 }
