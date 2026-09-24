@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parent.parent
 FEATURES = ROOT / "docs" / "features"
 SPRINT = FEATURES / "00-mission-1-sprint.md"
 TEST_STRATEGY = ROOT / "docs" / "testing-and-tdd.md"
-COMMANDS = ROOT / ".claude" / "commands"
+# The slash commands are the user's global configuration rather than a per-repository copy, so
+# the set the README is checked against lives outside the tree.
+COMMANDS = Path.home() / ".claude" / "commands"
 README = ROOT / "README.md"
 STANDARD = ROOT / "src" / "api" / "STANDARD.md"
 REPOSITORY = ROOT / "src" / "api" / "TrailBlaze.Repository"
@@ -202,11 +204,18 @@ def readme_lists_every_command():
     """The README's command block names every slash command, and invents none."""
     if not README.exists():
         return [f"missing {relative(ROOT, README)}"]
+
+    # Nothing to compare against where the global configuration is absent — a fresh clone on a
+    # machine that has not been set up. Reported as nothing rather than as a failure, because the
+    # README is not what is missing.
+    if not COMMANDS.is_dir():
+        return []
+
     documented = set(re.findall(r"^/([a-z-]+)", README.read_text(encoding="utf-8"), re.MULTILINE))
     defined = {path.stem for path in COMMANDS.glob("*.md")}
-    return [f"/{name} is defined in .claude/commands but not listed in the README"
+    return [f"/{name} is defined in {COMMANDS} but not listed in the README"
             for name in sorted(defined - documented)] + [
-        f"/{name} is listed in the README but has no .claude/commands/{name}.md"
+        f"/{name} is listed in the README but has no {COMMANDS / (name + '.md')}"
         for name in sorted(documented - defined)
     ]
 
