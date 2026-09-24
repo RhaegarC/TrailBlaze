@@ -78,8 +78,11 @@ feature: their endpoints ship permissive and are brought under the matrix here.
       caller who can read the activity**, including a stranger on a `Public` or `Shared` entry
       (Decision #27). Encoding the older owner-only rule here is the single most likely way to
       regress this feature, so the criterion is stated as an allow rather than a denial
-- [x] `DELETE /api/media/{id}` succeeds for the item's **uploader**, the **owner of its activity**,
-      and an **admin**, and a fourth signed-in user gets **403**. `PUT /user/me`, `POST` and
+- [x] `DELETE /api/media/{id}` succeeds for the item's **uploader** and for an **admin**, and a
+      third signed-in user gets **403** — including the **owner of the activity** the item sits on
+      *(corrected 2026-09-24 — this criterion granted the activity's owner the same right, following
+      the PRD as it then read. Review rejected it and the PRD row was narrowed to match: owning an
+      entry carries no right over bytes another user uploaded to it.)* `PUT /user/me`, `POST` and
       `DELETE /user/me/avatar` are **self-only** where `User` is concerned — a caller may never
       read or write another user's profile, and an attempt gets **403**. The self-only half is
       structural rather than a runtime check: no route on `UserController` takes a user id, so
@@ -138,9 +141,11 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   `User`-role caller carrying an admin-shaped claim is denied admin override.
 - Unit (`TrailBlaze.Service.Test`) — **hot spot (the axis crossing)**: assert that
   `POST /api/activity/{id}/media` **allows** a non-owner who can read the activity and
-  **denies** one who cannot, and that `DELETE /api/media/{id}` allows the uploader *and* the
-  activity owner *and* an admin. These two are written as explicit allow-tests precisely because
-  the intuitive-but-wrong owner-only rule would pass every other test in this file.
+  **denies** one who cannot, and that `DELETE /api/media/{id}` allows the uploader *and* an admin
+  while **refusing the activity's owner**. These two are written as explicit allow-and-refuse tests
+  precisely because the intuitive-but-wrong rule would pass every other test in this file — for
+  contribution that is "only the owner may add", and for removal it is "the owner may curate their
+  own entry", which is the one review caught.
 - Integration (`TrailBlaze.Api.Test`) — **moved to [feature 11](11-e2e-verification.md)**
   *(2026-09-24)*: exercise each endpoint over the real pipeline with a test token, asserting the
   exact status code — 401 unauthenticated, 403 authenticated-but-not-permitted, 404 absent **or

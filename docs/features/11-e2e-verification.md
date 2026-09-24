@@ -91,8 +91,8 @@ the app assumes, or whether the real tenant issues the token the API validates.
       restores a plain public URL that needs no SAS
 - [ ] **Collaborative media**: a second signed-in user adds media to the **first** user's `Public`
       activity and succeeds; the detail view groups the media **by uploader** with working
-      collapse/expand; and the second user's item is deletable by that user, by the activity's
-      owner, and by the admin
+      collapse/expand; and the second user's item is deletable by that user and by the admin — and
+      **not** by the activity's owner, who gets 403 on it (Decision #27, narrowed 2026-09-24)
 - [ ] **Collaboration refused where the caller cannot see the activity**: that same second user
       attempting to add media to a `Private` activity they cannot read is refused with **404**,
       not 403 — and `GET /api/activity/{id}/media` / `GET /api/media/{id}/url` return **404**

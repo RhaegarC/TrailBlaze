@@ -81,8 +81,9 @@ Verified by hand against a running stack; each is observable in a browser.
       **per-uploader groups** that collapse and expand, each group labelled with the uploader's
       display name, and the grouping follows who added each item rather than the activity's owner
 - [ ] **Delete respects collaboration**: the delete affordance appears on an item the signed-in
-      user uploaded, and on every item for the activity's owner and for an `Admin`; a deletion
-      goes through `DELETE /api/media/{id}` and the item is gone on reload
+      user uploaded, and on every item for an `Admin` — and on **no** item otherwise, including the
+      activity's owner's own entry (Decision #27, narrowed 2026-09-24); a deletion goes through
+      `DELETE /api/media/{id}` and the item is gone on reload
 - [ ] **Edit own**: an owned activity's edit form loads current values **including the visibility
       selector**, saves via `PUT /api/activity/{id}`, and the change is visible on reload; an
       edit that moves the activity across the public line leaves its cover rendering correctly

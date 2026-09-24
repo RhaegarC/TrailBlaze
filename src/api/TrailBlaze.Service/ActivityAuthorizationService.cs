@@ -56,8 +56,7 @@ public sealed class ActivityAuthorizationService(
             || (caller.IsSignedIn && activity.CreatedBy == caller.Id));
 
     /// <inheritdoc/>
-    public bool CanRemoveMedia(Media media, Activity? activity, Caller caller) =>
+    public bool CanRemoveMedia(Media media, Caller caller) =>
         caller.IsAdmin
-        || (caller.IsSignedIn
-            && (media.CreatedBy == caller.Id || activity?.CreatedBy == caller.Id));
+        || (caller.IsSignedIn && media.CreatedBy == caller.Id);
 }

@@ -201,9 +201,7 @@ public sealed class MediaService(
                 return MediaOutcome.NotFound();
             }
 
-            Activity? activity = await dbRepository.GetAsync<Activity>(row => row.Id == media.ActivityId);
-
-            if (!authorization.CanRemoveMedia(media, activity, caller))
+            if (!authorization.CanRemoveMedia(media, caller))
             {
                 return MediaOutcome.Forbidden();
             }

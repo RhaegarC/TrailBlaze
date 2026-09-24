@@ -435,15 +435,15 @@ public sealed class MediaServiceTests
     // ---- Who may remove -------------------------------------------------------------------
 
     [Theory]
-    [InlineData(Contributor, Contributor, Owner, MediaOutcomeKind.Deleted)]
-    [InlineData(Owner, Contributor, Owner, MediaOutcomeKind.Deleted)]
-    [InlineData(Stranger, Contributor, Owner, MediaOutcomeKind.Forbidden)]
-    [InlineData(null, Contributor, Owner, MediaOutcomeKind.NoCaller)]
-    public async Task The_uploader_and_the_activity_owner_may_remove_an_item(
-        string? caller, string uploader, string owner, MediaOutcomeKind expected)
+    [InlineData(Contributor, Contributor, MediaOutcomeKind.Deleted)]
+    [InlineData(Owner, Contributor, MediaOutcomeKind.Forbidden)]
+    [InlineData(Stranger, Contributor, MediaOutcomeKind.Forbidden)]
+    [InlineData(null, Contributor, MediaOutcomeKind.NoCaller)]
+    public async Task The_uploader_may_remove_an_item_and_the_entries_owner_may_not(
+        string? caller, string uploader, MediaOutcomeKind expected)
     {
         var harness = new Harness(caller);
-        harness.Repository.Activity = Activity(Constant.ActivityType.Shared, owner);
+        harness.Repository.Activity = Activity(Constant.ActivityType.Shared, Owner);
         harness.Repository.Item = Item("one", uploader);
 
         MediaOutcome outcome = await harness.Service.DeleteAsync("one");
@@ -452,11 +452,11 @@ public sealed class MediaServiceTests
     }
 
     /// <summary>
-    /// The administrator is the third principal here too, and the only one who need not be the
-    /// uploader or the entry's owner to remove an item.
+    /// The administrator is the other principal, and the only one who need not be the uploader to
+    /// remove an item.
     /// </summary>
     [Fact]
-    public async Task An_administrator_may_remove_an_item_they_neither_uploaded_nor_own()
+    public async Task An_administrator_may_remove_an_item_they_did_not_upload()
     {
         var harness = new Harness(caller: Admin, isAdmin: true);
         harness.Repository.Activity = Activity(Constant.ActivityType.Shared, Owner);
@@ -468,11 +468,11 @@ public sealed class MediaServiceTests
     }
 
     /// <summary>
-    /// A signed-in caller is not thereby permitted: the fourth principal is nobody, and this is the
+    /// A signed-in caller is not thereby permitted: the third principal is nobody, and this is the
     /// cell that keeps the two above from reading as though any token were enough.
     /// </summary>
     [Fact]
-    public async Task A_signed_in_caller_who_is_neither_the_uploader_nor_the_owner_is_forbidden()
+    public async Task A_signed_in_caller_who_is_neither_the_uploader_nor_an_admin_is_forbidden()
     {
         var harness = new Harness(caller: Stranger);
         harness.Repository.Activity = Activity(Constant.ActivityType.Shared, Owner);

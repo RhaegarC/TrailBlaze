@@ -181,8 +181,8 @@ public class ActivityController(
     /// Removes an item: its blob and its row.
     /// </summary>
     /// <remarks>
-    /// Three principals may do this and no fourth (Decision #27): the uploader, the owner of the
-    /// activity the item sits on, and an administrator.
+    /// Two principals may do this and no third (Decision #27): the item's uploader, and an
+    /// administrator. Owning the activity the item sits on is not enough.
     /// </remarks>
     /// <param name="mediaId">The item's id.</param>
     /// <returns>No content; not-found for an id that names nothing; forbidden for a caller who can
@@ -207,10 +207,6 @@ public class ActivityController(
         ActivityOutcomeKind.Completed => Ok(outcome.Activity),
         ActivityOutcomeKind.Deleted => NoContent(),
         ActivityOutcomeKind.NotFound => NotFound(),
-
-        // Forbid rather than a bare 403 status: it is the answer the authentication stack writes,
-        // so a refusal carries whatever the configured scheme puts in it. It answers 403 and never
-        // a challenge, because only an authenticated caller can reach this branch.
         ActivityOutcomeKind.Forbidden => Forbid(),
         ActivityOutcomeKind.NoCaller => Unauthorized(),
         _ => ValidationProblem(

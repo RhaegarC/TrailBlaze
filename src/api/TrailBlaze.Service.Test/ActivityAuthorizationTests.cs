@@ -137,54 +137,38 @@ public sealed class ActivityAuthorizationTests
     // ---- Removing one item of media ---------------------------------------------------------
 
     /// <summary>
-    /// Decision #27's three principals, written as an allow because the intuitive-but-wrong rule —
-    /// that only the contributor may remove their own item — would pass every other test here.
+    /// Decision #27's two principals, written as an allow because the intuitive-but-wrong rule —
+    /// that only the uploader may remove their own item — would pass every other test here.
     /// </summary>
     [Fact]
-    public void The_uploader_the_entries_owner_and_an_administrator_may_remove_an_item()
+    public void The_uploader_and_an_administrator_may_remove_an_item()
     {
         Media item = Item(uploader: Stranger);
-        Activity entry = Row(Constant.ActivityType.Public, Owner);
 
-        Assert.True(Rule.CanRemoveMedia(item, entry, AsStranger));
-        Assert.True(Rule.CanRemoveMedia(item, entry, AsOwner));
-        Assert.True(Rule.CanRemoveMedia(item, entry, AsAdmin));
+        Assert.True(Rule.CanRemoveMedia(item, AsStranger));
+        Assert.True(Rule.CanRemoveMedia(item, AsAdmin));
     }
 
     /// <summary>
-    /// There are three principals and no fourth: a signed-in caller who is neither is refused, and
-    /// the token alone buys nothing.
+    /// The entry's owner is not a third principal: owning the entry an item sits on carries no
+    /// right over bytes someone else put there, which is the intuitive rule this rule rejects.
     /// </summary>
     [Fact]
-    public void A_signed_in_caller_who_is_neither_is_refused()
-    {
-        Media item = Item(uploader: Stranger);
-        Activity entry = Row(Constant.ActivityType.Public, Owner);
-
-        Assert.False(Rule.CanRemoveMedia(item, entry, new Caller("neither-of-the-two", IsAdmin: false)));
-    }
-
-    [Fact]
-    public void An_anonymous_caller_may_remove_nothing()
-    {
-        Media item = Item(uploader: Stranger);
-        Activity entry = Row(Constant.ActivityType.Public, Owner);
-
-        Assert.False(Rule.CanRemoveMedia(item, entry, Caller.Anonymous));
-    }
+    public void The_owner_of_the_entry_may_not_remove_an_item_they_did_not_upload() =>
+        Assert.False(Rule.CanRemoveMedia(Item(uploader: Stranger), AsOwner));
 
     /// <summary>
-    /// The activity may be gone — a media row whose entry no longer resolves — and the uploader is
-    /// still the uploader. The owner half simply has nothing to match on.
+    /// Two principals and no third: a signed-in caller who is neither is refused, and the token
+    /// alone buys nothing.
     /// </summary>
     [Fact]
-    public void An_uploader_may_still_remove_their_item_when_the_entry_does_not_resolve()
-    {
-        Media item = Item(uploader: Stranger);
+    public void A_signed_in_caller_who_is_neither_is_refused() =>
+        Assert.False(Rule.CanRemoveMedia(
+            Item(uploader: Stranger), new Caller("neither-of-the-two", IsAdmin: false)));
 
-        Assert.True(Rule.CanRemoveMedia(item, null, AsStranger));
-        Assert.False(Rule.CanRemoveMedia(item, null, AsOwner));
-    }
+    [Fact]
+    public void An_anonymous_caller_may_remove_nothing() =>
+        Assert.False(Rule.CanRemoveMedia(Item(uploader: Stranger), Caller.Anonymous));
 
     // ---- Where the role comes from -----------------------------------------------------------
 

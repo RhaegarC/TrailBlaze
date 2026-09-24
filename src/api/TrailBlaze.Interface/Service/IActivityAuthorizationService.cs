@@ -48,12 +48,11 @@ public interface IActivityAuthorizationService
     bool CanMutate(Activity? activity, Caller caller);
 
     /// <summary>
-    /// Who may remove one item of media: the caller who uploaded it, the owner of the entry it sits
-    /// on, and an administrator (Decision #27).
+    /// Who may remove one item of media: the caller who uploaded it, and an administrator
+    /// (Decision #27). Owning the entry it sits on is not enough.
     /// </summary>
     /// <param name="media">The item.</param>
-    /// <param name="activity">The entry it sits on, or null when it no longer resolves.</param>
     /// <param name="caller">Who is asking.</param>
-    /// <returns>True when this caller is one of the three principals.</returns>
-    bool CanRemoveMedia(Media media, Activity? activity, Caller caller);
+    /// <returns>True when this caller is the uploader or an administrator.</returns>
+    bool CanRemoveMedia(Media media, Caller caller);
 }
