@@ -56,7 +56,7 @@ table](../PRD.md#current-state-vs-target) states capability rather than progress
 | 06 | [media-upload](archive/06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 50 per contributor per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | archived — merged in PR #17. Upload, metadata listing and item deletion work; **the administrator among the permitted deleters is not implemented** (no role is readable, so it lands with 09), and **fetching the bytes is 07's** |
 | 07 | [sas-delivery](07-sas-delivery.md) | 06 | `GET /api/media/{id}/url` mints a **short-lived SAS URL**, and **only** for an authenticated caller — rejected before any blob operation otherwise | not started |
 | 08 | [cover-images](archive/08-cover-images.md) | 04 | Cover is a **separate upload** whose container **follows the activity's `Type`** — public `covers` for `Public`, private `media` otherwise; a `Type` change across that line **moves** the cover. Never derived from private media | archived — merged in PR #20. The upload route, the routing rule and the visibility-change move are built and proven, the move against a live account; **no ownership rule** (any signed-in caller who can read an entry may set its cover), which lands with 09 |
-| 09 | [permission-enforcement](09-permission-enforcement.md) | 03, 04 | **Two axes enforced in one service**: visibility gates reads, ownership gates mutations, `Admin` overrides both. Anonymous denied everywhere except the two public read endpoints. Media upload is the axis crossing — allowed to any caller who can read the activity | not started |
+| 09 | [permission-enforcement](09-permission-enforcement.md) | 03, 04 | **Two axes enforced in one service**: visibility gates reads, ownership gates mutations, `Admin` overrides both. Anonymous denied everywhere except the two public read endpoints. Media upload is the axis crossing — allowed to any caller who can read the activity | in progress — branch `feature/09-permission-enforcement`, under review in its pull request. `IActivityAuthorizationService` holds the whole rule and every route consults it; the role is read from `users.Role`; 403 and 404 are told apart on the same route. **Two claims are not made here**: the live-pipeline status matrix moves to 11 (the Api tier cannot carry a token into an unreachable database), and the "leaves no blob" half of the rejected-mutation criterion has no tier to live in, so the ordering double is what proves it |
 | 10 | [figma-integration](10-figma-integration.md) | 05, 07, 08, 09 | The Figma-exported app wired to the API: MSAL login, API calls, role gating, **visibility badges**, **media grouped by uploader**, and the **profile screen**. **Non-TDD** — verified manually | not started |
 | 11 | [e2e-verification](11-e2e-verification.md) | 10 | Full-stack pass against a running stack: anonymous `Public`-only list → sign in for `Shared` → media visible → create with `Type` → collaborative upload by a second user → grouped by uploader → edit own → a `Private` entry 404s for a stranger → admin override | not started |
 
@@ -103,10 +103,10 @@ file's.
 
 | Project | Bare machine | With the containers |
 |---|---|---|
-| `TrailBlaze.Service.Test` | 105 / 0 / 105 | 105 / 0 / 105 |
-| `TrailBlaze.Repository.Test` | 58 / 55 / 113 | 113 / 0 / 113 |
-| `TrailBlaze.Api.Test` | 12 / 0 / 12 | 12 / 0 / 12 |
-| **All three** | **175 / 55 / 230** | **230 / 0 / 230** |
+| `TrailBlaze.Service.Test` | 230 / 0 / 230 | 230 / 0 / 230 |
+| `TrailBlaze.Repository.Test` | 47 / 75 / 122 | 122 / 0 / 122 |
+| `TrailBlaze.Api.Test` | 18 / 0 / 18 | 18 / 0 / 18 |
+| **All three** | **295 / 75 / 370** | **370 / 0 / 370** |
 
 Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
 the container tiers skip, and `Category=Container` is the only trait in the solution.

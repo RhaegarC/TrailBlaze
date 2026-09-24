@@ -30,6 +30,14 @@ is replaced by evidence that a visitor, a user, and an admin each see exactly wh
 This feature exercises the output of every feature before it — 01 through 10 — and cannot pass
 unless they all pass. It is last in the ladder by design.
 
+It also carries one thing that was planned elsewhere: **[09](09-permission-enforcement.md)'s
+live-pipeline status matrix** — each endpoint driven over the real pipeline with a test token, and
+the **403/404 pair asserted on the same route** *(2026-09-24 — moved here from 09, whose Api tier
+boots against an unreachable connection string and would fail on the connection rather than on the
+rule. Test-token infrastructure arrives with the tier that can use it, rather than as scaffolding
+in 09.)* The criteria below already assert those statuses as part of the journey; this note is
+here so a reader looking for the bullet in 09 finds where it went.
+
 ## Acceptance criteria
 
 Each is performed against a running stack: the API running from its container image, configured
