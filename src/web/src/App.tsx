@@ -1,4 +1,28 @@
-import { createContext, useContext, useState } from "react";
+// @integration:begin the export's imports, plus everything it was written without: the API,
+// sign-in, and the strings its translation table has no entry for because fixtures never fail.
+import { createContext, useContext, useEffect, useState } from "react";
+import { signIn, signInAvailable, signOut, useAuth } from "./auth/store";
+import { toApiError, type ApiError } from "./api/client";
+import {
+  createActivity,
+  deleteActivity,
+  removeAvatar,
+  updateActivity,
+  updateProfile,
+  uploadAvatar,
+  uploadCover,
+  uploadMedia,
+} from "./api/endpoints";
+import { toWireActivityType, type ActivityView, type MediaView } from "./api/mappers";
+import {
+  useActivities,
+  useActivity,
+  useActivityCount,
+  useActivityMedia,
+  useProfile,
+} from "./data/hooks";
+import { failureText, fieldError, loadingText, retryText, signOutText } from "./i18n/failures";
+// @integration:end
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -219,93 +243,11 @@ const T = {
   },
 } as const;
 
-// ─── Mock data ─────────────────────────────────────────────────────────────────
-
-const MOCK_ACTIVITIES: Activity[] = [
-  {
-    id: "1",
-    title: "Summit Attempt on Mount Rainier",
-    location: "Mount Rainier National Park, WA",
-    activityDate: "2026-09-12",
-    description: "Set out from Paradise at 0300 with crampon packs and a clear forecast. Hit the Disappointment Cleaver in whiteout conditions by 0900 — turned back at 12,400 ft. Not today, but the mountain is patient.",
-    coverImageUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&h=500&fit=crop&auto=format",
-    createdBy: "Rhys Caldwell",
-    createdByUserId: "user-1",
-    mediaCount: 12,
-    type: "public",
-  },
-  {
-    id: "2",
-    title: "Enchantments Through-Hike",
-    location: "Alpine Lakes Wilderness, WA",
-    activityDate: "2026-09-05",
-    description: "Three days, 18 miles, elevation change that makes your legs ask hard questions. The Upper Enchantments at dawn — no words. Camped at Leprechaun Lake on night two. Permit lottery finally came through after four years of applying.",
-    coverImageUrl: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=800&h=500&fit=crop&auto=format",
-    createdBy: "Saoirse Mäkinen",
-    createdByUserId: "user-2",
-    mediaCount: 28,
-    type: "shared",
-  },
-  {
-    id: "3",
-    title: "Night Run on the PCT",
-    location: "Snoqualmie Pass, WA",
-    activityDate: "2026-08-29",
-    description: "Full moon, headlamp as backup only. 22 miles north from the pass and back. Hit a black bear and her cub at mile 9 — gave them wide berth, continued. The trail at 2 AM has a different texture.",
-    coverImageUrl: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=500&fit=crop&auto=format",
-    createdBy: "Rhys Caldwell",
-    createdByUserId: "user-1",
-    mediaCount: 4,
-    type: "private",
-  },
-  {
-    id: "4",
-    title: "Glacier Crossing — Eldorado Peak",
-    location: "North Cascades, WA",
-    activityDate: "2026-08-17",
-    description: "Approached via Roush Creek trail. Roped up on the glacier, navigated crevasse field in early morning freeze. Summit at 0745. Views east into the Cascades for 200 miles.",
-    coverImageUrl: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=500&fit=crop&auto=format",
-    createdBy: "Tomás Herrera",
-    createdByUserId: "user-3",
-    mediaCount: 19,
-    type: "public",
-  },
-  {
-    id: "5",
-    title: "Olympic Coast Packraft",
-    location: "Olympic Peninsula, WA",
-    activityDate: "2026-08-03",
-    description: "Four days paddling and beach-camping from Rialto Beach to Oil City. Timed the headlands on the tides. Found a massive grey whale skeleton at Cape Johnson. Zero other humans from day two on.",
-    coverImageUrl: "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=800&h=500&fit=crop&auto=format",
-    createdBy: "Saoirse Mäkinen",
-    createdByUserId: "user-2",
-    mediaCount: 33,
-    type: "shared",
-  },
-  {
-    id: "6",
-    title: "Ptarmigan Traverse",
-    location: "North Cascades Wilderness, WA",
-    activityDate: "2026-07-20",
-    description: "Classic route. Six days, primarily on snow and glacier until late season. Caught a massive storm on day four and bivy'd in a crevasse lip. Emerged to complete the traverse in excellent style.",
-    coverImageUrl: "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=800&h=500&fit=crop&auto=format",
-    createdBy: "Tomás Herrera",
-    createdByUserId: "user-3",
-    mediaCount: 41,
-    type: "public",
-  },
-];
-
-const MOCK_MEDIA: MediaItem[] = [
-  { id: "m1", kind: "Image", originalFileName: "summit_approach.jpg", sizeBytes: 4200000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&h=400&fit=crop&auto=format", uploadedBy: "Rhys Caldwell", uploadedByUserId: "user-1" },
-  { id: "m2", kind: "Image", originalFileName: "cleaver_camp.jpg", sizeBytes: 3800000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=600&h=400&fit=crop&auto=format", uploadedBy: "Rhys Caldwell", uploadedByUserId: "user-1" },
-  { id: "m3", kind: "Image", originalFileName: "rope_team.jpg", sizeBytes: 5100000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=400&fit=crop&auto=format", uploadedBy: "Rhys Caldwell", uploadedByUserId: "user-1" },
-  { id: "m4", kind: "Video", originalFileName: "whiteout_conditions.mov", sizeBytes: 48000000, contentType: "video/quicktime", url: "", uploadedBy: "Rhys Caldwell", uploadedByUserId: "user-1" },
-  { id: "m5", kind: "Image", originalFileName: "glacier_below_cleaver.jpg", sizeBytes: 3200000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=600&h=400&fit=crop&auto=format", uploadedBy: "Saoirse Mäkinen", uploadedByUserId: "user-2" },
-  { id: "m6", kind: "Image", originalFileName: "view_east_from_summit.jpg", sizeBytes: 6700000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&h=400&fit=crop&auto=format", uploadedBy: "Saoirse Mäkinen", uploadedByUserId: "user-2" },
-  { id: "m7", kind: "Image", originalFileName: "team_at_camp.jpg", sizeBytes: 4800000, contentType: "image/jpeg", url: "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=600&h=400&fit=crop&auto=format", uploadedBy: "Tomás Herrera", uploadedByUserId: "user-3" },
-  { id: "m8", kind: "Video", originalFileName: "descent_timelapse.mp4", sizeBytes: 112000000, contentType: "video/mp4", url: "", uploadedBy: "Tomás Herrera", uploadedByUserId: "user-3" },
-];
+// @integration:begin the export's fixtures are replaced by the API
+// `MOCK_ACTIVITIES` and `MOCK_MEDIA` are gone rather than emptied: `data/hooks.ts` supplies
+// both, and a fixture left here would be a second source of truth that nothing keeps in step
+// with the server.
+// @integration:end
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -434,14 +376,22 @@ function Nav({
           )}
 
           {authRole === "visitor" ? (
-            <a href="/auth/login" className={`flex items-center gap-2 text-sm font-medium ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
+            // @integration:begin sign-in is an MSAL popup, not a link to a route this app does not have
+            <button
+              type="button"
+              onClick={() => void signIn()}
+              disabled={!signInAvailable}
+              title={signInAvailable ? undefined : "This deployment has no Entra tenant configured."}
+              className={`flex items-center gap-2 text-sm font-medium ${C.dim} hover:text-[var(--tb-fg)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors`}
+            >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M9 2H12C12.5523 2 13 2.44772 13 3V11C13 11.5523 12.5523 12 12 12H9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
                 <path d="M6 9.5L9 7L6 4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M1 7H9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
               </svg>
               {t.signIn}
-            </a>
+            </button>
+            // @integration:end
           ) : (
             <button onClick={() => onNavigate({ name: "profile" })} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               <span className="w-6 h-6 rounded-full bg-[#c8893a] flex items-center justify-center text-[10px] font-semibold text-[#0f120e]">
@@ -509,10 +459,12 @@ function ActivityList({ authRole, onNavigate }: { authRole: AuthRole; onNavigate
   const { lang } = useSettings();
   const t = T[lang];
   const [page, setPage] = useState(1);
-  const pageSize = 6;
-  const total = MOCK_ACTIVITIES.length;
+  // @integration:begin one page at a time from the API, and the count of everything readable
+  // `pageSize` is the server's, not the 6 asked for: it clamps, and the pager steps by what it
+  // actually applied rather than by what this screen requested.
+  const { items: paged, total, pageSize, loading, error, reload } = useActivities(page - 1, 6);
   const totalPages = Math.ceil(total / pageSize);
-  const paged = MOCK_ACTIVITIES.slice((page - 1) * pageSize, page * pageSize);
+  // @integration:end
 
   return (
     <main className="pt-14">
@@ -547,6 +499,23 @@ function ActivityList({ authRole, onNavigate }: { authRole: AuthRole; onNavigate
             <p className={`text-sm ${C.secondaryFg}`}>{t.visitorCallout}</p>
           </div>
         )}
+
+        {/* @integration:begin the list's own loading and refusal states, which the fixtures had no way to reach */}
+        {loading && paged.length === 0 && (
+          <p className={`text-sm ${C.dim} py-10`}>{loadingText(lang)}</p>
+        )}
+        {error && (
+          <div className={`mb-10 flex items-start gap-4 px-5 py-4 border ${C.border} ${C.card}`}>
+            <div>
+              <p className={`text-sm ${C.fg} font-medium`}>{failureText(lang, error).title}</p>
+              <p className={`text-[13px] ${C.dim} mt-1 leading-relaxed`}>{failureText(lang, error).detail}</p>
+              <button onClick={reload} className="mt-3 text-[13px] text-[#c8893a] hover:underline">
+                {retryText(lang)}
+              </button>
+            </div>
+          </div>
+        )}
+        {/* @integration:end */}
 
         <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-px ${C.borderBg}`}>
           {paged.map((a) => (
@@ -600,11 +569,16 @@ function ActivityDetail({
   const { lang, theme } = useSettings();
   const t = T[lang];
 
-  const activity = MOCK_ACTIVITIES.find((a) => a.id === activityId);
+  // @integration:begin the activity and its media come from the API
+  const { activity: loaded, loading, error } = useActivity(activityId);
+  const activity = loaded ?? undefined;
+  const canViewMedia = authRole !== "visitor";
+  // Not fetched at all for a visitor: the route is signed-in only, and a signed URL is what it
+  // hands back, so an anonymous caller asking for one is a 401 rather than a list.
+  const { media, error: mediaError, reload: reloadMedia } = useActivityMedia(activityId, canViewMedia);
   const isOwner = activity?.createdByUserId === currentUserId;
   const canEdit = authRole === "admin" || (authRole === "user" && isOwner);
-  const canViewMedia = authRole !== "visitor";
-  const media = canViewMedia ? MOCK_MEDIA : [];
+  // @integration:end
 
   const mediaByUploader = media.reduce<{ userId: string; name: string; items: MediaItem[] }[]>(
     (groups, item) => {
@@ -630,6 +604,44 @@ function ActivityDetail({
       return next;
     });
   }
+
+  // @integration:begin the delete goes through the API, and a refusal keeps the page as it was
+  const [deleteError, setDeleteError] = useState<ApiError | null>(null);
+
+  async function handleDelete() {
+    if (!activity) return;
+    try {
+      await deleteActivity(activity.id);
+    } catch (failure) {
+      // A 403 or a 404 here is not a success: staying put is what keeps the screen from
+      // showing a deletion that did not happen.
+      setDeleteError(toApiError(failure));
+      return;
+    }
+    onDelete(activity.id);
+  }
+  // @integration:end
+
+  // @integration:begin loading, refused and absent are three different screens here
+  if (loading) {
+    return (
+      <main className="pt-14 min-h-screen flex items-center justify-center">
+        <p className={C.dim}>{loadingText(lang)}</p>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="pt-14 min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md px-6">
+          <p className={`font-display text-[22px] ${C.fg}`}>{failureText(lang, error).title}</p>
+          <p className={`text-sm ${C.dim} mt-2 leading-relaxed`}>{failureText(lang, error).detail}</p>
+        </div>
+      </main>
+    );
+  }
+  // @integration:end
 
   if (!activity) {
     return (
@@ -681,9 +693,11 @@ function ActivityDetail({
                   </button>
                 ) : (
                   <div className="flex items-center gap-1">
-                    <button onClick={() => onDelete(activity.id)} className="px-3 py-2 text-sm font-medium text-red-400 border border-red-800 hover:bg-red-950 transition-colors">
+                    {/* @integration:begin the refusal is shown where the action was taken */}
+                    <button onClick={() => void handleDelete()} className="px-3 py-2 text-sm font-medium text-red-400 border border-red-800 hover:bg-red-950 transition-colors">
                       {t.confirm}
                     </button>
+                    {/* @integration:end */}
                     <button onClick={() => setConfirmDelete(false)} className={`px-3 py-2 text-sm ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
                       {t.cancel}
                     </button>
@@ -694,6 +708,26 @@ function ActivityDetail({
           </div>
         </div>
       </div>
+
+      {/* @integration:begin the refusals a fixture could not produce: a failed delete, and media the reader may not mint URLs for */}
+      {(deleteError || mediaError) && (
+        <div className="max-w-6xl mx-auto px-6 pt-8">
+          {[deleteError, mediaError].filter((e): e is ApiError => e !== null).map((e, i) => (
+            <div key={i} className={`flex items-start justify-between gap-4 px-5 py-4 mb-2 border ${C.border} ${C.card}`}>
+              <div>
+                <p className={`text-sm ${C.fg} font-medium`}>{failureText(lang, e).title}</p>
+                <p className={`text-[13px] ${C.dim} mt-1 leading-relaxed`}>{failureText(lang, e).detail}</p>
+              </div>
+              {e === mediaError && (
+                <button onClick={reloadMedia} className="text-[13px] text-[#c8893a] hover:underline shrink-0">
+                  {retryText(lang)}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {/* @integration:end */}
 
       <div className="max-w-6xl mx-auto px-6 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-12">
@@ -842,12 +876,26 @@ function ActivityDetail({
 function ActivityForm({ mode, activityId, onNavigate }: { mode: "create" | "edit"; activityId?: string; onNavigate: (v: View) => void }) {
   const { lang, theme } = useSettings();
   const t = T[lang];
-  const existing = activityId ? MOCK_ACTIVITIES.find((a) => a.id === activityId) : null;
+  // @integration:begin the form is filled from the API and saved to it
+  const { activity: existing } = useActivity(activityId ?? "");
+  const [cover, setCover] = useState<File | null>(null);
+  const [filledFor, setFilledFor] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<ApiError | null>(null);
 
-  const [form, setForm] = useState({ title: existing?.title ?? "", location: existing?.location ?? "", activityDate: existing?.activityDate ?? "", description: existing?.description ?? "", type: (existing?.type ?? "public") as ActivityType });
-  const [coverPreview, setCoverPreview] = useState<string | null>(existing?.coverImageUrl ?? null);
+  const [form, setForm] = useState({ title: "", location: "", activityDate: "", description: "", type: "public" as ActivityType });
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Fills the form when the edit target arrives, once. Re-running would overwrite whatever the
+  // person has typed since the request finished.
+  if (existing && filledFor !== existing.id) {
+    setFilledFor(existing.id);
+    setForm({ title: existing.title, location: existing.location, activityDate: existing.activityDate, description: existing.description, type: existing.type });
+    setCoverPreview(existing.coverImageUrl);
+  }
+  // @integration:end
 
   function validate() {
     const e: Record<string, string> = {};
@@ -857,13 +905,61 @@ function ActivityForm({ mode, activityId, onNavigate }: { mode: "create" | "edit
     return e;
   }
 
-  function handleSubmit(evt: React.FormEvent) {
+  // @integration:begin the picker the export's cover button never had
+  function handleCoverChange(evt: React.ChangeEvent<HTMLInputElement>) {
+    const file = evt.target.files?.[0];
+    if (!file) return;
+    setCover(file);
+    setCoverPreview(URL.createObjectURL(file));
+    // Cleared so picking the same file twice fires `change` the second time.
+    evt.target.value = "";
+  }
+  // @integration:end
+
+  // @integration:begin create, edit and the cover, over the API
+  async function handleSubmit(evt: React.FormEvent) {
     evt.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
-    setSubmitted(true);
-    setTimeout(() => onNavigate({ name: "list" }), 1400);
+
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const body = {
+        title: form.title,
+        location: form.location,
+        activityDate: form.activityDate,
+        description: form.description,
+        type: toWireActivityType(form.type),
+      };
+      const saved = existing
+        ? await updateActivity(existing.id, body)
+        : await createActivity(body);
+
+      // A second request, because a cover attaches to an activity that already exists.
+      if (cover) await uploadCover(saved.id, cover);
+
+      setSubmitted(true);
+      setTimeout(() => onNavigate({ name: "list" }), 1400);
+    } catch (failure) {
+      const apiError = toApiError(failure);
+      // The server's field-keyed rejections land under the fields this form renders.
+      const fieldErrors: Record<string, string> = {};
+      for (const field of ["title", "location", "activityDate"]) {
+        const message = fieldError(apiError, field);
+        if (message) fieldErrors[field] = message;
+      }
+      const named = Object.keys(apiError.problem?.errors ?? {});
+      const allShown = named.length > 0 && named.every((field) => field in fieldErrors);
+      setErrors(fieldErrors);
+      // A refusal, or a rule about a field this form has no slot for, goes in the banner
+      // rather than being dropped on the floor.
+      setSubmitError(allShown ? null : apiError);
+    } finally {
+      setSubmitting(false);
+    }
   }
+  // @integration:end
 
   const inputClass = (hasError: boolean) =>
     `w-full ${C.card} border px-4 py-3 text-[15px] ${C.fg} placeholder-[var(--tb-dimmer)] focus:outline-none focus:border-[#c8893a] transition-colors ${hasError ? "border-red-700" : C.border}`;
@@ -960,17 +1056,20 @@ function ActivityForm({ mode, activityId, onNavigate }: { mode: "create" | "edit
           <div>
             <label className={`block font-mono-data text-[10px] ${C.dim} uppercase tracking-widest mb-2`}>{t.coverImageLabel}</label>
             <div className={`border border-dashed ${C.border} hover:border-[#c8893a]/40 transition-colors`}>
+              {/* @integration:begin the export's cover picker, given the two things it was missing:
+                  the discard button also drops a pending file, and the "Upload cover image" button
+                  — which rendered inert — is a label that can carry one. Its markup is untouched. */}
               {coverPreview ? (
                 <div className="relative">
                   <img src={coverPreview} alt="Cover preview" className="w-full h-40 object-cover" />
-                  <button type="button" onClick={() => setCoverPreview(null)} className={`absolute top-2 right-2 w-7 h-7 ${C.bg}/80 flex items-center justify-center ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
+                  <button type="button" onClick={() => { setCover(null); setCoverPreview(null); }} title={mode === "edit" && !cover ? "Removing a stored cover is not an API operation; this only discards an unsaved pick." : undefined} className={`absolute top-2 right-2 w-7 h-7 ${C.bg}/80 flex items-center justify-center ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                       <path d="M9 3L3 9M3 3L9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                   </button>
                 </div>
               ) : (
-                <button type="button" className={`w-full px-6 py-8 flex flex-col items-center gap-2 ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
+                <label className={`w-full px-6 py-8 flex flex-col items-center gap-2 ${C.dim} hover:text-[var(--tb-fg)] transition-colors cursor-pointer`}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                     <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
                     <path d="M17 8L12 3L7 8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -978,15 +1077,28 @@ function ActivityForm({ mode, activityId, onNavigate }: { mode: "create" | "edit
                   </svg>
                   <span className="text-sm">{t.uploadCover}</span>
                   <span className={`font-mono-data text-[11px] ${C.dimmer}`}>{t.coverHint}</span>
-                </button>
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={handleCoverChange} />
+                </label>
               )}
+              {/* @integration:end */}
             </div>
           </div>
 
+          {/* @integration:begin the refusal the form's own validation cannot produce */}
+          {submitError && (
+            <div className={`px-5 py-4 border ${C.border} ${C.card}`}>
+              <p className={`text-sm ${C.fg} font-medium`}>{failureText(lang, submitError).title}</p>
+              <p className={`text-[13px] ${C.dim} mt-1 leading-relaxed`}>{failureText(lang, submitError).detail}</p>
+            </div>
+          )}
+          {/* @integration:end */}
+
           <div className={`flex items-center gap-3 pt-4 border-t ${C.border}`}>
-            <button type="submit" className="px-6 py-3 bg-[#c8893a] text-[#0f120e] text-sm font-semibold hover:bg-[#d9a050] transition-colors">
+            {/* @integration:begin a submit already in flight must not be sent twice */}
+            <button type="submit" disabled={submitting} className="px-6 py-3 bg-[#c8893a] text-[#0f120e] text-sm font-semibold hover:bg-[#d9a050] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               {mode === "create" ? t.logBtn : t.saveBtn}
             </button>
+            {/* @integration:end */}
             <button type="button" onClick={() => onNavigate(activityId ? { name: "detail", activityId } : { name: "list" })} className={`px-6 py-3 text-sm ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
               {t.cancel}
             </button>
@@ -1002,7 +1114,9 @@ function ActivityForm({ mode, activityId, onNavigate }: { mode: "create" | "edit
 function MediaUploadForm({ activityId, onNavigate }: { activityId: string; onNavigate: (v: View) => void }) {
   const { lang } = useSettings();
   const t = T[lang];
-  const activity = MOCK_ACTIVITIES.find((a) => a.id === activityId);
+  // @integration:begin the activity's title, which the header shows
+  const { activity } = useActivity(activityId);
+  // @integration:end
 
   type FileEntry = { id: string; file: File; preview: string | null; kind: "Image" | "Video" };
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -1023,12 +1137,41 @@ function MediaUploadForm({ activityId, onNavigate }: { activityId: string; onNav
     setFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  // @integration:begin one request per file, so one refusal does not discard the rest
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [refusals, setRefusals] = useState<{ name: string; error: ApiError }[]>([]);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!files.length) return;
+
+    setRefusals([]);
+    setProgress({ done: 0, total: files.length });
+
+    const failed: { name: string; error: ApiError }[] = [];
+    for (const entry of files) {
+      try {
+        await uploadMedia(activityId, entry.file);
+      } catch (failure) {
+        // An oversize or disallowed file is refused by the server with the reason, and the
+        // reason is what the person needs to see — the rest of the batch still goes.
+        failed.push({ name: entry.file.name, error: toApiError(failure) });
+      }
+      setProgress((prev) => ({ ...prev, done: prev.done + 1 }));
+    }
+
+    if (failed.length) {
+      setRefusals(failed);
+      // Only the refused files stay, so a second submit retries exactly them.
+      const refusedIds = new Set(files.filter((f) => failed.some((x) => x.name === f.file.name)).map((f) => f.id));
+      setFiles((prev) => prev.filter((f) => refusedIds.has(f.id)));
+      return;
+    }
+
     setSubmitted(true);
     setTimeout(() => onNavigate({ name: "detail", activityId }), 1400);
   }
+  // @integration:end
 
   if (submitted) {
     return (
@@ -1120,15 +1263,37 @@ function MediaUploadForm({ activityId, onNavigate }: { activityId: string; onNav
             </div>
           )}
 
+          {/* @integration:begin what the server refused, and how far the batch has got */}
+          {refusals.length > 0 && (
+            <div className={`px-5 py-4 border ${C.border} ${C.card}`}>
+              <p className={`text-sm ${C.fg} font-medium`}>{failureText(lang, refusals[0].error).title}</p>
+              <ul className="mt-2 space-y-1">
+                {refusals.map((r) => (
+                  <li key={r.name} className={`text-[13px] ${C.dim} leading-relaxed`}>
+                    <span className={C.secondaryFg}>{r.name}</span> — {r.error.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {progress.total > 0 && progress.done < progress.total && (
+            <p className={`font-mono-data text-[11px] ${C.dim}`}>
+              {progress.done} / {progress.total}
+            </p>
+          )}
+          {/* @integration:end */}
+
           <div className={`flex items-center gap-3 pt-4 border-t ${C.border}`}>
+            {/* @integration:begin a batch in flight must not be sent twice */}
             <button
               type="submit"
-              disabled={files.length === 0}
+              disabled={files.length === 0 || (progress.total > 0 && progress.done < progress.total)}
               className="px-6 py-3 bg-[#c8893a] text-[#0f120e] text-sm font-semibold hover:bg-[#d9a050] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {t.uploadMedia}
               {files.length > 0 && <span className="ml-2 font-mono-data text-[11px]">({files.length})</span>}
             </button>
+            {/* @integration:end */}
             <button
               type="button"
               onClick={() => onNavigate({ name: "detail", activityId })}
@@ -1176,30 +1341,77 @@ function UserProfile({ authRole, onNavigate }: { authRole: AuthRole; onNavigate:
   const { theme, lang, setTheme, setLang } = useSettings();
   const t = T[lang];
 
-  const [displayName, setDisplayName] = useState(authRole === "admin" ? "Admin User" : "Rhys Caldwell");
-  const [bio, setBio] = useState(
-    authRole === "admin" ? "" : "Alpine climber, packrafter, and occasional trail runner based in Seattle. Chasing summits in the Cascades since 2018."
-  );
+  // @integration:begin the profile, the avatar and the preferences all live on the server
+  const { profile } = useProfile(authRole !== "visitor");
+
+  const [displayName, setDisplayName] = useState("");
+  const [bio, setBio] = useState("");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarRemoved, setAvatarRemoved] = useState(false);
+  const [filledFor, setFilledFor] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<ApiError | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Fills the form once, when the profile arrives. The theme and language are the server's too,
+  // which is what makes a saved preference survive a reload in a fresh session.
+  useEffect(() => {
+    if (!profile || filledFor === profile.id) return;
+    setFilledFor(profile.id);
+    setDisplayName(profile.displayName);
+    setBio(profile.description);
+    setAvatarPreview(profile.avatarUrl);
+    setTheme(profile.theme);
+    setLang(profile.lang);
+  }, [profile, filledFor, setTheme, setLang]);
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setAvatarFile(file);
+    setAvatarRemoved(false);
     const reader = new FileReader();
     reader.onload = () => setAvatarPreview(reader.result as string);
     reader.readAsDataURL(file);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs: Record<string, string> = {};
     if (!displayName.trim()) errs.displayName = t.displayNameRequired;
     if (Object.keys(errs).length) { setErrors(errs); return; }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+
+    setSaving(true);
+    setSaveError(null);
+    try {
+      // The avatar is its own verb on its own route, so it goes first and a refusal there
+      // leaves the text edits unsaved rather than half-saved.
+      if (avatarFile) await uploadAvatar(avatarFile);
+      else if (avatarRemoved) await removeAvatar();
+
+      await updateProfile({
+        displayName,
+        description: bio,
+        preferredTheme: theme === "light" ? "Light" : "Dark",
+        preferredLanguage: lang,
+      });
+
+      setAvatarFile(null);
+      setAvatarRemoved(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (failure) {
+      const apiError = toApiError(failure);
+      const message = fieldError(apiError, "displayName");
+      setErrors(message ? { displayName: message } : {});
+      setSaveError(message ? null : apiError);
+    } finally {
+      setSaving(false);
+    }
   }
+  // @integration:end
 
   const initials = displayName.trim().split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
   const inputClass = (hasError: boolean) =>
@@ -1237,11 +1449,14 @@ function UserProfile({ authRole, onNavigate }: { authRole: AuthRole; onNavigate:
             <div>
               <p className={`text-[13px] ${C.fg} font-medium mb-1`}>{t.profilePhoto}</p>
               <p className={`text-[12px] ${C.dim} leading-relaxed`}>{t.photoHint}</p>
+              {/* @integration:begin dropping the pick has to drop the file too, so removing an
+                  avatar removes it rather than only hiding the preview */}
               {avatarPreview && (
-                <button type="button" onClick={() => setAvatarPreview(null)} className={`mt-2 text-[12px] ${C.dim} hover:text-red-400 transition-colors`}>
+                <button type="button" onClick={() => { setAvatarPreview(null); setAvatarFile(null); setAvatarRemoved(true); }} className={`mt-2 text-[12px] ${C.dim} hover:text-red-400 transition-colors`}>
                   {t.remove}
                 </button>
               )}
+              {/* @integration:end */}
             </div>
           </div>
 
@@ -1300,20 +1515,34 @@ function UserProfile({ authRole, onNavigate }: { authRole: AuthRole; onNavigate:
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <p className={`text-[11px] ${C.dim} mb-1`}>{t.email}</p>
-                <p className={`text-[14px] ${C.secondaryFg}`}>{authRole === "admin" ? "admin@trailblaze.app" : "rhys.caldwell@trailblaze.app"}</p>
+                {/* @integration:begin the address and the role are the token's, not a fixture's */}
+                <p className={`text-[14px] ${C.secondaryFg}`}>{profile?.email ?? ""}</p>
+                {/* @integration:end */}
               </div>
               <div>
                 <p className={`text-[11px] ${C.dim} mb-1`}>{t.role}</p>
-                <p className="font-mono-data text-[13px] text-[#c8893a] capitalize">{authRole}</p>
+                {/* @integration:begin the role is the row the server stores, not a prop */}
+                <p className="font-mono-data text-[13px] text-[#c8893a] capitalize">{profile?.role ?? authRole}</p>
+                {/* @integration:end */}
               </div>
             </div>
+
+            {/* @integration:begin signing out, which the export has no control for */}
+            <div className={`mt-5 pt-4 border-t ${C.border}`}>
+              <button type="button" onClick={() => { void signOut(); onNavigate({ name: "list" }); }} className={`text-[13px] ${C.dim} hover:text-red-400 transition-colors`}>
+                {signOutText(lang)}
+              </button>
+            </div>
+            {/* @integration:end */}
           </div>
 
           {/* Save */}
           <div className={`flex items-center gap-4 pt-2 border-t ${C.border}`}>
-            <button type="submit" className="px-6 py-3 bg-[#c8893a] text-[#0f120e] text-sm font-semibold hover:bg-[#d9a050] transition-colors">
+            {/* @integration:begin a save in flight must not be sent twice */}
+            <button type="submit" disabled={saving} className="px-6 py-3 bg-[#c8893a] text-[#0f120e] text-sm font-semibold hover:bg-[#d9a050] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               {t.saveBtn}
             </button>
+            {/* @integration:end */}
             {saved && (
               <span className={`flex items-center gap-2 text-sm ${C.dim}`}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -1323,6 +1552,15 @@ function UserProfile({ authRole, onNavigate }: { authRole: AuthRole; onNavigate:
               </span>
             )}
           </div>
+
+          {/* @integration:begin the refusal the profile form's own validation cannot produce */}
+          {saveError && (
+            <div className={`px-5 py-4 border ${C.border} ${C.card}`}>
+              <p className={`text-sm ${C.fg} font-medium`}>{failureText(lang, saveError).title}</p>
+              <p className={`text-[13px] ${C.dim} mt-1 leading-relaxed`}>{failureText(lang, saveError).detail}</p>
+            </div>
+          )}
+          {/* @integration:end */}
         </form>
       </div>
     </main>
@@ -1332,12 +1570,17 @@ function UserProfile({ authRole, onNavigate }: { authRole: AuthRole; onNavigate:
 // ─── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [authRole] = useState<AuthRole>("user");
+  // @integration:begin who the caller is comes from the sign-in store, not from a constant
+  const auth = useAuth();
+  const authRole: AuthRole = auth.role;
+  // The API's own id for this caller, which is what an activity's `createdByUserId` carries.
+  const currentUserId = auth.userId;
   const [view, setView] = useState<View>({ name: "list" });
   const [theme, setTheme] = useState<Theme>("dark");
   const [lang, setLang] = useState<Lang>("en");
-
-  const currentUserId = authRole === "user" ? "user-1" : authRole === "admin" ? "admin-1" : "";
+  // The footer's count, which the list below does not own.
+  const activityCount = useActivityCount();
+  // @integration:end
 
   function handleNavigate(v: View) {
     if ((v.name === "create" || v.name === "edit" || v.name === "upload" || v.name === "profile") && authRole === "visitor") return;
@@ -1387,7 +1630,9 @@ export default function App() {
         <footer className={`border-t ${C.border} mt-20`}>
           <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
             <span className={`font-display text-[13px] ${C.dimmer}`}>TrailBlaze</span>
-            <span className={`font-mono-data text-[11px] ${C.dimmer}`}>{t.footerTagline(MOCK_ACTIVITIES.length)}</span>
+            {/* @integration:begin the count is the server's, not a fixture's length */}
+            <span className={`font-mono-data text-[11px] ${C.dimmer}`}>{t.footerTagline(activityCount)}</span>
+            {/* @integration:end */}
           </div>
         </footer>
       </div>

@@ -11,8 +11,9 @@ the app still runs, and the screens look correct.
 ## What is upstream-owned, and what is not
 
 The rule is derived rather than listed, so it cannot go stale: **a path is upstream-owned if the
-same path exists under `figma/`.** Everything else under `src/web/` — the API client, the auth
-wiring, this file — belongs to the integration, and an export never touches it.
+same path exists under `figma/`.** Everything else under `src/web/` — `src/api/`, `src/auth/`,
+`src/data/`, `src/i18n/`, `src/config.ts`, `.env.example`, this file — belongs to the integration,
+and an export never touches it.
 
 So a re-export may replace every file it ships, and may not delete anything it does not ship.
 
@@ -85,8 +86,24 @@ It reads files, so it cannot see a seam that compiles and is wrong — a hook wi
 endpoint, or a screen still reading a mock that was moved rather than deleted. Feature 10 is
 verified end to end, and that pass is what covers those.
 
-**One clobber it cannot see, named rather than left looking covered.** Copying an export file over
-one that was already integrated takes the markers away with the wiring, and a file with no markers
-and no differences is indistinguishable from one that was never integrated at all. The check that
-closes this is a marker requirement on `src/web/src/App.tsx` — non-empty once the wiring lands. It
-is added when the wiring is, not before, because until then it would fail on a correct tree.
+**A clobber is caught, and by a different check than drift.** Copying an export file over one that
+was already integrated takes the markers away with the wiring, and the result — no markers, no
+differences — is indistinguishable from a file that was never integrated at all. Drift cannot see
+it, because a clobbered file has no drift. So every file the wiring lives in is named in the
+script's `WIRED`, and the check fails when one of them carries no seam at all.
+
+## What is exempt, and why it is written down rather than marked
+
+Two upstream files cannot carry a marker: `package.json`, because JSON has no comment and pnpm
+rewrites the file whole on the next `pnpm add`; and `pnpm-lock.yaml`, which pnpm generates. Both are
+named in the script's `UNMARKABLE` with that reason, and the check prints them as `skip` on every
+run — an exemption that is reported rather than passed over in silence. A third check fails if one
+of the names stops being a file the export ships, so the list cannot rot into exempting nothing.
+
+`src/web/package.json` differs from the export's by exactly one line — the `@azure/msal-browser`
+dependency the sign-in wiring needs. Nothing else in it is reordered, so a re-export's three-way
+merge against it is a one-line conflict rather than a whole-file one.
+
+**Everything else the integration adds is a new file, and a new file has nothing to mark.** The
+export owns no path under `src/web/src/api/`, `auth/`, `data/`, `i18n/` or `config.ts`, so those
+carry no seam and need none.
