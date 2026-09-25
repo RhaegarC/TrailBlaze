@@ -1,6 +1,6 @@
 # 10 — Figma Integration
 
-Status: **Not started** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
+Status: **In review** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../PRD.md) — Decisions #17/#22/#26–#30 + "Frontend build" + "System overview".
 
 ## Summary
@@ -139,26 +139,67 @@ What exists instead:
   that the browser cannot decode will simply not play here, which is a known accepted limitation
   and not a defect in this integration.
 
+### Where the line between wiring and authoring was drawn
+
+The export renders some controls and leaves them inert, and it does not render others at all. The
+two are different work, and conflating them is how a non-goal gets broken:
+
+- **A control the export renders but leaves inert is wiring.** The "Upload cover image" button in
+  `ActivityForm` rendered with no handler and no file input at all, so it is now a `<label>` that
+  carries one. Its markup and styling are unchanged; the element had to become one that can hold a
+  file input, which is the minimum that makes the label true.
+- **A screen element the export does not render is authoring, and is not added here.** Where an
+  acceptance criterion needs one, the criterion is recorded as unmet below rather than met by
+  hand-written UI, because the non-goal above says a wrong screen is fixed in Figma Make and
+  re-exported.
+
 ### Known gaps in the current export
 
-Three concrete defects found by reading the committed export (`src/web/src/App.tsx`). Each is a
-defect in the **Figma Make export**, not in the integration: per the non-goal above they are fixed
-in Figma Make and re-exported, **not patched in `src/web/`**. Until that re-export lands, the
-create/upload/collaboration criteria above cannot be met by the export as committed.
+Re-audited against the export as committed, file and line numbers included. Each is a defect in
+the **Figma Make export**, not in the integration, and each is fixed in Figma Make and re-exported
+rather than patched in `src/web/`. **Three acceptance criteria cannot be met until that re-export
+lands**; they are named here so a green build is not mistaken for a met criterion.
 
-- **The top-banner `+` button is labelled for media, but wired to create** —
-  `src/web/src/App.tsx:419-429`. On a detail page it relabels itself "Upload media" (`plusLabel`,
-  `src/web/src/App.tsx:402`), yet **both branches of its click handler navigate to
-  `{ name: "create" }`** (`src/web/src/App.tsx:421`), so it opens the *create-activity* form with
-  no activity context. The media-upload entry point is labelled but not wired, and it silently
-  takes the user somewhere else.
-- **`ActivityDetail` has no upload affordance at all** — the component (`src/web/src/App.tsx:586`)
-  and its media section (`src/web/src/App.tsx:700-775`). The detail view renders media, groups it
-  by uploader with collapse/expand, and opens a lightbox, but nothing lets a signed-in reader add
-  an item. The export therefore has **no working way to attach media to an existing activity**,
-  which is the whole point of Decision #27.
-- **The `+` button renders for any non-visitor** — `src/web/src/App.tsx:419`. The only gate is
-  `authRole !== "visitor"`, so it also appears on another user's activity, where the upload it
-  offers may be refused. It needs visibility/ownership gating: on an activity the caller cannot
-  read the app is at a 404 anyway, and on one they can read but do not own the control should
-  either offer the collaborative upload (Decision #27) or not appear.
+- **Videos do not play** — criterion 6. `ActivityDetail` renders a video as a filename-and-size row
+  with a "SAS required" badge and **no `<video>` element** ([`figma/src/App.tsx:759-772`](../../figma/src/App.tsx#L759-L772)).
+  Images display: the SAS URL `GET /api/media/{id}/url` returns is fetched per item and set as each
+  image's `src`. For a video the same URL is fetched and sits unused in the item's `url`, so the
+  data is wired and nothing renders it. The badge now reads a little untruthfully — the SAS URL it
+  says is required has been obtained — and fixing that is part of the same re-export.
+- **There is no per-media delete control** — criterion 11. The detail view's media grid gives each
+  image exactly one action, opening the lightbox ([`figma/src/App.tsx:748-756`](../../figma/src/App.tsx#L748-L756)),
+  and the video row has none. The only `onDelete` in the export is the activity's
+  ([`figma/src/App.tsx:684`](../../figma/src/App.tsx#L684)). `DELETE /api/media/{id}` is therefore
+  wired into the API client and **uncalled**, and the collaborator/admin delete rule — the whole
+  point of the 2026-09-24 narrowing of Decision #27 — is unreachable from the UI.
+- **No avatar renders for an anonymous visitor** — criterion 18. `avatarPreview` appears only
+  inside `UserProfile` ([`figma/src/App.tsx:1222-1244`](../../figma/src/App.tsx#L1222-L1244)), which
+  is reachable only once signed in. The public `avatars` container path is exercised by the
+  signed-in profile screen and by nothing an anonymous visitor sees; `creatorDisplayName` renders
+  in the list and detail as **text**, never as an image.
+
+Three defects the earlier draft of this section listed were **stale**, and are recorded here as
+fixed so the next reader does not go looking: the top-banner `+` button does route to the upload
+form on a detail page (`plusTarget`, [`figma/src/App.tsx:405-407`](../../figma/src/App.tsx#L405-L407));
+`ActivityDetail` is reached by that button, so it is not without an upload affordance; and the
+button's `authRole !== "visitor"` gate is **correct** as committed, because Decision #27 lets any
+signed-in caller contribute to an activity they can read.
+
+One minor wording defect, noted rather than escalated: the visibility selector describes `Private`
+as "Only you" ([`figma/src/App.tsx:114`](../../figma/src/App.tsx#L114)), while feature 09 gives an
+administrator read access to it too. The label understates who can see the entry.
+
+### What this branch did and did not verify
+
+The implementation is checked by `tsc --noEmit`, by `vite build`, and by
+[`scripts/web-seam.py`](../../scripts/web-seam.py), which asserts that every line of `src/web/`
+differing from the export falls inside a marked seam. Against the local container stack
+(`src/api/docker-compose.yml`), the anonymous list answers `{"items":[],"page":0,"pageSize":10,"total":0}`
+— matching the declared `WireActivityPage` field-for-field — an unknown activity id answers 404, an
+anonymous `POST` answers 401, and a CORS preflight from `http://localhost:8443` is allowed while an
+unlisted origin gets no allow header.
+
+**The browser walkthrough has not been run.** No browser is available on the machine this was
+implemented on, so no criterion above is marked met on the strength of having seen it work. That
+pass is [11-e2e-verification](11-e2e-verification.md)'s, and it is the only thing that closes this
+feature.
