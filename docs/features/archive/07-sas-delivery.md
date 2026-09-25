@@ -1,7 +1,7 @@
 # 07 — SAS Delivery
 
-Status: **In progress** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #2/#5/#6/#7 + "Media storage & delivery" + "API surface" + "Authentication & authorization".
+Status: **Archived** — merged to `develop` in PR #28 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Source: [PRD](../../PRD.md) — Decisions #2/#5/#6/#7 + "Media storage & delivery" + "API surface" + "Authentication & authorization".
 
 ## Summary
 
@@ -18,9 +18,9 @@ image or video that is otherwise private.
 
 ## Dependencies
 
-- [06-media-upload](archive/06-media-upload.md) (the `media` rows and the private blobs being addressed)
-- [02-entra-auth](archive/02-entra-auth.md) (caller identity — the endpoint is not anonymous)
-- [01-foundation](archive/01-foundation.md) (`IStorageRepository` abstraction; storage is exercised against a live backend in `TrailBlaze.Repository.Test`)
+- [06-media-upload](06-media-upload.md) (the `media` rows and the private blobs being addressed)
+- [02-entra-auth](02-entra-auth.md) (caller identity — the endpoint is not anonymous)
+- [01-foundation](01-foundation.md) (`IStorageRepository` abstraction; storage is exercised against a live backend in `TrailBlaze.Repository.Test`)
 
 ## Acceptance criteria
 
@@ -30,7 +30,7 @@ image or video that is otherwise private.
       `Shared` one is reachable by any signed-in caller and not by an anonymous one; a signed-in
       caller who may read the activity gets 200 and one who may not gets **404**, not 403, so the
       route cannot be used as a side door to confirm the entry exists.
-      *(2026-09-24 — moved here from [09](archive/09-permission-enforcement.md), which named this route
+      *(2026-09-24 — moved here from [09](09-permission-enforcement.md), which named this route
       among the ones it gates before the route existed. 09 has landed and its rule is
       `IActivityAuthorizationService`; this route must reach the same service rather than decide
       visibility for itself, which is the one thing 09's single-home criterion forbids.)*
@@ -61,9 +61,9 @@ image or video that is otherwise private.
   - a successful mint produces a URL whose expiry is in the future and within the cap;
   - the requested permission set is read-only and the target is a single blob in the private container;
   - an over-long configured TTL is clamped to the maximum.
-- Integration (`TrailBlaze.Repository.Test`): with nothing listening on a port, the media row is the source of the blob path — the lookup whose id is soft-deleted or unknown is asserted to yield no blob path, and therefore no URL, with the query inspected via `ToQueryString()` ([testing-and-tdd.md](../testing-and-tdd.md)).
+- Integration (`TrailBlaze.Repository.Test`): with nothing listening on a port, the media row is the source of the blob path — the lookup whose id is soft-deleted or unknown is asserted to yield no blob path, and therefore no URL, with the query inspected via `ToQueryString()` ([testing-and-tdd.md](../../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Api.Test`): a tokenless request to `/api/media/{id}/url` returns 401 with no storage call — "no call" being the same purpose-built recording double as the unit bullet above, since the deployment the API tier boots against is offline and would refuse a real one for the wrong reason; an authenticated request returns 200 with a URL and an expiry.
-- Storage integration (`TrailBlaze.Repository.Test`, tagged `Category=Container`; `dotnet test --filter "Category=Container"`): a **real SAS round-trip** — mint against the live account, issue a plain HTTP GET against the returned URL with no credentials, and receive 200 with the original bytes; then request a URL whose expiry has already passed and observe the storage service **refuse** it. This is the tier that proves SAS generation, which no double can by construction (see [testing-and-tdd.md](../testing-and-tdd.md)). It runs **by default** against the Azurite emulator, which needs no credentials, and against a real account only when `TRAILBLAZE_STORAGE_CONNECTION` names one, skipping rather than failing when nothing answers. *(2026-09-18 — the project and the trait in this bullet were both wrong after the refactor. The emulator looks like a weakening of the property and is not: the signature is still computed from the account key and checked by a server, so a wrong key or a wrong permission set still yields a well-formed URL that is refused on fetch; only the account behind it differs.)*
+- Storage integration (`TrailBlaze.Repository.Test`, tagged `Category=Container`; `dotnet test --filter "Category=Container"`): a **real SAS round-trip** — mint against the live account, issue a plain HTTP GET against the returned URL with no credentials, and receive 200 with the original bytes; then request a URL whose expiry has already passed and observe the storage service **refuse** it. This is the tier that proves SAS generation, which no double can by construction (see [testing-and-tdd.md](../../testing-and-tdd.md)). It runs **by default** against the Azurite emulator, which needs no credentials, and against a real account only when `TRAILBLAZE_STORAGE_CONNECTION` names one, skipping rather than failing when nothing answers. *(2026-09-18 — the project and the trait in this bullet were both wrong after the refactor. The emulator looks like a weakening of the property and is not: the signature is still computed from the account key and checked by a server, so a wrong key or a wrong permission set still yields a well-formed URL that is refused on fetch; only the account behind it differs.)*
 
 ## Delivered — where each test landed, and two claims that moved
 
@@ -78,7 +78,7 @@ image or video that is otherwise private.
   `TrailBlaze.Service.Test` asserts that what the response reports is the instant handed to storage;
   `TrailBlaze.Repository.Test`'s container tier asserts that storage signs the instant it is handed.
   Neither test makes the whole claim, and that seam is named rather than hidden — the same seam
-  [testing-and-tdd.md](../testing-and-tdd.md) describes generally.
+  [testing-and-tdd.md](../../testing-and-tdd.md) describes generally.
 - **The read-only and single-blob criteria are asserted against the server, not the arguments.**
   `StorageContainerRoutingTests` reads `sp` and `sr` back out of the URL that was handed over (a
   permission set that never reached the builder still builds a well-formed URL), and
@@ -96,7 +96,7 @@ image or video that is otherwise private.
    middleware before the action is entered, and a zero-interaction assertion would hold because of the
    framework's ordering rather than because of anything this code does — it would still pass if the
    mint were moved above the gate, which is the one mistake it exists to catch.
-   [testing-and-tdd.md](../testing-and-tdd.md)'s rule is explicit that such an assertion is not a test
+   [testing-and-tdd.md](../../testing-and-tdd.md)'s rule is explicit that such an assertion is not a test
    of our code. The double is `NeverReachedStorage` in `MediaServiceTests`, a private type in that file
    used only by the two ordering tests; C# has no class declarations inside a method, so "defined
    inside that one test" is realised as "defined in that test's file and reachable from nowhere else".
@@ -116,7 +116,7 @@ this feature adds is that a row which resolves to nothing yields no URL at all.
 ## Notes / non-goals
 
 - **The SAS URL is a bearer token.** Anyone holding the string can read that blob until it expires; the URL's secrecy is not a control, so the **expiry window is the real control**. The consequences this feature accepts: a short TTL, a hard server-side cap, no long-lived SAS values persisted anywhere, no full URLs logged, and no SAS embedded in stored data.
-- **No authorization check here beyond authentication.** Any signed-in user may currently obtain a URL for any media item. The **visibility** gate — a caller who cannot read the activity gets **404**, not a URL (Decisions #26/#29) — was applied to every other route by [09](archive/09-permission-enforcement.md), and the owner/admin rules with it; this route arrives after that and is the one place still holding the gap, because it does not exist yet. *(2026-09-24 — 09 has landed; what it could not do is gate a route nobody has built. The criterion above is where this feature picks the rule up.)* The visibility half is stated here because a private activity's media being mint-able by any signed-in stranger is exactly the leak a reader might assume 05 had already closed.
+- **No authorization check here beyond authentication.** Any signed-in user may currently obtain a URL for any media item. The **visibility** gate — a caller who cannot read the activity gets **404**, not a URL (Decisions #26/#29) — was applied to every other route by [09](09-permission-enforcement.md), and the owner/admin rules with it; this route arrives after that and is the one place still holding the gap, because it does not exist yet. *(2026-09-24 — 09 has landed; what it could not do is gate a route nobody has built. The criterion above is where this feature picks the rule up.)* The visibility half is stated here because a private activity's media being mint-able by any signed-in stranger is exactly the leak a reader might assume 05 had already closed.
 - No revocation list, no one-time-use tokens, and no forced re-mint on download — with a bounded TTL, expiry is the only lever and that is deliberate.
 - No CDN, no range-request tuning, no download throttling or bandwidth accounting.
 - No SAS for a blob in a **public** container (`covers`, `avatars`) — a SAS there would add a

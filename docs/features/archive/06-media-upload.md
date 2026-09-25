@@ -4,10 +4,10 @@ Status: **Archived** — merged to `develop` in PR #17 · [00-mission-1-sprint.m
 Source: [PRD](../../PRD.md) — Decisions #2/#4/#6/#15/#24/#26/#27 + "Media storage & delivery" + data-model `media` table + "Authentication & authorization".
 
 > **Archiving this one does not mean the slice is closed.** It shipped upload, the metadata listing
-> and item deletion; fetching the bytes is [07](../07-sas-delivery.md)'s, and two criteria above are
+> and item deletion; fetching the bytes is [07](07-sas-delivery.md)'s, and two criteria above are
 > still open: the administrator among the permitted deleters, which needs a readable role and lands
 > with [09](09-permission-enforcement.md), and the bytes-unmodified claim through the upload route,
-> which needs a tier that hosts the API against a live account. *(2026-09-24 — 09 is merged, in PR #26, so this is satisfied: `develop` is deployable from that commit.)*
+> which needs a tier that hosts the API against a live account. *(2026-09-24 — 09 is merged, in PR #26, so this is satisfied: `develop` is deployable from that commit. 2026-09-25 — 07 is merged too, in PR #28, so fetching the bytes is built; the bytes-unmodified claim is still the one open item.)*
 
 ## Summary
 
