@@ -428,7 +428,9 @@ public sealed class ActivityService(
         CoverContainerFor(type) == Constant.StorageContainer.Covers
             ? storageRepository.CreatePublicUrl(Constant.StorageContainer.Covers, path).ToString()
             : (await storageRepository.CreateReadUrlAsync(
-                Constant.StorageContainer.Media, path, Constant.CoverUrl.SasLifetime)).ToString();
+                Constant.StorageContainer.Media,
+                path,
+                Constant.CoverUrl.Lifetime.ExpiryFrom(DateTimeOffset.UtcNow))).ToString();
 
     /// <summary>The container a cover belongs in: the public <c>covers</c> for a <c>Public</c> entry,
     /// the private <c>media</c> for a <c>Shared</c> or <c>Private</c> one. Both private types share a

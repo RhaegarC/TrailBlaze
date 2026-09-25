@@ -1,5 +1,6 @@
 namespace TrailBlaze.Service.Test;
 
+using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
 
 /// <summary>
@@ -38,5 +39,28 @@ public sealed class OneRuleOneHomeTests
 
         Assert.DoesNotContain("ResolveAsync", members);
         Assert.DoesNotContain("IsAdmin", members);
+    }
+
+    /// <summary>
+    /// The storage contract offers exactly one way to sign a URL, so the two readers that need one
+    /// cannot drift into two windows.
+    /// </summary>
+    /// <remarks>
+    /// An activity's private cover and an activity's media both reach a blob in the private
+    /// container, and feature 07 requires them to reach it through the same method rather than each
+    /// arranging its own. A second mint would be a second expiry rule — and the copy nobody edits is
+    /// the one that outlives its window. Asserted on the contract rather than on either caller,
+    /// because "these two call the same thing" is a property of the contract and not of a run.
+    /// </remarks>
+    [Fact]
+    public void The_storage_contract_offers_one_way_to_mint_a_read_url()
+    {
+        string[] mints = [
+            .. typeof(IStorageRepository).GetMethods()
+                .Where(method => method.Name.Contains("ReadUrl", StringComparison.Ordinal))
+                .Select(method => method.Name)
+                .Order()];
+
+        Assert.Equal([nameof(IStorageRepository.CreateReadUrlAsync)], mints);
     }
 }

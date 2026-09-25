@@ -56,22 +56,30 @@ public interface IStorageRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Mints a read URL for an object.
+    /// Mints a read URL for an object, valid until <paramref name="expiresOn"/>.
     /// </summary>
     /// <remarks>
-    /// This is the only way a caller reaches an object in a private container, so the
-    /// lifetime is required rather than defaulted: a URL with no expiry is a leaked object,
-    /// and the caller is the only one who knows how long the link needs to live.
+    /// <para>
+    /// This is the only way a caller reaches an object in a private container, so the expiry is
+    /// required rather than defaulted: a URL with no expiry is a leaked object. The caller names the
+    /// instant rather than a duration so that the instant it reports to a client is the instant the
+    /// token carries — the storage layer signs exactly what it is given and rounds nothing.
+    /// </para>
+    /// <para>
+    /// An instant in the past is signed, not refused: the resulting URL simply does not work, which
+    /// is a caller error the backend reports on fetch. That is what lets the storage tier prove the
+    /// server refuses an expired signature without waiting for one to lapse.
+    /// </para>
     /// </remarks>
     /// <param name="container">One of <c>Constant.StorageContainer</c>.</param>
     /// <param name="path">Path within the container.</param>
-    /// <param name="lifetime">How long the returned URL stays valid. Must be positive.</param>
+    /// <param name="expiresOn">The instant the URL stops working. Must be named.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A URL readable without further authorization until it expires.</returns>
     Task<Uri> CreateReadUrlAsync(
         string container,
         string path,
-        TimeSpan lifetime,
+        DateTimeOffset expiresOn,
         CancellationToken cancellationToken = default);
 
     /// <summary>

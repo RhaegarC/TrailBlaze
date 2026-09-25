@@ -517,13 +517,14 @@ public sealed class ActivityServiceTests
 
         await Service(repository, storage).GetAsync("the-activity");
 
-        (string container, string path, TimeSpan lifetime) = Assert.Single(storage.ReadUrls);
+        (string container, string path, DateTimeOffset expiresOn) = Assert.Single(storage.ReadUrls);
         Assert.Equal(Constant.StorageContainer.Media, container);
         Assert.Equal("media/cover.jpg", path);
 
         // The expiry is the real control on a bearer link, so it is bounded rather than merely
-        // positive — a lifetime of a year would satisfy "expiring" and leak the bytes.
-        Assert.InRange(lifetime, TimeSpan.FromMinutes(1), TimeSpan.FromHours(1));
+        // positive — a window of a year would satisfy "expiring" and leak the bytes.
+        Assert.InRange(
+            expiresOn - DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1), TimeSpan.FromHours(1));
         Assert.Empty(storage.PublicUrls);
     }
 
@@ -1432,7 +1433,7 @@ public sealed class ActivityServiceTests
     {
         public List<(string Container, string Path)> PublicUrls { get; } = [];
 
-        public List<(string Container, string Path, TimeSpan Lifetime)> ReadUrls { get; } = [];
+        public List<(string Container, string Path, DateTimeOffset ExpiresOn)> ReadUrls { get; } = [];
 
         public List<(string Container, string Path, string ContentType)> Uploads { get; } = [];
 
@@ -1444,10 +1445,10 @@ public sealed class ActivityServiceTests
         public Task<Uri> CreateReadUrlAsync(
             string container,
             string path,
-            TimeSpan lifetime,
+            DateTimeOffset expiresOn,
             CancellationToken cancellationToken = default)
         {
-            ReadUrls.Add((container, path, lifetime));
+            ReadUrls.Add((container, path, expiresOn));
             return Task.FromResult(new Uri($"https://signed.invalid/{container}/{path}"));
         }
 
@@ -1506,7 +1507,7 @@ public sealed class ActivityServiceTests
         public Task<Uri> CreateReadUrlAsync(
             string container,
             string path,
-            TimeSpan lifetime,
+            DateTimeOffset expiresOn,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Mark(nameof(CreateReadUrlAsync)));
 

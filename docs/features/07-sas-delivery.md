@@ -1,6 +1,6 @@
 # 07 — SAS Delivery
 
-Status: **Not started** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
+Status: **In progress** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../PRD.md) — Decisions #2/#5/#6/#7 + "Media storage & delivery" + "API surface" + "Authentication & authorization".
 
 ## Summary
@@ -24,8 +24,8 @@ image or video that is otherwise private.
 
 ## Acceptance criteria
 
-- [ ] `GET /api/media/{id}/url` requires a valid Entra bearer token; a request with no token returns **401** (PRD permission table)
-- [ ] **The route is under the visibility matrix, not outside it.** A `Private` activity is
+- [x] `GET /api/media/{id}/url` requires a valid Entra bearer token; a request with no token returns **401** (PRD permission table)
+- [x] **The route is under the visibility matrix, not outside it.** A `Private` activity is
       unreachable through this route to a caller who is neither its owner nor an admin, and a
       `Shared` one is reachable by any signed-in caller and not by an anonymous one; a signed-in
       caller who may read the activity gets 200 and one who may not gets **404**, not 403, so the
@@ -34,25 +34,25 @@ image or video that is otherwise private.
       among the ones it gates before the route existed. 09 has landed and its rule is
       `IActivityAuthorizationService`; this route must reach the same service rather than decide
       visibility for itself, which is the one thing 09's single-home criterion forbids.)*
-- [ ] The 401 is produced by the authorization layer **before any `IStorageRepository` call** — asserted with a **purpose-built recording double defined inside that one test**, which implements `IStorageRepository` only to record whether it was invoked (or to throw on invocation), so "rejected first" is a tested property, not a code-reading claim. This is the single claim a storage double is still sanctioned for, and it is the only thing this double is used for: it is not a fake implementation of the repository and not a substitute for testing storage *(2026-09-18: the blanket fake that used to carry this assert is deleted, and without a double the claim would be code-reading again)*
-- [ ] A request with a valid token but an unknown media id returns 404, and that check also precedes any minting
-- [ ] The response carries the SAS URL and its expiry as a UTC instant, so the client can refresh before it lapses
-- [ ] The TTL comes from configuration with a hard maximum: a configured value above the cap is **clamped, not honoured**
-- [ ] Expiry is **bounded and asserted in tests** — a test fails if the window is absent, non-positive, or longer than the cap. The expiry returned must equal the expiry actually embedded in the token
-- [ ] The SAS grants **read only** — no write, create, or delete permission
-- [ ] The SAS is scoped to the **single blob**, not to the container
-- [ ] The SAS is minted against the **private** container only, and never against a blob in a
+- [x] The 401 is produced by the authorization layer **before any `IStorageRepository` call** — asserted with a **purpose-built recording double defined inside that one test**, which implements `IStorageRepository` only to record whether it was invoked (or to throw on invocation), so "rejected first" is a tested property, not a code-reading claim. This is the single claim a storage double is still sanctioned for, and it is the only thing this double is used for: it is not a fake implementation of the repository and not a substitute for testing storage *(2026-09-18: the blanket fake that used to carry this assert is deleted, and without a double the claim would be code-reading again)*
+- [x] A request with a valid token but an unknown media id returns 404, and that check also precedes any minting
+- [x] The response carries the SAS URL and its expiry as a UTC instant, so the client can refresh before it lapses
+- [x] The TTL comes from configuration with a hard maximum: a configured value above the cap is **clamped, not honoured**
+- [x] Expiry is **bounded and asserted in tests** — a test fails if the window is absent, non-positive, or longer than the cap. The expiry returned must equal the expiry actually embedded in the token
+- [x] The SAS grants **read only** — no write, create, or delete permission
+- [x] The SAS is scoped to the **single blob**, not to the container
+- [x] The SAS is minted against the **private** container only, and never against a blob in a
       **public** container. Note where that line now falls: since Decision #29 `covers` holds only
       `Public` activities' covers, while a `Shared` or `Private` activity's cover lives in `media`
       and **does** get a SAS (feature 08). The rule is therefore about *containers*, not about
       "covers" — a `covers` blob is world-readable by design (Decision #13, amended by #29) and a
       SAS there would add a credential to content that needs none
-- [ ] Minting for a cover in the private container is the **same** operation as for a media blob,
+- [x] Minting for a cover in the private container is the **same** operation as for a media blob,
       reached through the same repository method — feature 05 and feature 08 must not construct SAS
       URLs by a second path, or the TTL cap and the read-only scope stop being single-sourced
-- [ ] A URL for a blob whose bytes are no longer present is the client's problem, not a minting failure — the failure mode is documented and does not 500
-- [ ] Minting goes through `IStorageRepository`, so the policy around it — TTL, clamping, read-only scope, single-blob target — is unit-tested as a decision without a store, and the Azure-specific construction is covered by the container tier, which is the tier that can show the signature is accepted
-- [ ] The generated URL is not written to logs (it is a credential)
+- [x] A URL for a blob whose bytes are no longer present is the client's problem, not a minting failure — the failure mode is documented and does not 500
+- [x] Minting goes through `IStorageRepository`, so the policy around it — TTL, clamping, read-only scope, single-blob target — is unit-tested as a decision without a store, and the Azure-specific construction is covered by the container tier, which is the tier that can show the signature is accepted
+- [x] The generated URL is not written to logs (it is a credential)
 
 ## Tests (TDD)
 
@@ -64,6 +64,54 @@ image or video that is otherwise private.
 - Integration (`TrailBlaze.Repository.Test`): with nothing listening on a port, the media row is the source of the blob path — the lookup whose id is soft-deleted or unknown is asserted to yield no blob path, and therefore no URL, with the query inspected via `ToQueryString()` ([testing-and-tdd.md](../testing-and-tdd.md)).
 - Integration (`TrailBlaze.Api.Test`): a tokenless request to `/api/media/{id}/url` returns 401 with no storage call — "no call" being the same purpose-built recording double as the unit bullet above, since the deployment the API tier boots against is offline and would refuse a real one for the wrong reason; an authenticated request returns 200 with a URL and an expiry.
 - Storage integration (`TrailBlaze.Repository.Test`, tagged `Category=Container`; `dotnet test --filter "Category=Container"`): a **real SAS round-trip** — mint against the live account, issue a plain HTTP GET against the returned URL with no credentials, and receive 200 with the original bytes; then request a URL whose expiry has already passed and observe the storage service **refuse** it. This is the tier that proves SAS generation, which no double can by construction (see [testing-and-tdd.md](../testing-and-tdd.md)). It runs **by default** against the Azurite emulator, which needs no credentials, and against a real account only when `TRAILBLAZE_STORAGE_CONNECTION` names one, skipping rather than failing when nothing answers. *(2026-09-18 — the project and the trait in this bullet were both wrong after the refactor. The emulator looks like a weakening of the property and is not: the signature is still computed from the account key and checked by a server, so a wrong key or a wrong permission set still yields a well-formed URL that is refused on fetch; only the account behind it differs.)*
+
+## Delivered — where each test landed, and two claims that moved
+
+*(2026-09-25, feature branch `feature/07-sas-delivery`.)*
+
+- **The policy has one home**: `TrailBlaze.Model/SignedUrlLifetime.cs`, holding the default (15 min),
+  the cap (60 min), the clamping, and the rounding to whole seconds a SAS can carry. The media route
+  reads its window from `MediaUrlTtlMinutes` through the composition root; the private-cover path
+  takes `Constant.CoverUrl.Lifetime`. Both reach storage through the **same** `CreateReadUrlAsync`,
+  which is asserted as a property of the contract in `OneRuleOneHomeTests`.
+- **The "expiry returned equals expiry embedded" criterion is a pair of tests across a seam.**
+  `TrailBlaze.Service.Test` asserts that what the response reports is the instant handed to storage;
+  `TrailBlaze.Repository.Test`'s container tier asserts that storage signs the instant it is handed.
+  Neither test makes the whole claim, and that seam is named rather than hidden — the same seam
+  [testing-and-tdd.md](../testing-and-tdd.md) describes generally.
+- **The read-only and single-blob criteria are asserted against the server, not the arguments.**
+  `StorageContainerRoutingTests` reads `sp` and `sr` back out of the URL that was handed over (a
+  permission set that never reached the builder still builds a well-formed URL), and
+  `AzureBlobStorageIntegrationTests` issues a **well-formed** `PUT` against the signed URL and
+  observes it refused with the bytes unchanged. The first draft of that test omitted the
+  `x-ms-blob-type` header and passed on a 400 — a malformed request refuses every write, including
+  the permitted ones — which is why it is now asserted as "the write did not land" as well as "the
+  write was refused".
+
+**Two claims from the Tests block were not made where the block put them.**
+
+1. **The "before any blob operation" count is at the service tier, not the API tier.** The block asks
+   for the purpose-built recording double in `TrailBlaze.Api.Test` as well. It cannot carry the claim
+   there: every media route is `[Authorize]`, so a tokenless request is refused by the authentication
+   middleware before the action is entered, and a zero-interaction assertion would hold because of the
+   framework's ordering rather than because of anything this code does — it would still pass if the
+   mint were moved above the gate, which is the one mistake it exists to catch.
+   [testing-and-tdd.md](../testing-and-tdd.md)'s rule is explicit that such an assertion is not a test
+   of our code. The double is `NeverReachedStorage` in `MediaServiceTests`, a private type in that file
+   used only by the two ordering tests; C# has no class declarations inside a method, so "defined
+   inside that one test" is realised as "defined in that test's file and reachable from nowhere else".
+   The API tier contributes the 401 itself, which is a real assertion: a route that did not exist
+   would answer 404, and the test fails when the route is removed.
+2. **The API tier still cannot make the authenticated 200.** As with 09, the tier has no way to
+   present a token — there is no Entra dev tenant, and `oid` is signed by Microsoft's keys. The
+   authenticated surface is asserted in `TrailBlaze.Service.Test` against the service, and end to end
+   in 11 when a running stack and a tenant exist.
+
+The soft-delete half of the repository-tier bullet was already carried before this feature:
+`MediaModelTests` asserts the `IsDeleted` predicate in the generated SQL via `ToQueryString()`,
+`SoftDeleteExecutionTests` asserts it executes against a real engine, and
+`MediaRoundTripTests.A_removed_item_leaves_the_read_path_and_stays_in_the_table` binds the two. What
+this feature adds is that a row which resolves to nothing yields no URL at all.
 
 ## Notes / non-goals
 

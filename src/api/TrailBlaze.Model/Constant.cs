@@ -90,6 +90,10 @@ public static class Constant
         /// configured separately: the containers are the closed set in
         /// <see cref="StorageContainer"/>.</summary>
         public const string BlobConnection = "BlobConnection";
+
+        /// <summary>How many minutes a media read URL is given. Optional, and held inside
+        /// <see cref="SignedUrlLifetime.Maximum"/> whatever it says.</summary>
+        public const string MediaUrlTtlMinutes = "MediaUrlTtlMinutes";
     }
 
     /// <summary>
@@ -284,12 +288,13 @@ public static class Constant
     /// </summary>
     /// <remarks>
     /// A SAS is a bearer token, so the expiry is the real control rather than the URL's secrecy.
-    /// Feature 07 mints the media equivalent on terms of its own — two numbers, not one.
+    /// Feature 07 mints the media equivalent on terms of its own — two numbers, not one. Both are
+    /// held inside <see cref="SignedUrlLifetime.Maximum"/>.
     /// </remarks>
     public static class CoverUrl
     {
         /// <summary>The lifetime of a `Shared` or `Private` entry's cover link.</summary>
-        public static readonly TimeSpan SasLifetime = TimeSpan.FromMinutes(15);
+        public static readonly SignedUrlLifetime Lifetime = new(TimeSpan.FromMinutes(15));
     }
 
     /// <summary>
