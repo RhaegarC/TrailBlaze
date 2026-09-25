@@ -44,6 +44,7 @@ type View =
   | { name: "detail"; activityId: string }
   | { name: "create" }
   | { name: "edit"; activityId: string }
+  | { name: "upload"; activityId: string }
   | { name: "profile" };
 
 // ─── Settings context ────────────────────────────────────────────────────────
@@ -400,6 +401,10 @@ function Nav({
   const t = T[lang];
   const isDetail = currentView?.name === "detail";
   const plusLabel = isDetail ? t.uploadMedia : t.newActivity;
+  const detailActivityId = isDetail ? (currentView as { name: "detail"; activityId: string }).activityId : null;
+  const plusTarget: View = detailActivityId
+    ? { name: "upload", activityId: detailActivityId }
+    : { name: "create" };
 
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 border-b ${C.border} ${C.bg}/95 backdrop-blur-sm transition-colors duration-300`}>
@@ -418,7 +423,7 @@ function Nav({
         <div className="flex items-center gap-4">
           {authRole !== "visitor" && (
             <button
-              onClick={() => onNavigate(isDetail ? { name: "create" } : { name: "create" })}
+              onClick={() => onNavigate(plusTarget)}
               className={`hidden sm:flex items-center gap-2 text-sm font-medium ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -992,6 +997,152 @@ function ActivityForm({ mode, activityId, onNavigate }: { mode: "create" | "edit
   );
 }
 
+// ─── Media Upload Form ─────────────────────────────────────────────────────────
+
+function MediaUploadForm({ activityId, onNavigate }: { activityId: string; onNavigate: (v: View) => void }) {
+  const { lang } = useSettings();
+  const t = T[lang];
+  const activity = MOCK_ACTIVITIES.find((a) => a.id === activityId);
+
+  type FileEntry = { id: string; file: File; preview: string | null; kind: "Image" | "Video" };
+  const [files, setFiles] = useState<FileEntry[]>([]);
+  const [submitted, setSubmitted] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
+  function addFiles(incoming: FileList | null) {
+    if (!incoming) return;
+    const entries: FileEntry[] = Array.from(incoming).map((file) => {
+      const kind: "Image" | "Video" = file.type.startsWith("video/") ? "Video" : "Image";
+      const preview = kind === "Image" ? URL.createObjectURL(file) : null;
+      return { id: Math.random().toString(36).slice(2), file, preview, kind };
+    });
+    setFiles((prev) => [...prev, ...entries]);
+  }
+
+  function removeFile(id: string) {
+    setFiles((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!files.length) return;
+    setSubmitted(true);
+    setTimeout(() => onNavigate({ name: "detail", activityId }), 1400);
+  }
+
+  if (submitted) {
+    return (
+      <main className="pt-14 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border border-[#c8893a] flex items-center justify-center mx-auto mb-4">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M4 10L8 14L16 6" stroke="#c8893a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <p className={`font-display text-[22px] ${C.fg}`}>{t.changesSaved}</p>
+          <p className={`text-sm ${C.dim} mt-1`}>{t.returningToJournal}</p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="pt-14">
+      <div className="max-w-3xl mx-auto px-6 py-12">
+        <button
+          onClick={() => onNavigate({ name: "detail", activityId })}
+          className={`flex items-center gap-2 text-sm ${C.dim} hover:text-[var(--tb-fg)] transition-colors mb-8`}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 11L5 7L9 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {t.backToActivity}
+        </button>
+
+        <h1 className={`font-display text-[38px] font-semibold ${C.fg} mb-1`}>{t.uploadMedia}</h1>
+        {activity && (
+          <p className={`text-sm ${C.dim} mb-10`}>{activity.title}</p>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Drop zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files); }}
+            className={`border-2 border-dashed transition-colors ${dragOver ? "border-[#c8893a] bg-[#c8893a]/5" : C.border}`}
+          >
+            <label className={`flex flex-col items-center gap-3 px-8 py-12 cursor-pointer ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}>
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <path d="M28 20V26C28 27.1046 27.1046 28 26 28H6C4.89543 28 4 27.1046 4 26V20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M22 11L16 5L10 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M16 5V21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span className="text-sm font-medium">Drop files here or click to browse</span>
+              <span className={`font-mono-data text-[11px] ${C.dimmer}`}>
+                Images ≤ 10 MB · Videos ≤ 200 MB · Up to 20 files
+              </span>
+              <input type="file" multiple accept="image/*,video/*" className="hidden" onChange={(e) => addFiles(e.target.files)} />
+            </label>
+          </div>
+
+          {/* File list */}
+          {files.length > 0 && (
+            <div className="space-y-2">
+              {files.map((f) => (
+                <div key={f.id} className={`flex items-center gap-4 px-4 py-3 border ${C.border} ${C.card}`}>
+                  {f.preview ? (
+                    <img src={f.preview} alt={f.file.name} className="w-10 h-10 object-cover shrink-0" />
+                  ) : (
+                    <div className={`w-10 h-10 ${C.secondary} flex items-center justify-center shrink-0`}>
+                      <svg width="14" height="16" viewBox="0 0 12 14" fill="none">
+                        <path d="M1 1L11 7L1 13V1Z" fill="#c8893a" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${C.fg} truncate`}>{f.file.name}</p>
+                    <p className={`font-mono-data text-[11px] ${C.dim}`}>
+                      {formatBytes(f.file.size)} · {f.kind}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(f.id)}
+                    className={`${C.dim} hover:text-red-400 transition-colors shrink-0`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M10.5 3.5L3.5 10.5M3.5 3.5L10.5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className={`flex items-center gap-3 pt-4 border-t ${C.border}`}>
+            <button
+              type="submit"
+              disabled={files.length === 0}
+              className="px-6 py-3 bg-[#c8893a] text-[#0f120e] text-sm font-semibold hover:bg-[#d9a050] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {t.uploadMedia}
+              {files.length > 0 && <span className="ml-2 font-mono-data text-[11px]">({files.length})</span>}
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate({ name: "detail", activityId })}
+              className={`px-6 py-3 text-sm ${C.dim} hover:text-[var(--tb-fg)] transition-colors`}
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </form>
+      </div>
+    </main>
+  );
+}
+
 // ─── User Profile ──────────────────────────────────────────────────────────────
 
 function SegmentedControl<T extends string>({
@@ -1189,7 +1340,7 @@ export default function App() {
   const currentUserId = authRole === "user" ? "user-1" : authRole === "admin" ? "admin-1" : "";
 
   function handleNavigate(v: View) {
-    if ((v.name === "create" || v.name === "edit" || v.name === "profile") && authRole === "visitor") return;
+    if ((v.name === "create" || v.name === "edit" || v.name === "upload" || v.name === "profile") && authRole === "visitor") return;
     setView(v);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -1213,7 +1364,25 @@ export default function App() {
         )}
         {view.name === "create" && <ActivityForm mode="create" onNavigate={handleNavigate} />}
         {view.name === "edit" && <ActivityForm mode="edit" activityId={view.activityId} onNavigate={handleNavigate} />}
+        {view.name === "upload" && <MediaUploadForm activityId={view.activityId} onNavigate={handleNavigate} />}
         {view.name === "profile" && <UserProfile authRole={authRole} onNavigate={handleNavigate} />}
+
+        {/* Mobile FAB — shown only on small screens when signed in and not on form pages */}
+        {authRole !== "visitor" && view.name !== "create" && view.name !== "edit" && view.name !== "upload" && view.name !== "profile" && (
+          <button
+            onClick={() => handleNavigate(
+              view.name === "detail"
+                ? { name: "upload", activityId: view.activityId }
+                : { name: "create" }
+            )}
+            aria-label={view.name === "detail" ? t.uploadMedia : t.newActivity}
+            className="sm:hidden fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-[#c8893a] hover:bg-[#d9a050] active:scale-95 transition-all shadow-2xl flex items-center justify-center"
+          >
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+              <path d="M11 2V20M2 11H20" stroke="#0f120e" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
 
         <footer className={`border-t ${C.border} mt-20`}>
           <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
