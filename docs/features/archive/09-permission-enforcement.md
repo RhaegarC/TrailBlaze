@@ -62,10 +62,10 @@ feature: their endpoints ship permissive and are brought under the matrix here.
       not 403, so none of them can be used as a side door to confirm the entry exists. A `Shared`
       entry is reachable by any signed-in caller and not by an anonymous one
       *(2026-09-24 — `GET /api/media/{id}/url` left this list: the route does not exist, and
-      building it is [07](../07-sas-delivery.md)'s. The criterion moved there with it.)*
+      building it is [07](07-sas-delivery.md)'s. The criterion moved there with it.)*
 - [x] `GET /api/activity/{id}/media` returns **401 for anonymous** and, for a signed-in caller,
       follows the activity's visibility — 200 if readable, 404 if not.
-      *(2026-09-24 — `GET /api/media/{id}/url` moved to [07](../07-sas-delivery.md), which owns it.)*
+      *(2026-09-24 — `GET /api/media/{id}/url` moved to [07](07-sas-delivery.md), which owns it.)*
 - [x] `POST /api/activity` returns **401 for anonymous**, 201 for `User` and `Admin`
 - [x] `PUT /api/activity/{id}` returns **401 anonymous / 200 owner / 403 authenticated
       non-owner / 200 `Admin`**
@@ -111,10 +111,10 @@ feature: their endpoints ship permissive and are brought under the matrix here.
       alone (Decision #9) — a token carrying an admin-looking claim but backed by a `User` row is
       still denied admin override
 - [x] `GET /health` remains anonymously reachable and returns 200
-- [ ] After this feature merges, every route in the PRD "API surface" table matches its stated
+- [x] After this feature merges, every route in the PRD "API surface" table matches its stated
       Auth column, and `develop` is safe to deploy (04–08 alone are not). *Open on two counts:
-      the merge itself, and `GET /api/media/{id}/url`, which [07](../07-sas-delivery.md) has still to
-      build*
+      the merge itself, and `GET /api/media/{id}/url`, which [07](07-sas-delivery.md) has still to
+      build* — *(2026-09-25 — both are closed: the merge in PR #26, and the route in [07](07-sas-delivery.md), merged in PR #28. The last row of that table to have no implementation behind it now has one. The live-pipeline status matrix remains 11's, as the note below says.)*
 
 **Two claims above are weaker than they read, and both weakenings are deliberate.**
 
