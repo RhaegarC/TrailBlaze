@@ -1,5 +1,6 @@
 namespace TrailBlaze.Service.Test;
 
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Linq.Expressions;
 using TrailBlaze.Interface.Infrastructure;
@@ -510,6 +511,213 @@ public sealed class MediaServiceTests
         Assert.Empty(harness.Storage.Deleted);
     }
 
+    // ---- Minting a read URL ---------------------------------------------------------------
+
+    /// <summary>
+    /// The security hot spot of the media path, and the one claim a storage double is still
+    /// sanctioned for.
+    /// </summary>
+    /// <remarks>
+    /// The count is the whole of the assertion: one recording double, zero interactions. It can be
+    /// made no other way — a real backend records nothing, so "the refusal came before any blob
+    /// operation" is invisible to the container tier, which can only see what did happen. This
+    /// double stands in for no storage behaviour and supports no other claim.
+    /// </remarks>
+    [Fact]
+    public async Task An_unauthenticated_caller_is_refused_before_storage_is_reached()
+    {
+        var harness = new Harness(caller: null);
+        var storage = new NeverReachedStorage();
+
+        MediaUrlOutcome outcome = await harness.ServiceWith(storage).CreateReadUrlAsync("one");
+
+        Assert.Equal(MediaUrlOutcomeKind.NoCaller, outcome.Kind);
+        Assert.Empty(storage.Reached);
+    }
+
+    /// <summary>
+    /// The same count for the caller who is signed in but may not read the entry: a <c>Private</c>
+    /// activity's media is not mintable by a stranger, and the refusal precedes the mint exactly as
+    /// the anonymous one does.
+    /// </summary>
+    [Fact]
+    public async Task A_caller_who_may_not_read_the_entry_is_refused_before_storage_is_reached()
+    {
+        var harness = new Harness(caller: Contributor);
+        harness.Repository.Activity = Activity(Constant.ActivityType.Private, Owner);
+
+        // The item exists, so the refusal is the visibility gate rather than a row that was absent
+        // anyway — without this the test would pass on the lookup missing.
+        harness.Repository.Item = Item("one", Contributor);
+        var storage = new NeverReachedStorage();
+
+        MediaUrlOutcome outcome = await harness.ServiceWith(storage).CreateReadUrlAsync("one");
+
+        Assert.Equal(MediaUrlOutcomeKind.NotFound, outcome.Kind);
+        Assert.Empty(storage.Reached);
+    }
+
+    /// <summary>
+    /// An id that names nothing is answered as absent, and the answer costs no mint either: whether
+    /// the row exists at all is the fact being withheld.
+    /// </summary>
+    [Fact]
+    public async Task An_item_that_names_nothing_mints_nothing()
+    {
+        var harness = new Harness();
+        harness.Repository.Item = null;
+
+        MediaUrlOutcome outcome = await harness.Service.CreateReadUrlAsync("one");
+
+        Assert.Equal(MediaUrlOutcomeKind.NotFound, outcome.Kind);
+        Assert.Empty(harness.Storage.ReadUrls);
+    }
+
+    /// <summary>
+    /// The route has no authorization rule of its own: it reaches the same matrix every other read
+    /// does, which is what keeps a private entry's media from being mintable by a signed-in
+    /// stranger.
+    /// </summary>
+    [Theory]
+    [InlineData(Contributor, Constant.ActivityType.Public, Owner, false, MediaUrlOutcomeKind.Minted)]
+    [InlineData(Contributor, Constant.ActivityType.Shared, Owner, false, MediaUrlOutcomeKind.Minted)]
+    [InlineData(Contributor, Constant.ActivityType.Private, Owner, false, MediaUrlOutcomeKind.NotFound)]
+    [InlineData(Owner, Constant.ActivityType.Private, Owner, false, MediaUrlOutcomeKind.Minted)]
+    [InlineData(Contributor, Constant.ActivityType.Shared, Contributor, false, MediaUrlOutcomeKind.Minted)]
+    [InlineData(Admin, Constant.ActivityType.Private, Owner, true, MediaUrlOutcomeKind.Minted)]
+    public async Task A_url_is_minted_for_a_caller_who_may_read_the_entry(
+        string? caller, string type, string owner, bool isAdmin, MediaUrlOutcomeKind expected)
+    {
+        var harness = new Harness(caller, isAdmin);
+        harness.Repository.Activity = Activity(type, owner);
+        harness.Repository.Item = Item("one", Contributor);
+
+        MediaUrlOutcome outcome = await harness.Service.CreateReadUrlAsync("one");
+
+        Assert.Equal(expected, outcome.Kind);
+    }
+
+    /// <summary>
+    /// The target is the row's own blob, in the private container — one object, not the container.
+    /// </summary>
+    [Fact]
+    public async Task The_url_is_signed_for_the_items_own_blob_in_the_private_container()
+    {
+        var harness = new Harness();
+        harness.Repository.Item = Item("one", Contributor);
+
+        MediaUrlOutcome outcome = await harness.Service.CreateReadUrlAsync("one");
+
+        (string container, string path, _) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.Equal(MediaUrlOutcomeKind.Minted, outcome.Kind);
+        Assert.Equal(Constant.StorageContainer.Media, container);
+        Assert.Equal("blobs/one", path);
+        Assert.Equal("https://signed.invalid/media/blobs/one", outcome.Url!.Url);
+    }
+
+    /// <summary>
+    /// The instant the client is told is the instant the token carries.
+    /// </summary>
+    /// <remarks>
+    /// This is the half of that claim the service tier can make: what it reports is what it handed
+    /// to storage. The other half — that storage signs the instant it is handed — needs a real
+    /// account and is asserted in <c>TrailBlaze.Repository.Test</c>. Neither test is the whole
+    /// claim, and this seam is the reason.
+    /// </remarks>
+    [Fact]
+    public async Task The_expiry_reported_is_the_instant_handed_to_storage()
+    {
+        var harness = new Harness();
+        harness.Repository.Item = Item("one", Contributor);
+
+        MediaUrlOutcome outcome = await harness.Service.CreateReadUrlAsync("one");
+
+        (_, _, DateTimeOffset handedToStorage) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.Equal(handedToStorage, outcome.Url!.ExpiresOnUtc);
+    }
+
+    /// <summary>
+    /// The window is bounded at both ends, which is the whole of the control on a bearer link: a
+    /// window of a year would satisfy "expires eventually" and leak the bytes.
+    /// </summary>
+    [Fact]
+    public async Task The_expiry_is_in_the_future_and_within_the_cap()
+    {
+        var harness = new Harness();
+        harness.Repository.Item = Item("one", Contributor);
+
+        MediaUrlOutcome outcome = await harness.Service.CreateReadUrlAsync("one");
+
+        Assert.InRange(
+            outcome.Url!.ExpiresOnUtc - DateTimeOffset.UtcNow,
+            TimeSpan.FromMinutes(1),
+            SignedUrlLifetime.Maximum);
+    }
+
+    /// <summary>
+    /// A configured window longer than the cap is clamped to it rather than honoured.
+    /// </summary>
+    [Fact]
+    public async Task A_configured_window_longer_than_the_cap_is_clamped()
+    {
+        var harness = new Harness(mediaUrlTtl: TimeSpan.FromHours(5));
+        harness.Repository.Item = Item("one", Contributor);
+
+        await harness.Service.CreateReadUrlAsync("one");
+
+        // Read off what storage was handed rather than off the response: this is the policy's own
+        // output, and "the response repeats it" is a separate claim with a test of its own.
+        (_, _, DateTimeOffset expiresOn) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.InRange(
+            expiresOn - DateTimeOffset.UtcNow,
+            SignedUrlLifetime.Maximum - TimeSpan.FromSeconds(1),
+            SignedUrlLifetime.Maximum);
+    }
+
+    /// <summary>
+    /// A configured window that is not positive is the absence of a setting rather than an
+    /// instruction to mint a dead link, so the default answers for it.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-30)]
+    public async Task A_configured_window_that_is_not_positive_falls_back_to_the_default(int minutes)
+    {
+        var harness = new Harness(mediaUrlTtl: TimeSpan.FromMinutes(minutes));
+        harness.Repository.Item = Item("one", Contributor);
+
+        await harness.Service.CreateReadUrlAsync("one");
+
+        (_, _, DateTimeOffset expiresOn) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.InRange(
+            expiresOn - DateTimeOffset.UtcNow,
+            SignedUrlLifetime.Default - TimeSpan.FromSeconds(1),
+            SignedUrlLifetime.Default);
+    }
+
+    /// <summary>
+    /// The URL is a credential, so it is answered to the caller who asked and written nowhere:
+    /// anything that logged it would put a working link to a private blob into the log sink.
+    /// </summary>
+    [Fact]
+    public async Task The_minted_url_is_never_written_to_the_log()
+    {
+        var harness = new Harness();
+        harness.Repository.Item = Item("one", Contributor);
+        var logger = new RecordingLogger();
+        MediaService service = harness.ServiceWith(harness.Storage, logger);
+
+        MediaUrlOutcome outcome = await service.CreateReadUrlAsync("one");
+
+        string url = outcome.Url!.Url;
+        Assert.NotEmpty(url);
+        Assert.DoesNotContain(logger.Messages, message => message.Contains(url, StringComparison.Ordinal));
+    }
+
     // ---- Scaffolding ----------------------------------------------------------------------
 
     private static Activity Activity(string type, string owner) => new()
@@ -540,8 +748,14 @@ public sealed class MediaServiceTests
     /// them.</summary>
     private sealed class Harness
     {
-        public Harness(string? caller = Contributor, bool isAdmin = false)
+        private readonly string? _caller;
+        private readonly SignedUrlLifetime _lifetime;
+
+        public Harness(string? caller = Contributor, bool isAdmin = false, TimeSpan? mediaUrlTtl = null)
         {
+            _caller = caller;
+            _lifetime = new SignedUrlLifetime(mediaUrlTtl ?? SignedUrlLifetime.Default);
+
             Repository = new RecordingRepository
             {
                 Activity = Activity(Constant.ActivityType.Public, Owner),
@@ -554,15 +768,7 @@ public sealed class MediaServiceTests
             };
             Storage = new RecordingStorage();
 
-            Service = new MediaService(
-                Repository,
-                Storage,
-
-                // The real rule, not a stand-in: the visibility and ownership decisions are the thing
-                // under test in the gate tables, and a double here would be asserting the double.
-                new ActivityAuthorizationService(Repository, new StubUserContext(caller)),
-                new UploadValidationService(),
-                NullLogger<MediaService>.Instance);
+            Service = ServiceWith(Storage, NullLogger<MediaService>.Instance);
         }
 
         public RecordingRepository Repository { get; }
@@ -570,6 +776,20 @@ public sealed class MediaServiceTests
         public RecordingStorage Storage { get; }
 
         public MediaService Service { get; }
+
+        /// <summary>The same wiring over a different storage double, for the tests whose storage is
+        /// the thing being recorded and not the default recorder.</summary>
+        public MediaService ServiceWith(IStorageRepository storage, ILogger<MediaService>? logger = null) =>
+            new(
+                Repository,
+                storage,
+
+                // The real rule, not a stand-in: the visibility and ownership decisions are the thing
+                // under test in the gate tables, and a double here would be asserting the double.
+                new ActivityAuthorizationService(Repository, new StubUserContext(_caller)),
+                new UploadValidationService(),
+                _lifetime,
+                logger ?? NullLogger<MediaService>.Instance);
     }
 
     /// <summary>The caller's object id and nothing else.</summary>
@@ -696,15 +916,18 @@ public sealed class MediaServiceTests
     }
 
     /// <summary>
-    /// Records the blobs it was asked to store or remove, and stores nothing.
+    /// Records the asks the service makes of storage, and mints markers in their place.
     /// </summary>
     /// <remarks>
-    /// It stands in for no storage behaviour — it holds no bytes, mints no URL and moves nothing —
-    /// and supports one claim only: what the service asked for, and what it did not ask for before
-    /// it refused. Whether the blob is really there is the container tier's question.
+    /// It stands in for no storage behaviour: it holds no bytes and signs nothing, so it cannot show
+    /// that a URL works — the container tier is where that is asked, because only a real backend can
+    /// answer it. What it supports is the claim about the <em>ask</em>: which container, which path,
+    /// and the instant the URL was given.
     /// </remarks>
     private sealed class RecordingStorage : IStorageRepository
     {
+        public List<(string Container, string Path, DateTimeOffset ExpiresOn)> ReadUrls { get; } = [];
+
         public List<(string Container, string Path, string ContentType)> Uploads { get; } = [];
 
         public List<string> Deleted { get; } = [];
@@ -739,8 +962,12 @@ public sealed class MediaServiceTests
         public Task<Uri> CreateReadUrlAsync(
             string container,
             string path,
-            TimeSpan lifetime,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException(NoStorage);
+            DateTimeOffset expiresOn,
+            CancellationToken cancellationToken = default)
+        {
+            ReadUrls.Add((container, path, expiresOn));
+            return Task.FromResult(new Uri($"https://signed.invalid/{container}/{path}"));
+        }
 
         public Uri CreatePublicUrl(string container, string path) =>
             throw new NotSupportedException(NoStorage);
@@ -753,5 +980,77 @@ public sealed class MediaServiceTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException(NoStorage);
 
         private const string NoStorage = "This double records calls and stores nothing.";
+    }
+
+    /// <summary>
+    /// Records nothing but the fact that it was reached, and names the member it was reached through.
+    /// </summary>
+    /// <remarks>
+    /// One pair of tests uses it, for one claim: that a refused request touches no storage at all.
+    /// It stands in for no storage behaviour and exists because <see cref="RecordingStorage"/> can
+    /// only report the members it knows about, while this answers for every one of them at once.
+    /// </remarks>
+    private sealed class NeverReachedStorage : IStorageRepository
+    {
+        public List<string> Reached { get; } = [];
+
+        public Task<string> UploadAsync(
+            string container,
+            string path,
+            Stream content,
+            string contentType,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Mark(nameof(UploadAsync)).ToString());
+
+        public Task DeleteAsync(
+            string container,
+            string path,
+            CancellationToken cancellationToken = default)
+        {
+            Mark(nameof(DeleteAsync));
+            return Task.CompletedTask;
+        }
+
+        public Task<Uri> CreateReadUrlAsync(
+            string container,
+            string path,
+            DateTimeOffset expiresOn,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Mark(nameof(CreateReadUrlAsync)));
+
+        public Uri CreatePublicUrl(string container, string path) => Mark(nameof(CreatePublicUrl));
+
+        public Task<string> MoveAsync(
+            string sourceContainer,
+            string sourcePath,
+            string destinationContainer,
+            string destinationPath,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Mark(nameof(MoveAsync)).ToString());
+
+        private Uri Mark(string member)
+        {
+            Reached.Add(member);
+            return new Uri($"https://never.invalid/{member}");
+        }
+    }
+
+    /// <summary>Keeps every message the service logged, so "the URL was not logged" is a count
+    /// rather than a reading of the code.</summary>
+    private sealed class RecordingLogger : ILogger<MediaService>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Messages.Add(formatter(state, exception));
     }
 }

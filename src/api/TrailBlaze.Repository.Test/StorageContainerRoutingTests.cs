@@ -1,8 +1,6 @@
 namespace TrailBlaze.Repository.Test;
 
-using System.Globalization;
 using System.Net;
-using System.Web;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using TrailBlaze.Model;
@@ -76,15 +74,15 @@ public sealed class StorageContainerRoutingTests(AzureStorageFixture fixture)
     /// The read URL of a private container is signed and expires when it was asked to.
     /// </summary>
     /// <remarks>
-    /// The lifetime is the load-bearing half. A URL that is signed but never expires is a
-    /// leaked object, and a URL that expires on some default rather than on the caller's
-    /// lifetime silently breaks the promise the caller made to whoever it handed the link to.
-    /// The window is generous because the assertion is "the five minutes it asked for", not
-    /// "five minutes to the second" — it excludes an hour and it excludes never, which is what
-    /// a default would look like.
+    /// The expiry is the load-bearing half. A URL that is signed but never expires is a
+    /// leaked object, and a URL that expires on some default rather than on the instant the
+    /// caller named silently breaks the promise the caller made to whoever it handed the link to.
+    /// The comparison is exact rather than a window, because the caller names the instant and the
+    /// signature carries it to the second: anything else would leave the caller reporting a moment
+    /// the token does not hold.
     /// </remarks>
     [SkippableFact]
-    public async Task A_read_url_is_signed_and_expires_with_the_lifetime_it_was_given()
+    public async Task A_read_url_is_signed_and_expires_when_it_was_told_to()
     {
         AzureBlobStorageRepository storage = fixture.Repository();
         string path = Unique("sas");
@@ -95,13 +93,58 @@ public sealed class StorageContainerRoutingTests(AzureStorageFixture fixture)
                 Constant.StorageContainer.Media, path, new MemoryStream("signed"u8.ToArray()),
                 "text/plain");
 
+            DateTimeOffset expiresOn = new SignedUrlLifetime(TimeSpan.FromMinutes(5))
+                .ExpiryFrom(DateTimeOffset.UtcNow);
+
             Uri url = await storage.CreateReadUrlAsync(
-                Constant.StorageContainer.Media, path, TimeSpan.FromMinutes(5));
+                Constant.StorageContainer.Media, path, expiresOn);
 
             Assert.Contains("sig=", url.Query);
+            Assert.Equal(expiresOn, SignedUrl.ExpiryOf(url));
+        }
+        finally
+        {
+            await storage.DeleteAsync(Constant.StorageContainer.Media, path);
+        }
+    }
 
-            TimeSpan remaining = ExpiryOf(url) - DateTimeOffset.UtcNow;
-            Assert.InRange(remaining, TimeSpan.FromMinutes(4), TimeSpan.FromMinutes(6));
+    /// <summary>
+    /// The signature grants a read of one blob and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// Both halves are load-bearing and neither is visible from the call: a SAS that granted write
+    /// would let anyone holding the URL overwrite the object, and one scoped to the container would
+    /// open every other item in it. The claim is read off the URL the caller is handed rather than
+    /// from the arguments that built it, because a permission set that never reached the builder
+    /// still produces a well-formed URL. That the server <em>honours</em> the scope — a write is
+    /// refused — is the half this cannot make, and
+    /// <see cref="AzureBlobStorageIntegrationTests"/> makes it.
+    /// </remarks>
+    [SkippableFact]
+    public async Task A_read_url_grants_a_read_of_one_blob_and_no_more()
+    {
+        AzureBlobStorageRepository storage = fixture.Repository();
+        string path = Unique("scope");
+
+        try
+        {
+            await storage.UploadAsync(
+                Constant.StorageContainer.Media, path, new MemoryStream("scoped"u8.ToArray()),
+                "text/plain");
+
+            Uri url = await storage.CreateReadUrlAsync(
+                Constant.StorageContainer.Media,
+                path,
+                new SignedUrlLifetime(TimeSpan.FromMinutes(5)).ExpiryFrom(DateTimeOffset.UtcNow));
+
+            Assert.Equal("r", SignedUrl.PermissionsOf(url));
+
+            // `b` for blob: `c` would be a container-wide signature, which the API never mints.
+            Assert.Equal("b", SignedUrl.ResourceOf(url));
+
+            // And the path names this object, so a signature scoped to a blob other than the one the
+            // caller asked for would not read back.
+            Assert.EndsWith($"/{Constant.StorageContainer.Media}/{path}", url.AbsolutePath);
         }
         finally
         {
@@ -253,18 +296,18 @@ public sealed class StorageContainerRoutingTests(AzureStorageFixture fixture)
     }
 
     /// <summary>
-    /// A read URL with no expiry is a leaked object, so a nonsensical lifetime is refused
-    /// rather than silently clamped.
+    /// A read URL with no expiry is a leaked object, so an expiry that was never named is
+    /// refused rather than defaulted to something.
     /// </summary>
     /// <remarks>
-    /// The deleted fake had its own copy of this guard, which meant the tier was testing the
-    /// double rather than the implementation. This one reaches the real
-    /// <c>AzureBlobStorageRepository</c>.
+    /// The guard is on <c>default</c> rather than on a duration, because the caller names the
+    /// instant: there is no duration here to be non-positive, and the one value that cannot mean
+    /// an instant is the one with no ticks in it. The wider policy — that a configured window is
+    /// clamped and a nonsensical one falls back — lives in <c>SignedUrlLifetime</c> and is unit
+    /// tested there, so this stays the repository's own single claim.
     /// </remarks>
-    [SkippableTheory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    public async Task A_read_url_needs_a_positive_lifetime(int seconds)
+    [SkippableFact]
+    public async Task A_read_url_needs_the_instant_it_expires()
     {
         AzureBlobStorageRepository storage = fixture.Repository();
 
@@ -272,15 +315,8 @@ public sealed class StorageContainerRoutingTests(AzureStorageFixture fixture)
             () => storage.CreateReadUrlAsync(
                 Constant.StorageContainer.Media,
                 Unique("never-written"),
-                TimeSpan.FromSeconds(seconds)));
+                default));
     }
-
-    /// <summary>When the SAS expires, read out of the URL it was signed into.</summary>
-    private static DateTimeOffset ExpiryOf(Uri url) =>
-        DateTimeOffset.Parse(
-            HttpUtility.ParseQueryString(url.Query)["se"]!,
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
 
     /// <summary>A path unique to this run, so a failure cannot be read as the last one's
     /// leftovers and a cleanup can never remove another test's object.</summary>

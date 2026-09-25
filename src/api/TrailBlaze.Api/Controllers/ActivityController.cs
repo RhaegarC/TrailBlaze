@@ -196,6 +196,25 @@ public class ActivityController(
     }
 
     /// <summary>
+    /// Mints a short-lived, read-only URL for one item's bytes.
+    /// </summary>
+    /// <remarks>
+    /// A read, so it is gated by visibility and nothing else — no ownership and no admin override
+    /// beyond the one <see cref="IActivityAuthorizationService"/> already applies. The URL is a bearer
+    /// token, so the expiry it comes with is the control, and the window is clamped by the service.
+    /// </remarks>
+    /// <param name="mediaId">The item's id.</param>
+    /// <returns>The URL and the instant it stops working; not-found for an id that names nothing or
+    /// one this caller may not read.</returns>
+    [HttpGet("/api/media/{mediaId}/url")]
+    public async Task<IActionResult> GetMediaUrl(string mediaId)
+    {
+        MediaUrlOutcome outcome = await _mediaService.CreateReadUrlAsync(mediaId);
+
+        return this.ToActionResult(outcome);
+    }
+
+    /// <summary>
     /// Maps a service outcome onto HTTP.
     /// </summary>
     /// <remarks>

@@ -44,4 +44,19 @@ public interface IMediaService
     /// <returns>Deleted; not-found for an id that names nothing; or forbidden for a caller who can
     /// read the item but is not permitted to remove it.</returns>
     Task<MediaOutcome> DeleteAsync(string mediaId);
+
+    /// <summary>
+    /// Mints a short-lived, read-only URL for one item's bytes.
+    /// </summary>
+    /// <remarks>
+    /// The URL is a bearer token, so the window is the control rather than the address: it is
+    /// clamped to <see cref="SignedUrlLifetime.Maximum"/> and reported to the caller, because a
+    /// client that cannot tell when a link dies cannot cache it safely. An item whose bytes have
+    /// gone is signed for regardless — the row and the object are separate, and the missing bytes
+    /// are the client's 404 on fetch rather than a failure here.
+    /// </remarks>
+    /// <param name="mediaId">The item's id.</param>
+    /// <returns>The URL and its expiry; not-found for an id that names nothing or one this caller
+    /// may not read.</returns>
+    Task<MediaUrlOutcome> CreateReadUrlAsync(string mediaId);
 }

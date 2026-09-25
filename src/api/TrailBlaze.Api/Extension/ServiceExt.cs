@@ -1,5 +1,6 @@
 ﻿namespace TrailBlaze.Api.Extension;
 
+using System.Globalization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using TrailBlaze.Interface.Infrastructure;
@@ -25,6 +26,17 @@ internal static class ServiceExt
         // A singleton: the client is thread-safe and holds a connection pool worth keeping.
         services.AddSingleton<IStorageRepository>(
             _ => new AzureBlobStorageRepository(blobConnection));
+
+        // The window a media read URL is given. Optional: an absent or unparsable setting falls to the
+        // policy's default, and a value above its cap is clamped there rather than honoured here.
+        services.AddSingleton(_ => new SignedUrlLifetime(
+                double.TryParse(
+                    configuration[Constant.ConfigKey.MediaUrlTtlMinutes],
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double minutes)
+                    ? TimeSpan.FromMinutes(minutes)
+                    : SignedUrlLifetime.Default));
 
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IActivityAuthorizationService, ActivityAuthorizationService>();

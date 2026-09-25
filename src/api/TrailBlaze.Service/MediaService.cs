@@ -15,6 +15,7 @@ public sealed class MediaService(
     IStorageRepository storageRepository,
     IActivityAuthorizationService authorization,
     IUploadValidationService uploadValidation,
+    SignedUrlLifetime signedUrlLifetime,
     ILogger<MediaService> logger) : IMediaService
 {
     /// <summary>The form field a refused upload reports its reason under — the name the route reads,
@@ -215,6 +216,53 @@ public sealed class MediaService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Deleting media {MediaId} failed.", mediaId);
+            throw;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<MediaUrlOutcome> CreateReadUrlAsync(string mediaId)
+    {
+        try
+        {
+            Caller caller = await authorization.ResolveAsync();
+
+            if (!caller.IsSignedIn)
+            {
+                return MediaUrlOutcome.NoCaller();
+            }
+
+            Media? media = await dbRepository.GetAsync<Media>(row => row.Id == mediaId);
+
+            if (media is null)
+            {
+                return MediaUrlOutcome.NotFound();
+            }
+
+            Activity? activity = await dbRepository.GetAsync<Activity>(row => row.Id == media.ActivityId);
+
+            // The same read rule every other read of this activity goes through, and the last thing
+            // before the mint: a caller who may not see the entry must not be handed a working link to
+            // its bytes, and an entry they may not see is answered exactly as an absent one is.
+            if (!authorization.CanRead(activity, caller))
+            {
+                return MediaUrlOutcome.NotFound();
+            }
+
+            // The instant is decided here and handed down, so what the client is told and what the
+            // token carries are the same value rather than two that ought to agree.
+            DateTimeOffset expiresOn = signedUrlLifetime.ExpiryFrom(DateTimeOffset.UtcNow);
+
+            Uri url = await storageRepository.CreateReadUrlAsync(
+                Constant.StorageContainer.Media, media.BlobPath, expiresOn);
+
+            return MediaUrlOutcome.Minted(
+                new MediaUrlResponse { Url = url.ToString(), ExpiresOnUtc = expiresOn });
+        }
+        catch (Exception ex)
+        {
+            // The URL is a credential and is never logged; the id it was minted for is not.
+            logger.LogError(ex, "Minting a read URL for media {MediaId} failed.", mediaId);
             throw;
         }
     }
