@@ -457,15 +457,19 @@ then user-secrets, then environment variables, then command line. Later sources 
   environments take the pipeline's `DbConnection`, which names Azure SQL, and no container is
   reachable from ACA — so this is an exception with a boundary, not a rule that moved.
 
-  **The hand-started container is not the test tier's, and the two contend for the same port.**
-  Both bind `127.0.0.1:1433`, so only one can be up, and while the dev container holds the port a
-  `dotnet test` run reaches *it* — which is safe only because the tier owns one database,
-  `TrailBlazeTest`, and drops nothing outside it. Stop the dev container to get the isolated stack
-  back. Do not point the test tier at the dev database deliberately: that name is the only thing
-  bounding what it drops, and a schema in use is exactly what it has no reason to preserve.
-  `docker-compose.yml` is a third thing again and contends with neither: it publishes `14330` and
-  `10010`, and the API reaches both engines by compose service name rather than through a host
-  binding at all.
+  **The hand-started container is not the test tier's, and the stack is what contends with it.**
+  README's `docker run` container and `docker-compose.yml`'s `azure-sql-edge` both bind
+  `127.0.0.1:1433`, so only one of those two can be up. The test tier is deliberately off that
+  port: `docker-compose.test.yml` publishes `14330` and `10010` — the `TB_TEST_*_PORT` variables
+  `TestEnvironment` reads under the same names, so a host that needs different ones moves both
+  sides at once. That is what lets a `dotnet test` run reach the tier's own throwaway engine while
+  either of the others is running. Aim it
+  elsewhere by force and the tier is still safe, but only because it owns one database,
+  `TrailBlazeTest`, and drops nothing outside it — do not point it at the dev database, because
+  that name is the only thing bounding what it drops and a schema in use is exactly what it has no
+  reason to preserve. Nothing in either compose file reads these bindings: the API and `migrate`
+  reach both engines by compose service name over the network, and the published ports exist so a
+  host client — the test tier included — can look.
 
   **What the exception costs** is that Azure SQL Edge is not Azure SQL Database. A behaviour
   depending on the managed engine's version, collation, or certificate is no longer exercised

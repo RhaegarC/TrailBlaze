@@ -181,9 +181,8 @@ public class ActivityController(
     /// Removes an item: its blob and its row.
     /// </summary>
     /// <remarks>
-    /// Three principals may do this and no fourth (Decision #27): the uploader, the owner of the
-    /// activity the item sits on, and an administrator. The administrator is not among them yet —
-    /// nothing can read a role — so one is judged as an ordinary user today.
+    /// Two principals may do this and no third (Decision #27): the item's uploader, and an
+    /// administrator. Owning the activity the item sits on is not enough.
     /// </remarks>
     /// <param name="mediaId">The item's id.</param>
     /// <returns>No content; not-found for an id that names nothing; forbidden for a caller who can
@@ -192,6 +191,25 @@ public class ActivityController(
     public async Task<IActionResult> DeleteMedia(string mediaId)
     {
         MediaOutcome outcome = await _mediaService.DeleteAsync(mediaId);
+
+        return this.ToActionResult(outcome);
+    }
+
+    /// <summary>
+    /// Mints a short-lived, read-only URL for one item's bytes.
+    /// </summary>
+    /// <remarks>
+    /// A read, so it is gated by visibility and nothing else — no ownership and no admin override
+    /// beyond the one <see cref="IActivityAuthorizationService"/> already applies. The URL is a bearer
+    /// token, so the expiry it comes with is the control, and the window is clamped by the service.
+    /// </remarks>
+    /// <param name="mediaId">The item's id.</param>
+    /// <returns>The URL and the instant it stops working; not-found for an id that names nothing or
+    /// one this caller may not read.</returns>
+    [HttpGet("/api/media/{mediaId}/url")]
+    public async Task<IActionResult> GetMediaUrl(string mediaId)
+    {
+        MediaUrlOutcome outcome = await _mediaService.CreateReadUrlAsync(mediaId);
 
         return this.ToActionResult(outcome);
     }
@@ -208,6 +226,7 @@ public class ActivityController(
         ActivityOutcomeKind.Completed => Ok(outcome.Activity),
         ActivityOutcomeKind.Deleted => NoContent(),
         ActivityOutcomeKind.NotFound => NotFound(),
+        ActivityOutcomeKind.Forbidden => Forbid(),
         ActivityOutcomeKind.NoCaller => Unauthorized(),
         _ => ValidationProblem(
             new ValidationProblemDetails(new Dictionary<string, string[]>(outcome.Errors!))),

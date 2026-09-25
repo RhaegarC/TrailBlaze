@@ -78,13 +78,16 @@ public sealed class AzureBlobStorageRepository : IStorageRepository
     public Task<Uri> CreateReadUrlAsync(
         string container,
         string path,
-        TimeSpan lifetime,
+        DateTimeOffset expiresOn,
         CancellationToken cancellationToken = default)
     {
-        if (lifetime <= TimeSpan.Zero)
+        // The default is the value a forgotten argument carries, and it is not an instant anybody
+        // means — so it is the one expiry refused here. A past instant is signed, and the backend
+        // refuses it on fetch, which is how the storage tier proves an expired SAS does not open.
+        if (expiresOn == default)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(lifetime), lifetime, "The read URL lifetime must be positive.");
+                nameof(expiresOn), expiresOn, "The read URL needs the instant it expires.");
         }
 
         BlobClient blob = GetBlobClient(container, path);
@@ -94,7 +97,10 @@ public sealed class AzureBlobStorageRepository : IStorageRepository
             BlobContainerName = container,
             BlobName = path,
             Resource = "b",
-            ExpiresOn = DateTimeOffset.UtcNow.Add(lifetime),
+
+            // Verbatim. Nothing is added to it and nothing is rounded, so the caller's instant is
+            // the one the token carries.
+            ExpiresOn = expiresOn,
         };
         sas.SetPermissions(BlobSasPermissions.Read);
 

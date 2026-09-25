@@ -1,12 +1,12 @@
 namespace TrailBlaze.Service;
 
-using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 using TrailBlaze.Interface.Infrastructure;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
 using TrailBlaze.Model.Activity;
+using TrailBlaze.Model.Authorization;
 using TrailBlaze.Model.DatabaseEntity;
 
 /// <inheritdoc/>
@@ -14,30 +14,13 @@ public sealed class ActivityService(
     IDbRepository dbRepository,
     IStorageRepository storageRepository,
     IUploadValidationService uploadValidation,
+    IActivityAuthorizationService authorization,
     IUserContextService userContext,
     ILogger<ActivityService> logger) : IActivityService
 {
     /// <summary>The form field a refused cover reports its reason under — the name the route reads,
     /// so a client can put the message beside the control that caused it.</summary>
     private const string FileFormField = "file";
-
-    /// <inheritdoc/>
-    public Expression<Func<Activity, bool>> VisibleTo(string? caller) =>
-        string.IsNullOrWhiteSpace(caller)
-            ? activity => activity.Type == Constant.ActivityType.Public
-            : activity => activity.Type == Constant.ActivityType.Public
-                || activity.Type == Constant.ActivityType.Shared
-                || activity.CreatedBy == caller;
-
-    /// <inheritdoc/>
-    public bool CanRead(Activity activity, string? caller)
-    {
-        ArgumentNullException.ThrowIfNull(activity);
-
-        // Compiled from the expression the queries use rather than restated in C#: a second copy of
-        // an access rule is a second rule.
-        return VisibleTo(caller).Compile()(activity);
-    }
 
     /// <inheritdoc/>
     public IReadOnlyDictionary<string, string[]> Validate(IActivityInput input)
@@ -83,9 +66,9 @@ public sealed class ActivityService(
 
             // The route carries [Authorize], so this is a token that validated without naming anyone,
             // and an entry with no author is one nobody may edit.
-            string? caller = userContext.EntraObjectId;
+            Caller caller = await authorization.ResolveAsync();
 
-            if (string.IsNullOrWhiteSpace(caller))
+            if (!caller.IsSignedIn)
             {
                 return ActivityOutcome.NoCaller();
             }
@@ -101,7 +84,7 @@ public sealed class ActivityService(
                 Type = draft.Type,
 
                 // From the request in flight, never the body, which has no property for it.
-                CreatedBy = caller,
+                CreatedBy = caller.Id,
             };
 
             await dbRepository.CreateAsync(activity);
@@ -120,14 +103,13 @@ public sealed class ActivityService(
     {
         try
         {
-            string? caller = userContext.EntraObjectId;
+            Caller caller = await authorization.ResolveAsync();
             Activity? activity = await FindAsync(id);
 
             // An entry the caller may not read is answered as absent rather than forbidden:
             // confirming the id names something is the fact being withheld, so the two answers have
-            // to be the same one. The admin branch would read a role, and no layer exposes one yet —
-            // it lands with feature 09, and until then an admin reads what a user reads.
-            if (activity is null || !CanRead(activity, caller))
+            // to be the same one.
+            if (!authorization.CanRead(activity, caller))
             {
                 return ActivityOutcome.NotFound();
             }
@@ -146,7 +128,7 @@ public sealed class ActivityService(
     {
         try
         {
-            string? caller = userContext.EntraObjectId;
+            Caller caller = await authorization.ResolveAsync();
 
             int appliedPage = Math.Max(page, 0);
             int appliedSize = pageSize <= 0
@@ -157,7 +139,7 @@ public sealed class ActivityService(
             int skip = (int)Math.Min((long)appliedPage * appliedSize, int.MaxValue);
 
             (List<Activity> items, int total) = await dbRepository.GetPageAsync<Activity>(
-                VisibleTo(caller), NewestFirst, skip, appliedSize);
+                authorization.VisibleTo(caller), NewestFirst, skip, appliedSize);
 
             logger.LogInformation(
                 "Listed {Count} of {Total} activities for page {Page}.", items.Count, total, appliedPage);
@@ -184,12 +166,22 @@ public sealed class ActivityService(
 
         try
         {
+            Caller caller = await authorization.ResolveAsync();
+
             // Read before validating, so an id that names nothing is a 404 whatever the body says.
             Activity? activity = await FindAsync(id);
 
-            if (activity is null)
+            if (!authorization.CanRead(activity, caller))
             {
                 return ActivityOutcome.NotFound();
+            }
+
+            // Then ownership, and also before validating: a caller with no right to edit is not owed
+            // a field-by-field answer about an edit they were never going to make. Readable but not
+            // theirs is the one answer that is neither 404 nor 400.
+            if (!authorization.CanMutate(activity, caller))
+            {
+                return ActivityOutcome.Forbidden();
             }
 
             IReadOnlyDictionary<string, string[]> errors = Validate(request);
@@ -222,8 +214,7 @@ public sealed class ActivityService(
             // Read, changed, written back — never replaced, because UpdateAsync writes every property.
             await dbRepository.UpdateAsync(activity);
 
-            return ActivityOutcome.Completed(
-                (await RespondAsync([activity], userContext.EntraObjectId))[0]);
+            return ActivityOutcome.Completed((await RespondAsync([activity], caller))[0]);
         }
         catch (Exception ex)
         {
@@ -252,21 +243,29 @@ public sealed class ActivityService(
                     new Dictionary<string, string[]> { [FileFormField] = [rejection] });
             }
 
-            string? caller = userContext.EntraObjectId;
+            Caller caller = await authorization.ResolveAsync();
 
-            if (string.IsNullOrWhiteSpace(caller))
+            if (!caller.IsSignedIn)
             {
                 return CoverOutcome.NoCaller();
             }
 
             Activity? activity = await FindAsync(activityId);
 
-            // A cover is the entry's face rather than a contribution to it, but the gate is the same
-            // read rule media uses: an entry this caller cannot read is one they cannot give a face
-            // to. Not-found rather than forbidden, for the reason the detail read gives.
-            if (activity is null || !CanRead(activity, caller))
+            // An entry this caller cannot read is one they cannot give a face to, and the answer is
+            // not-found for the reason the detail read gives: confirming the id names something is
+            // the fact being withheld.
+            if (!authorization.CanRead(activity, caller))
             {
                 return CoverOutcome.NotFound();
+            }
+
+            // Readable is not the same as theirs. A cover is the entry's own face rather than a
+            // contribution to it, so this is where the two axes part: media is collaborative and a
+            // cover is not.
+            if (!authorization.CanMutate(activity, caller))
+            {
+                return CoverOutcome.Forbidden();
             }
 
             // Derived from the entry's type, which a change across the public line moves the blob
@@ -305,11 +304,17 @@ public sealed class ActivityService(
     {
         try
         {
+            Caller caller = await authorization.ResolveAsync();
             Activity? activity = await FindAsync(id);
 
-            if (activity is null)
+            if (!authorization.CanRead(activity, caller))
             {
                 return ActivityOutcome.NotFound();
+            }
+
+            if (!authorization.CanMutate(activity, caller))
+            {
+                return ActivityOutcome.Forbidden();
             }
 
             // Its media rows and blobs are left standing: the delete is soft, so the activity can be
@@ -360,7 +365,7 @@ public sealed class ActivityService(
 
     /// <summary>Every read's response goes through here, so the two reads cannot grow different
     /// shapes and the name join and count are one query each rather than one per item.</summary>
-    private async Task<List<ActivityResponse>> RespondAsync(List<Activity> activities, string? caller)
+    private async Task<List<ActivityResponse>> RespondAsync(List<Activity> activities, Caller caller)
     {
         if (activities.Count == 0)
         {
@@ -387,7 +392,10 @@ public sealed class ActivityService(
                     : await CoverUrlAsync(activity.CoverImageBlobPath, activity.Type),
                 MediaCount = counts.GetValueOrDefault(activity.Id),
                 CreatorDisplayName = activity.CreatedBy is { } creator ? names.GetValueOrDefault(creator) : null,
-                CreatedByUserId = caller is null ? null : activity.CreatedBy,
+
+                // The id is disclosed to a caller who has one, and to nobody else: an anonymous
+                // payload names the creator by display name only (Decision #30).
+                CreatedByUserId = caller.IsSignedIn ? activity.CreatedBy : null,
             });
         }
 
@@ -420,7 +428,9 @@ public sealed class ActivityService(
         CoverContainerFor(type) == Constant.StorageContainer.Covers
             ? storageRepository.CreatePublicUrl(Constant.StorageContainer.Covers, path).ToString()
             : (await storageRepository.CreateReadUrlAsync(
-                Constant.StorageContainer.Media, path, Constant.CoverUrl.SasLifetime)).ToString();
+                Constant.StorageContainer.Media,
+                path,
+                Constant.CoverUrl.Lifetime.ExpiryFrom(DateTimeOffset.UtcNow))).ToString();
 
     /// <summary>The container a cover belongs in: the public <c>covers</c> for a <c>Public</c> entry,
     /// the private <c>media</c> for a <c>Shared</c> or <c>Private</c> one. Both private types share a

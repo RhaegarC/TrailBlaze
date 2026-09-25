@@ -22,6 +22,7 @@ internal static class CoverOutcomeExtensions
         {
             CoverOutcomeKind.Uploaded => controller.Ok(outcome.Cover),
             CoverOutcomeKind.NotFound => controller.NotFound(),
+            CoverOutcomeKind.Forbidden => controller.Forbid(),
             CoverOutcomeKind.NoCaller => controller.Unauthorized(),
             _ => controller.ValidationProblem(
                 new ValidationProblemDetails(new Dictionary<string, string[]>(outcome.Errors!))),

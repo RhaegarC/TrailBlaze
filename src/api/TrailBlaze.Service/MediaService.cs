@@ -5,6 +5,7 @@ using TrailBlaze.Interface.Infrastructure;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
+using TrailBlaze.Model.Authorization;
 using TrailBlaze.Model.DatabaseEntity;
 using TrailBlaze.Model.Media;
 
@@ -12,9 +13,9 @@ using TrailBlaze.Model.Media;
 public sealed class MediaService(
     IDbRepository dbRepository,
     IStorageRepository storageRepository,
-    IActivityService activityService,
-    IUserContextService userContext,
+    IActivityAuthorizationService authorization,
     IUploadValidationService uploadValidation,
+    SignedUrlLifetime signedUrlLifetime,
     ILogger<MediaService> logger) : IMediaService
 {
     /// <summary>The form field a refused upload reports its reason under — the name the route reads,
@@ -52,23 +53,25 @@ public sealed class MediaService(
                 return Rejected(rejection);
             }
 
-            string? caller = userContext.EntraObjectId;
+            Caller caller = await authorization.ResolveAsync();
 
-            if (string.IsNullOrWhiteSpace(caller))
+            if (!caller.IsSignedIn)
             {
                 return MediaOutcome.NoCaller();
             }
 
             Activity? activity = await dbRepository.GetAsync<Activity>(row => row.Id == activityId);
 
-            // One answer for an activity that does not exist and one this caller may not read: media
-            // is collaborative, so the gate is the read rule and not ownership (Decision #27).
-            if (activity is null || !activityService.CanRead(activity, caller))
+            // The gate is the read rule and never ownership: media is collaborative, so any caller
+            // who can see an entry may contribute to it (Decision #27). An entry that does not exist
+            // and one this caller may not read get the same answer, because existence is the fact
+            // being withheld.
+            if (!authorization.CanRead(activity, caller))
             {
                 return MediaOutcome.NotFound();
             }
 
-            User? uploader = await dbRepository.GetAsync<User>(row => row.Id == caller);
+            User? uploader = await dbRepository.GetAsync<User>(row => row.Id == caller.Id);
 
             string path = MediaPathFor(activityId, contentType!);
 
@@ -78,7 +81,7 @@ public sealed class MediaService(
 
                 // From the request in flight, never from a body: an upload cannot be attributed to
                 // someone else, exactly as an activity's creator cannot.
-                CreatedBy = caller,
+                CreatedBy = caller.Id,
                 Kind = kind!,
                 BlobPath = path,
                 ContentType = contentType!,
@@ -91,7 +94,7 @@ public sealed class MediaService(
             // activity, which is what the cap bounds.
             bool stored = await dbRepository.CreateIfUnderAsync(
                 media,
-                row => row.ActivityId == activityId && row.CreatedBy == caller,
+                row => row.ActivityId == activityId && row.CreatedBy == caller.Id,
                 Constant.MediaLimit.PerContributorPerActivity);
 
             if (!stored)
@@ -136,19 +139,19 @@ public sealed class MediaService(
     {
         try
         {
-            string? caller = userContext.EntraObjectId;
+            Caller caller = await authorization.ResolveAsync();
 
-            // The route carries [Authorize], so a blank caller cannot arrive. Answering not-found
+            // The route carries [Authorize], so a nameless caller cannot arrive. Answering not-found
             // rather than reading is what keeps this surface from becoming a way to read without a
             // token, should the route's attribute ever change.
-            if (string.IsNullOrWhiteSpace(caller))
+            if (!caller.IsSignedIn)
             {
                 return MediaListing.NotFound();
             }
 
             Activity? activity = await dbRepository.GetAsync<Activity>(row => row.Id == activityId);
 
-            if (activity is null || !activityService.CanRead(activity, caller))
+            if (!authorization.CanRead(activity, caller))
             {
                 return MediaListing.NotFound();
             }
@@ -185,9 +188,9 @@ public sealed class MediaService(
     {
         try
         {
-            string? caller = userContext.EntraObjectId;
+            Caller caller = await authorization.ResolveAsync();
 
-            if (string.IsNullOrWhiteSpace(caller))
+            if (!caller.IsSignedIn)
             {
                 return MediaOutcome.NoCaller();
             }
@@ -199,15 +202,7 @@ public sealed class MediaService(
                 return MediaOutcome.NotFound();
             }
 
-            Activity? activity = await dbRepository.GetAsync<Activity>(row => row.Id == media.ActivityId);
-
-            // Three principals and no fourth (Decision #27): the contributor, the owner of the entry
-            // the item sits on, and an administrator. The administrator is not among them yet --
-            // nothing can read a role today -- so a caller who is one is judged as an ordinary user.
-            bool permitted = media.CreatedBy == caller
-                || activity?.CreatedBy == caller;
-
-            if (!permitted)
+            if (!authorization.CanRemoveMedia(media, caller))
             {
                 return MediaOutcome.Forbidden();
             }
@@ -221,6 +216,53 @@ public sealed class MediaService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Deleting media {MediaId} failed.", mediaId);
+            throw;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<MediaUrlOutcome> CreateReadUrlAsync(string mediaId)
+    {
+        try
+        {
+            Caller caller = await authorization.ResolveAsync();
+
+            if (!caller.IsSignedIn)
+            {
+                return MediaUrlOutcome.NoCaller();
+            }
+
+            Media? media = await dbRepository.GetAsync<Media>(row => row.Id == mediaId);
+
+            if (media is null)
+            {
+                return MediaUrlOutcome.NotFound();
+            }
+
+            Activity? activity = await dbRepository.GetAsync<Activity>(row => row.Id == media.ActivityId);
+
+            // The same read rule every other read of this activity goes through, and the last thing
+            // before the mint: a caller who may not see the entry must not be handed a working link to
+            // its bytes, and an entry they may not see is answered exactly as an absent one is.
+            if (!authorization.CanRead(activity, caller))
+            {
+                return MediaUrlOutcome.NotFound();
+            }
+
+            // The instant is decided here and handed down, so what the client is told and what the
+            // token carries are the same value rather than two that ought to agree.
+            DateTimeOffset expiresOn = signedUrlLifetime.ExpiryFrom(DateTimeOffset.UtcNow);
+
+            Uri url = await storageRepository.CreateReadUrlAsync(
+                Constant.StorageContainer.Media, media.BlobPath, expiresOn);
+
+            return MediaUrlOutcome.Minted(
+                new MediaUrlResponse { Url = url.ToString(), ExpiresOnUtc = expiresOn });
+        }
+        catch (Exception ex)
+        {
+            // The URL is a credential and is never logged; the id it was minted for is not.
+            logger.LogError(ex, "Minting a read URL for media {MediaId} failed.", mediaId);
             throw;
         }
     }

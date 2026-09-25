@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,300;1,9..144,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: #0f120e;
+  --color-foreground: #e8e3d8;
+  --color-card: #161a14;
+  --color-card-foreground: #e8e3d8;
+  --color-primary: #c8893a;
+  --color-primary-foreground: #0f120e;
+  --color-secondary: #1e2419;
+  --color-secondary-foreground: #b8b2a4;
+  --color-muted: #1a1e18;
+  --color-muted-foreground: #7a7568;
+  --color-accent: #c8893a;
+  --color-accent-foreground: #0f120e;
+  --color-border: #2a2f26;
+  --color-ring: #c8893a;
+  --radius: 2px;
+}
+
+/* Light theme overrides */
+[data-theme="light"] {
+  --tb-bg: #f4f1ea;
+  --tb-fg: #1a1e18;
+  --tb-card: #ffffff;
+  --tb-card-fg: #1a1e18;
+  --tb-secondary: #e8e4db;
+  --tb-secondary-fg: #4a4a42;
+  --tb-muted: #ede9e0;
+  --tb-muted-fg: #7a7568;
+  --tb-border: #d8d3c8;
+  --tb-dim: #a09a90;
+  --tb-dimmer: #c8c2b6;
+}
+
+[data-theme="dark"] {
+  --tb-bg: #0f120e;
+  --tb-fg: #e8e3d8;
+  --tb-card: #161a14;
+  --tb-card-fg: #e8e3d8;
+  --tb-secondary: #1e2419;
+  --tb-secondary-fg: #b8b2a4;
+  --tb-muted: #1a1e18;
+  --tb-muted-fg: #7a7568;
+  --tb-border: #2a2f26;
+  --tb-dim: #7a7568;
+  --tb-dimmer: #3a4036;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar {
+  display: none;
+}
+
+body {
+  background-color: #0f120e;
+  color: #e8e3d8;
+  font-family: 'Work Sans', sans-serif;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Fraunces', serif;
+}
+
+.font-display {
+  font-family: 'Fraunces', serif;
+}
+
+.font-mono-data {
+  font-family: 'JetBrains Mono', monospace;
+}

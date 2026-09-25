@@ -29,7 +29,8 @@ decides who may *edit* an entry rather than who may read it.
 
 ## Working on it
 
-The workflow lives in `.claude/` and runs on slash commands:
+The workflow lives in `~/.claude/` — skills, agents and slash commands shared across every
+repository — and runs on slash commands:
 
 ```
 /capture <kind> NN    # a feature spec or a bug report
@@ -105,17 +106,15 @@ the schema with it. `--shm-size 1g` is not optional either: the engine fails opa
 default.
 
 That container is separate from the two compose files. `src/api/docker-compose.test.yml` starts its
-own SQL Edge for `dotnet test`, and both it and the container above bind `127.0.0.1:1433`, so only
-one of those two can run at a time. While the dev container holds the port, a test run reaches
-*it*; that is safe — the tier owns one database, `TrailBlazeTest`, and never touches `TrailBlaze` —
-but stop the dev container to get the isolated stack back. The stack below binds neither port, so
-it contends with neither.
+own SQL Edge for `dotnet test` on `14330` and `10010`, so it contends with neither this container
+nor the stack below — all three can run at once. The **stack** is what contends with this one:
+`docker-compose.yml` binds `127.0.0.1:1433` as well, so only one of those two can be up.
 
 **Or run the whole stack, API included:**
 
 ```bash
 cd src/api
-cp .env.example .env          # then fill in MSSQL_SA_PASSWORD
+cp .env.example .env          # then fill in MSSQL_SA_PASSWORD, DbConnection and BlobConnection
 docker compose up -d --build
 curl -sS http://localhost:8080/api/Activity
 ```
@@ -123,11 +122,11 @@ curl -sS http://localhost:8080/api/Activity
 `up` blocks until the schema is applied and the blob containers exist, because the API is not
 allowed to start against an unmigrated database and never migrates on boot itself. Both are
 one-shot services in that file: `Dockerfile.migrate` builds the migrations into an `efbundle` and
-runs it, and `blob-init` creates the three containers. The API then
+runs it, and `blob-init` creates the three containers and sets their access levels. The API then
 serves on `http://localhost:8080` in Development, so `/openapi/v1.json` is available. The engines
-publish on `14330` and `10010` rather than `1433` and `10000`, which is what lets this, the test
-tier and the container above all run at once; nothing in the stack reads those bindings — the API
-reaches both engines by service name over the compose network.
+publish on `1433` and `10000`, which is why the hand-started container above has to be stopped
+first — nothing in the stack reads either binding: the API reaches both engines by service name
+over the compose network, and the test tier is off on `14330`/`10010`.
 
 This is a **local convenience, not a deployment artifact.** The API is deployed to **Azure
 Container Apps** from the image `src/api/Dockerfile` builds, and the web app to **Azure Static Web
@@ -178,9 +177,12 @@ pointed somewhere else would migrate the wrong database and report success.
    what is not is status, owned by that file's table. Feature 02's slice — the profile routes, avatar
    upload and upload validator — is **not** covered. "Green" here means the foundation is
    green.
-2. **`develop` is not deployable until feature 09 merges.** 09 imposes the ownership and admin
-   rules; [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) is where the rule and the
-   sequencing behind it live.
+2. **`develop` was not deployable until feature 09 merged, and now is** *(2026-09-24, PR #26)*.
+   09 imposes the ownership and admin rules; [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md)
+   is where the rule and the sequencing behind it live. [Feature 10](docs/features/archive/10-figma-integration.md)
+   then wired the `src/web/` export to that API *(2026-09-25, PR #31)*, so the mocks are gone — but
+   **no part of it has been observed running**: it compiles and type-checks, and the browser pass
+   that would close it is [feature 11](docs/features/11-e2e-verification.md), not yet run.
 3. **Azure Blob is real in every environment**, tests included — there is no `IStorageRepository`
    fake, so nothing stands in for the real implementation. [testing-and-tdd.md](docs/testing-and-tdd.md)
    states what that costs and what it buys.

@@ -6,8 +6,7 @@ Source: [PRD](../../PRD.md) — Decisions #10/#11/#12/#25/#26 + "API surface" an
 > **Archiving this one does not mean the slice is closed.** It shipped the CRUD mechanics and the
 > anonymous paged list; the payload a list item carries, the detail read and the admin branch of the
 > visibility rule are [05](05-public-activity-list.md)'s, and who may mutate an entry is
-> [09](../09-permission-enforcement.md)'s. `develop` is not deployable until 09 lands — the
-> sequencing note in the sprint file states why.
+> [09](09-permission-enforcement.md)'s. *(2026-09-24 — 09 is merged, in PR #26, so this is satisfied: `develop` is deployable from that commit.)*
 
 ## Summary
 
@@ -16,7 +15,7 @@ set is fixed: `Title`, `Location`, `ActivityDate` (a **calendar date — no time
 optional `Description`, optional `CoverImageBlobPath`, and `Type` — the **visibility**
 (`Public` | `Shared` | `Private`, Decision #26). `CreatedOn` is stamped server-side and is the
 list's sort key, newest entry first. This feature stores `Type` and applies the **read** half of the
-visibility rule to the list; **who may mutate an entry is feature [09](../09-permission-enforcement.md)'s**,
+visibility rule to the list; **who may mutate an entry is feature [09](09-permission-enforcement.md)'s**,
 and the detail read, the cover URL and the enriched payload are
 [05](05-public-activity-list.md)'s.
 
@@ -100,7 +99,7 @@ The paged list, which is the first anonymous read in the product:
 **The admin branch of the visibility rule is not implemented here, and cannot be.** It reads a role,
 and `IUserContextService` carries none — a role has exactly one source, the `users` row, which is a
 store read this predicate does not perform. Reading it is part of the permission work
-[09](../09-permission-enforcement.md) owns; until then an admin pages what a user pages. Asserted as
+[09](09-permission-enforcement.md) owns; until then an admin pages what a user pages. Asserted as
 such rather than left to be discovered.
 
 **Ordering was changed on 2026-09-19, and the PRD changed with it.** Decision #10 originally made the
@@ -190,5 +189,5 @@ is not covered by any tier, and is called out rather than implied.**
 - **`Type` is stored, not enforced, in this slice.** `GET /api/activity/{id}` here returns the
   row for any id; hiding a `Shared` or `Private` entry from a caller who may not read it is the
   read-filtering rule owned by [05-public-activity-list](05-public-activity-list.md) and
-  [09-permission-enforcement](../09-permission-enforcement.md). Splitting it this way keeps the CRUD
+  [09-permission-enforcement](09-permission-enforcement.md). Splitting it this way keeps the CRUD
   mechanics testable on their own, exactly as the ownership rules are split out.

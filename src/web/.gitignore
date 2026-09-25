@@ -3,6 +3,9 @@ dist/
 build/
 .cache/
 .env*
+# @integration:begin `.env` is ignored above; its shape holds no secret and is tracked
+!.env.example
+# @integration:end
 .vite/
 vite.config.*.timestamp-*
 *.tsbuildinfo

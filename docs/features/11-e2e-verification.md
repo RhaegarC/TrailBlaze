@@ -25,10 +25,18 @@ is replaced by evidence that a visitor, a user, and an admin each see exactly wh
 
 ## Dependencies
 
-- [10-figma-integration](10-figma-integration.md) (the integrated app this pass drives)
+- [10-figma-integration](archive/10-figma-integration.md) (the integrated app this pass drives)
 
 This feature exercises the output of every feature before it — 01 through 10 — and cannot pass
 unless they all pass. It is last in the ladder by design.
+
+It also carries one thing that was planned elsewhere: **[09](archive/09-permission-enforcement.md)'s
+live-pipeline status matrix** — each endpoint driven over the real pipeline with a test token, and
+the **403/404 pair asserted on the same route** *(2026-09-24 — moved here from 09, whose Api tier
+boots against an unreachable connection string and would fail on the connection rather than on the
+rule. Test-token infrastructure arrives with the tier that can use it, rather than as scaffolding
+in 09.)* The criteria below already assert those statuses as part of the journey; this note is
+here so a reader looking for the bullet in 09 finds where it went.
 
 ## Acceptance criteria
 
@@ -83,8 +91,8 @@ the app assumes, or whether the real tenant issues the token the API validates.
       restores a plain public URL that needs no SAS
 - [ ] **Collaborative media**: a second signed-in user adds media to the **first** user's `Public`
       activity and succeeds; the detail view groups the media **by uploader** with working
-      collapse/expand; and the second user's item is deletable by that user, by the activity's
-      owner, and by the admin
+      collapse/expand; and the second user's item is deletable by that user and by the admin — and
+      **not** by the activity's owner, who gets 403 on it (Decision #27, narrowed 2026-09-24)
 - [ ] **Collaboration refused where the caller cannot see the activity**: that same second user
       attempting to add media to a `Private` activity they cannot read is refused with **404**,
       not 403 — and `GET /api/activity/{id}/media` / `GET /api/media/{id}/url` return **404**
@@ -146,12 +154,19 @@ What it runs is everything that already exists, plus the tiers that only this pa
 
 - **Not new functionality.** If this feature needs code written to pass, the defect belongs to the
   feature that owns it (01–10), not here.
-- **It cannot run yet: the Figma export is mock-only.** The committed export under `src/web/` makes
-  no API call, has no MSAL, hard-codes the role, and leaves its upload controls inert, so every
-  criterion above that is phrased as *app* behaviour is blocked until
-  [10-figma-integration](10-figma-integration.md) wires it up. The API-side criteria can be
-  exercised in the meantime by calling the endpoints directly; that proves the API, not this pass,
-  and does not close this feature.
+- **It cannot run yet, and the export is no longer what blocks it.**
+  [10-figma-integration](archive/10-figma-integration.md) wired the app to the API *(2026-09-25,
+  PR #31)*, so the app now makes real calls, signs in through MSAL, and reads its role from the
+  server. What is missing is the pass itself: a browser, a tenant, and the identities to walk the
+  journey as. Until it is run, the integration is compiled and type-checked but **unobserved**,
+  and this feature is what would observe it. The API-side criteria can be exercised in the
+  meantime by calling the endpoints directly; that proves the API, not this pass, and does not
+  close this feature.
+- **Three of 10's criteria cannot pass here either.** The export renders no `<video>` element, no
+  per-media delete control, and no avatar an anonymous visitor can see, and 10 recorded those as
+  export gaps rather than hand-building them. A criterion above that needs one of the three is
+  blocked on a **re-export**, not on this pass — see 10's "Known gaps" for the file and line of
+  each.
 - **The profile screen is new surface.** The display name, bio, avatar, theme, and language
   criteria above depend on the profile API (Decision #28) as well as on the frontend wiring; a
   failure there is a defect in the feature that owns that endpoint, not here.

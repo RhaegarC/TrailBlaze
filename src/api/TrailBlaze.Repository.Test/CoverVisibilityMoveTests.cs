@@ -59,7 +59,9 @@ public sealed class CoverVisibilityMoveTests(AzureStorageFixture fixture)
             // And the image is still there, reached the one way a private object can be — so the
             // assertion above says the bytes moved rather than that they were lost.
             Uri signed = await storage.CreateReadUrlAsync(
-                Constant.StorageContainer.Media, path, Constant.CoverUrl.SasLifetime);
+                Constant.StorageContainer.Media,
+                path,
+                Constant.CoverUrl.Lifetime.ExpiryFrom(DateTimeOffset.UtcNow));
 
             Assert.Equal(HttpStatusCode.OK, await StatusAsync(signed));
         }
