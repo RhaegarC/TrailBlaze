@@ -25,7 +25,7 @@ is replaced by evidence that a visitor, a user, and an admin each see exactly wh
 
 ## Dependencies
 
-- [10-figma-integration](10-figma-integration.md) (the integrated app this pass drives)
+- [10-figma-integration](archive/10-figma-integration.md) (the integrated app this pass drives)
 
 This feature exercises the output of every feature before it — 01 through 10 — and cannot pass
 unless they all pass. It is last in the ladder by design.
@@ -154,12 +154,19 @@ What it runs is everything that already exists, plus the tiers that only this pa
 
 - **Not new functionality.** If this feature needs code written to pass, the defect belongs to the
   feature that owns it (01–10), not here.
-- **It cannot run yet: the Figma export is mock-only.** The committed export under `src/web/` makes
-  no API call, has no MSAL, hard-codes the role, and leaves its upload controls inert, so every
-  criterion above that is phrased as *app* behaviour is blocked until
-  [10-figma-integration](10-figma-integration.md) wires it up. The API-side criteria can be
-  exercised in the meantime by calling the endpoints directly; that proves the API, not this pass,
-  and does not close this feature.
+- **It cannot run yet, and the export is no longer what blocks it.**
+  [10-figma-integration](archive/10-figma-integration.md) wired the app to the API *(2026-09-25,
+  PR #31)*, so the app now makes real calls, signs in through MSAL, and reads its role from the
+  server. What is missing is the pass itself: a browser, a tenant, and the identities to walk the
+  journey as. Until it is run, the integration is compiled and type-checked but **unobserved**,
+  and this feature is what would observe it. The API-side criteria can be exercised in the
+  meantime by calling the endpoints directly; that proves the API, not this pass, and does not
+  close this feature.
+- **Three of 10's criteria cannot pass here either.** The export renders no `<video>` element, no
+  per-media delete control, and no avatar an anonymous visitor can see, and 10 recorded those as
+  export gaps rather than hand-building them. A criterion above that needs one of the three is
+  blocked on a **re-export**, not on this pass — see 10's "Known gaps" for the file and line of
+  each.
 - **The profile screen is new surface.** The display name, bio, avatar, theme, and language
   criteria above depend on the profile API (Decision #28) as well as on the frontend wiring; a
   failure there is a defect in the feature that owns that endpoint, not here.

@@ -1,7 +1,7 @@
 # 10 — Figma Integration
 
-Status: **In review** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #17/#22/#26–#30 + "Frontend build" + "System overview".
+Status: **Archived** — merged to `develop` in PR #31 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Source: [PRD](../../PRD.md) — Decisions #17/#22/#26–#30 + "Frontend build" + "System overview".
 
 ## Summary
 
@@ -19,7 +19,7 @@ theme, language), a **visibility selector** on the activity form, a **visibility
 uploader**. Wiring them is the same work as any other screen — the API slice behind each is
 specified by the numbered backend features, not here.
 
-Per [docs/testing-and-tdd.md](../testing-and-tdd.md) the frontend is **out of TDD scope** — it is
+Per [docs/testing-and-tdd.md](../../testing-and-tdd.md) the frontend is **out of TDD scope** — it is
 not test-first — so the acceptance criteria below are **manual and observable**: each one is a
 thing a person can verify by opening the app, signing in or not, and acting.
 
@@ -31,15 +31,15 @@ anyone's, through the interface the designer authored rather than a hand-built o
 
 ## Dependencies
 
-- [02-entra-auth](archive/02-entra-auth.md) (the profile API — `PUT /user/me`, `POST`/`DELETE /user/me/avatar` — and the profile columns it writes, which the profile screen below consumes)
-- [05-public-activity-list](archive/05-public-activity-list.md) (paged, date-descending list with covers for anonymous callers)
-- [07-sas-delivery](archive/07-sas-delivery.md) (short-lived SAS URLs that make media renderable)
-- [08-cover-images](archive/08-cover-images.md) (cover upload, routed to `covers` or `media` by the activity's `Type`, and the cover URL — plain or SAS — in list/detail responses)
-- [09-permission-enforcement](archive/09-permission-enforcement.md) (the role rules the UI must reflect)
+- [02-entra-auth](02-entra-auth.md) (the profile API — `PUT /user/me`, `POST`/`DELETE /user/me/avatar` — and the profile columns it writes, which the profile screen below consumes)
+- [05-public-activity-list](05-public-activity-list.md) (paged, date-descending list with covers for anonymous callers)
+- [07-sas-delivery](07-sas-delivery.md) (short-lived SAS URLs that make media renderable)
+- [08-cover-images](08-cover-images.md) (cover upload, routed to `covers` or `media` by the activity's `Type`, and the cover URL — plain or SAS — in list/detail responses)
+- [09-permission-enforcement](09-permission-enforcement.md) (the role rules the UI must reflect)
 
 **Blocked until the Figma Make export exists.** Everything this feature depends on can be
 finished and tested before the export arrives; the export is the gate (see
-[00-mission-1-sprint.md](00-mission-1-sprint.md) open items).
+[00-mission-1-sprint.md](../00-mission-1-sprint.md) open items).
 
 ## Acceptance criteria
 
@@ -113,13 +113,13 @@ Verified by hand against a running stack; each is observable in a browser.
 ## Tests (TDD)
 
 Not applicable by design. The frontend is **out of TDD scope** per
-[docs/testing-and-tdd.md](../testing-and-tdd.md) — this feature has no unit or integration test
+[docs/testing-and-tdd.md](../../testing-and-tdd.md) — this feature has no unit or integration test
 tier to write against, because the screens come from Figma Make and the hand-written surface is
 API integration, which is verified manually end-to-end. Nothing here adds to `dotnet test`.
 
 What exists instead:
 
-- The manual walkthrough in [11-e2e-verification](11-e2e-verification.md) is the verification
+- The manual walkthrough in [11-e2e-verification](../11-e2e-verification.md) is the verification
   instrument for this feature; the criteria above are its per-screen detail.
 - The backend it calls is fully covered by the existing tiers — no correctness claim about
   permissions, SAS expiry, or upload validation is being made here that 05/07/08/09 do not
@@ -130,7 +130,7 @@ What exists instead:
 - No hand-authored screens, components, or styling: if a screen is wrong, it is fixed in Figma
   Make and re-exported, not patched in `src/web/`.
 - No frontend test framework, no component tests, no Playwright/Cypress suite — this is the
-  deliberate consequence of the TDD scope in [docs/testing-and-tdd.md](../testing-and-tdd.md).
+  deliberate consequence of the TDD scope in [docs/testing-and-tdd.md](../../testing-and-tdd.md).
 - No offline support and no native mobile app (PRD out-of-scope list).
 - No admin screens (Decision #21): the admin role adds rights to the same controls and the same
   screens, nothing more.
@@ -161,38 +161,38 @@ rather than patched in `src/web/`. **Three acceptance criteria cannot be met unt
 lands**; they are named here so a green build is not mistaken for a met criterion.
 
 - **Videos do not play** — criterion 6. `ActivityDetail` renders a video as a filename-and-size row
-  with a "SAS required" badge and **no `<video>` element** ([`figma/src/App.tsx:759-772`](../../figma/src/App.tsx#L759-L772)).
+  with a "SAS required" badge and **no `<video>` element** ([`figma/src/App.tsx:759-772`](../../../figma/src/App.tsx#L759-L772)).
   Images display: the SAS URL `GET /api/media/{id}/url` returns is fetched per item and set as each
   image's `src`. For a video the same URL is fetched and sits unused in the item's `url`, so the
   data is wired and nothing renders it. The badge now reads a little untruthfully — the SAS URL it
   says is required has been obtained — and fixing that is part of the same re-export.
 - **There is no per-media delete control** — criterion 11. The detail view's media grid gives each
-  image exactly one action, opening the lightbox ([`figma/src/App.tsx:748-756`](../../figma/src/App.tsx#L748-L756)),
+  image exactly one action, opening the lightbox ([`figma/src/App.tsx:748-756`](../../../figma/src/App.tsx#L748-L756)),
   and the video row has none. The only `onDelete` in the export is the activity's
-  ([`figma/src/App.tsx:684`](../../figma/src/App.tsx#L684)). `DELETE /api/media/{id}` is therefore
+  ([`figma/src/App.tsx:684`](../../../figma/src/App.tsx#L684)). `DELETE /api/media/{id}` is therefore
   wired into the API client and **uncalled**, and the collaborator/admin delete rule — the whole
   point of the 2026-09-24 narrowing of Decision #27 — is unreachable from the UI.
 - **No avatar renders for an anonymous visitor** — criterion 18. `avatarPreview` appears only
-  inside `UserProfile` ([`figma/src/App.tsx:1222-1244`](../../figma/src/App.tsx#L1222-L1244)), which
+  inside `UserProfile` ([`figma/src/App.tsx:1222-1244`](../../../figma/src/App.tsx#L1222-L1244)), which
   is reachable only once signed in. The public `avatars` container path is exercised by the
   signed-in profile screen and by nothing an anonymous visitor sees; `creatorDisplayName` renders
   in the list and detail as **text**, never as an image.
 
 Three defects the earlier draft of this section listed were **stale**, and are recorded here as
 fixed so the next reader does not go looking: the top-banner `+` button does route to the upload
-form on a detail page (`plusTarget`, [`figma/src/App.tsx:405-407`](../../figma/src/App.tsx#L405-L407));
+form on a detail page (`plusTarget`, [`figma/src/App.tsx:405-407`](../../../figma/src/App.tsx#L405-L407));
 `ActivityDetail` is reached by that button, so it is not without an upload affordance; and the
 button's `authRole !== "visitor"` gate is **correct** as committed, because Decision #27 lets any
 signed-in caller contribute to an activity they can read.
 
 One minor wording defect, noted rather than escalated: the visibility selector describes `Private`
-as "Only you" ([`figma/src/App.tsx:114`](../../figma/src/App.tsx#L114)), while feature 09 gives an
+as "Only you" ([`figma/src/App.tsx:114`](../../../figma/src/App.tsx#L114)), while feature 09 gives an
 administrator read access to it too. The label understates who can see the entry.
 
 ### What this branch did and did not verify
 
 The implementation is checked by `tsc --noEmit`, by `vite build`, and by
-[`scripts/web-seam.py`](../../scripts/web-seam.py), which asserts that every line of `src/web/`
+[`scripts/web-seam.py`](../../../scripts/web-seam.py), which asserts that every line of `src/web/`
 differing from the export falls inside a marked seam. Against the local container stack
 (`src/api/docker-compose.yml`), the anonymous list answers `{"items":[],"page":0,"pageSize":10,"total":0}`
 — matching the declared `WireActivityPage` field-for-field — an unknown activity id answers 404, an
@@ -201,5 +201,5 @@ unlisted origin gets no allow header.
 
 **The browser walkthrough has not been run.** No browser is available on the machine this was
 implemented on, so no criterion above is marked met on the strength of having seen it work. That
-pass is [11-e2e-verification](11-e2e-verification.md)'s, and it is the only thing that closes this
+pass is [11-e2e-verification](../11-e2e-verification.md)'s, and it is the only thing that closes this
 feature.
