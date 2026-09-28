@@ -1,5 +1,6 @@
 {
-  "description": "Transform product design files into responsive, user-friendly front-end interfaces, streamlining the development process for designers and developers.",
+  "title": "TrailBlaze",
+  "description": "Record outdoor adventures and share them with friends.",
   "robots": {
     "index": false
   },

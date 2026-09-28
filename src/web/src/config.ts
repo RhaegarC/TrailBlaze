@@ -53,9 +53,6 @@ export const entra: EntraConfig | null =
     ? {
         clientId,
         tenantId,
-        // `<clientId>/.default`, not `api://<clientId>/.default`: the app registration is its own
-        // audience and declares no identifier URI, so the `api://` form names a principal that
-        // does not exist (AADSTS500011).
-        scopes: [import.meta.env.VITE_ENTRA_SCOPE?.trim() || `${clientId}/.default`],
+        scopes: [],
       }
     : null;
