@@ -7,7 +7,7 @@ Numbering is Project #1 (Mission 1 — TrailBlaze Activity Journal).
 
 | # | Bug (file) | Severity | Component | Reported | Status | Work item |
 |---|---|---|---|---|---|---|
-| — | *(no bugs reported yet)* | | | | | |
+| 01 | [01-popup-sign-in-never-completes.md](01-popup-sign-in-never-completes.md) | High | `src/web` — sign-in | 2026-09-28 | Fixed — awaiting the PR | `loginIssue` |
 
 ## Severity guide
 

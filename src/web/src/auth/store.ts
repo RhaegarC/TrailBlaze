@@ -8,10 +8,12 @@
  */
 
 import {
+  BrowserUtils,
   InteractionRequiredAuthError,
   PublicClientApplication,
   type AccountInfo,
 } from "@azure/msal-browser";
+import { broadcastResponseToMainFrame } from "@azure/msal-browser/redirect-bridge";
 import { useSyncExternalStore } from "react";
 
 import { getProfile } from "../api/endpoints";
@@ -152,10 +154,29 @@ export async function signOut(): Promise<void> {
   setState({});
 }
 
+/**
+ * MSAL v5 gives a popup's response to the opener over a `BroadcastChannel`, and only the page the
+ * IdP landed on can post it — this app, at the redirect URI. A page carrying no response throws.
+ */
+function hasAuthResponse(): boolean {
+  try {
+    BrowserUtils.parseAuthResponseFromUrl();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Runs once, at import. Restores an account from the MSAL cache so a reload stays signed in. */
 async function initialise(): Promise<void> {
   if (!msal || !entra) return;
   try {
+    // A popup's landing page hands the response back and renders nothing.
+    if (hasAuthResponse()) {
+      await broadcastResponseToMainFrame();
+      return;
+    }
+
     await msal.initialize();
     const account = msal.getAllAccounts()[0] ?? null;
     if (account) await adopt(account);

@@ -53,6 +53,7 @@ export const entra: EntraConfig | null =
     ? {
         clientId,
         tenantId,
-        scopes: [],
+        // `<clientId>/.default`, not `api://…`: the registration declares no identifier URI.
+        scopes: [import.meta.env.VITE_ENTRA_SCOPE?.trim() || `${clientId}/.default`],
       }
     : null;
