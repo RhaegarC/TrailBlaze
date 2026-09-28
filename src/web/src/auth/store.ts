@@ -85,7 +85,7 @@ async function acquireToken(account: AccountInfo): Promise<string | null> {
   if (!msal || !entra) return null;
   const request = { scopes: entra.scopes, account };
   try {
-    return (await msal.acquireTokenSilent(request)).accessToken;
+    return (await msal.acquireTokenSilent(request)).idToken;
   } catch (silentFailure) {
     // An expired refresh token is the ordinary case here, and it is answered by asking the
     // person rather than by failing the request. Anything else is a real failure and is
