@@ -9,10 +9,10 @@ EXPOSE 8080
 # This stage is used to build the service project
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
-WORKDIR /src
+WORKDIR /src/api
 COPY . .
 RUN dotnet restore "./TrailBlaze.Api/TrailBlaze.Api.csproj"
-WORKDIR "/src/TrailBlaze.Api"
+WORKDIR "/src/api/TrailBlaze.Api"
 RUN dotnet build "./TrailBlaze.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # This stage is used to publish the service project to be copied to the final stage
