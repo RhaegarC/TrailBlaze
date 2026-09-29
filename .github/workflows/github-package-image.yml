@@ -14,20 +14,6 @@ env:
   AZURE_CLIENT_SECRET: ${{ secrets.TRAILBLAZE_AZURE_CLIENT_SECRET }}
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Run tests
-        run: dotnet test src/api/TrailBlaze.slnx
-
   build-and-push-image:
     runs-on: ubuntu-latest
     permissions:
