@@ -3,15 +3,15 @@ name: Create and publish a Docker image
 on:
   push:
     branches:
-      - develop
+      - master
     paths:
       - 'src/api/**'
 
 env:
   REGISTRY: ghcr.io
-  AZURE_CLIENT_ID: ${{ secrets.TRAILBLAZE_AZURE_CLIENT_ID }}
-  AZURE_TENANT_ID: ${{ secrets.TRAILBLAZE_AZURE_TENANT_ID }}
-  AZURE_CLIENT_SECRET: ${{ secrets.TRAILBLAZE_AZURE_CLIENT_SECRET }}
+  AZURE_CLIENT_ID: ${{ secrets.VITE_ENTRA_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.VITE_ENTRA_TENANT_ID }}
+  AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
 
 jobs:
   build-and-push-image:
@@ -35,7 +35,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.PACKAGE_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -46,21 +46,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./src/api
           file: ./src/api/Dockerfile
           push: true
           tags: ${{ steps.vars.outputs.IMAGE_TAG }}
           labels: ${{ steps.meta.outputs.labels }}
-      
-      - name: Deploy to Azure Container App
-        uses: azure/CLI@v2
-        with:
-          inlineScript: |
-            az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID
-            az account set --subscription ${{ secrets.TRAILBLAZE_AZURE_SUBSCRIPTION_ID }}
-            IMAGE="${{ env.REGISTRY }}/${{ steps.vars.outputs.IMAGE_NAME }}:${{ github.sha }}"
-
-            az containerapp update \
-              --name trailblazeapi \
-              --resource-group TrailBlaze \
-              --image "$IMAGE"
