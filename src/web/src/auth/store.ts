@@ -1,12 +1,3 @@
-/**
- * Who is signed in, as a store rather than a context.
- *
- * MSAL is already a page-wide singleton, and the screen that renders the header is the same one
- * that decides the whole view, so a provider would have to wrap the component that needs it.
- * A store read through `useSyncExternalStore` avoids that and keeps the sign-in state in the
- * one place the token comes from.
- */
-
 import {
   BrowserUtils,
   InteractionRequiredAuthError,
@@ -16,6 +7,7 @@ import {
 import { broadcastResponseToMainFrame } from "@azure/msal-browser/redirect-bridge";
 import { useSyncExternalStore } from "react";
 
+import type { WireProfile } from "../api/types";
 import { getProfile } from "../api/endpoints";
 import { setTokenSource } from "../api/client";
 import { entra } from "../config";
@@ -23,13 +15,11 @@ import { entra } from "../config";
 export type AuthRole = "visitor" | "user" | "admin";
 
 export interface AuthState {
-  /** `unconfigured` is a deployment with no tenant: the app runs anonymously and cannot sign in. */
   status: "unconfigured" | "initialising" | "visitor" | "signed-in";
   role: AuthRole;
-  /** The Entra object id, and therefore what `createdByUserId` on an activity compares against. */
   userId: string;
   displayName: string;
-  /** Set when the last sign-in attempt failed, so the header can say so rather than nothing. */
+  avatarUrl: string | null;
   error: string | null;
 }
 
@@ -38,15 +28,12 @@ const msal: PublicClientApplication | null = entra
       auth: {
         clientId: entra.clientId,
         authority: `https://login.microsoftonline.com/${entra.tenantId}`,
-        // The SPA redirect URI has to be registered against the app registration; this is the
-        // origin the app is actually served from, which differs per environment by construction.
         redirectUri: window.location.origin,
       },
       cache: { cacheLocation: "sessionStorage" },
     })
   : null;
 
-/** False in a deployment with no tenant, where the sign-in link has nothing to open. */
 export const signInAvailable: boolean = entra !== null;
 
 const ANONYMOUS: AuthState = {
@@ -54,6 +41,7 @@ const ANONYMOUS: AuthState = {
   role: "visitor",
   userId: "",
   displayName: "",
+  avatarUrl: null,
   error: null,
 };
 
@@ -80,30 +68,17 @@ export function useAuth(): AuthState {
   return useSyncExternalStore(subscribe, getAuthState);
 }
 
-/** The account's token, or null when nobody is signed in or the tenant is not configured. */
 async function acquireToken(account: AccountInfo): Promise<string | null> {
   if (!msal || !entra) return null;
   const request = { scopes: entra.scopes, account };
   try {
     return (await msal.acquireTokenSilent(request)).idToken;
   } catch (silentFailure) {
-    // An expired refresh token is the ordinary case here, and it is answered by asking the
-    // person rather than by failing the request. Anything else is a real failure and is
-    // reported as one by the caller that needed the token.
     if (!(silentFailure instanceof InteractionRequiredAuthError)) throw silentFailure;
     return (await msal.acquireTokenPopup(request)).accessToken;
   }
 }
 
-/**
- * Adopt a signed-in account: wire its tokens into the client, then read the role from the
- * server.
- *
- * The role is deliberately the server's to state rather than the token's to claim. Until
- * `GET /user/me` answers, the caller is an ordinary user — the narrower of the two, so an
- * admin affordance that has not arrived yet is late rather than shown to someone who may not
- * have it.
- */
 async function adopt(account: AccountInfo): Promise<void> {
   setTokenSource(() => acquireToken(account));
   setState({
@@ -111,23 +86,24 @@ async function adopt(account: AccountInfo): Promise<void> {
     role: "user",
     userId: "",
     displayName: account.name ?? "",
+    avatarUrl: null,
     error: null,
   });
 
   try {
-    const profile = await getProfile();
-    setState({
-      role: profile.role === "Admin" ? "admin" : "user",
-      // The API's own id for this caller, which is what an activity's `createdByUserId` holds.
-      userId: profile.id,
-      displayName: profile.displayName ?? account.name ?? "",
-    });
+    applyProfile(await getProfile(), account.name ?? "");
   } catch (failure) {
-    // Signed in but unidentifiable, which the API answers 401 for. Keeping `visitor`-level
-    // affordances while holding a token is the safe half of that: nothing is offered that the
-    // server has not just confirmed.
     setState({ error: failure instanceof Error ? failure.message : String(failure) });
   }
+}
+
+export function applyProfile(profile: WireProfile, fallbackName = ""): void {
+  setState({
+    role: profile.role === "Admin" ? "admin" : "user",
+    userId: profile.id,
+    displayName: profile.displayName ?? fallbackName,
+    avatarUrl: profile.avatarUrl ?? null,
+  });
 }
 
 export async function signIn(): Promise<void> {
@@ -154,10 +130,6 @@ export async function signOut(): Promise<void> {
   setState({});
 }
 
-/**
- * MSAL v5 gives a popup's response to the opener over a `BroadcastChannel`, and only the page the
- * IdP landed on can post it — this app, at the redirect URI. A page carrying no response throws.
- */
 function hasAuthResponse(): boolean {
   try {
     BrowserUtils.parseAuthResponseFromUrl();
@@ -167,11 +139,9 @@ function hasAuthResponse(): boolean {
   }
 }
 
-/** Runs once, at import. Restores an account from the MSAL cache so a reload stays signed in. */
 async function initialise(): Promise<void> {
   if (!msal || !entra) return;
   try {
-    // A popup's landing page hands the response back and renders nothing.
     if (hasAuthResponse()) {
       await broadcastResponseToMainFrame();
       return;

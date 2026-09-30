@@ -1,7 +1,8 @@
 // @integration:begin the export's imports, plus everything it was written without: the API,
 // sign-in, and the strings its translation table has no entry for because fixtures never fail.
 import { createContext, useContext, useEffect, useState } from "react";
-import { signIn, signInAvailable, signOut, useAuth } from "./auth/store";
+import { applyProfile, signIn, signInAvailable, signOut, useAuth } from "./auth/store";
+import { initialsOf } from "./auth/identity";
 import { toApiError, type ApiError } from "./api/client";
 import {
   createActivity,
@@ -22,6 +23,7 @@ import {
   useProfile,
 } from "./data/hooks";
 import { failureText, fieldError, loadingText, retryText, signOutText } from "./i18n/failures";
+import { Lightbox } from "./ui/lightbox";
 // @integration:end
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -341,6 +343,9 @@ function Nav({
 }) {
   const { lang } = useSettings();
   const t = T[lang];
+  // @integration:begin the export's chip is a mock, so it is hand-fed the signed-in caller here
+  const auth = useAuth();
+  // @integration:end
   const isDetail = currentView?.name === "detail";
   const plusLabel = isDetail ? t.uploadMedia : t.newActivity;
   const detailActivityId = isDetail ? (currentView as { name: "detail"; activityId: string }).activityId : null;
@@ -393,12 +398,25 @@ function Nav({
             </button>
             // @integration:end
           ) : (
-            <button onClick={() => onNavigate({ name: "profile" })} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <span className="w-6 h-6 rounded-full bg-[#c8893a] flex items-center justify-center text-[10px] font-semibold text-[#0f120e]">
-                {authRole === "admin" ? "A" : "U"}
+            // @integration:begin the export hardcoded an "A"/"U" chip and the role word here, so
+            // the caller's own avatar and name replace both; the initials stand in until one arrives
+            <button
+              onClick={() => onNavigate({ name: "profile" })}
+              aria-label={auth.displayName || authRole}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
+              <span className="w-6 h-6 rounded-full bg-[#c8893a] overflow-hidden flex items-center justify-center text-[10px] font-semibold text-[#0f120e]">
+                {auth.avatarUrl ? (
+                  <img src={auth.avatarUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  initialsOf(auth.displayName)
+                )}
               </span>
-              <span className={`hidden sm:block text-sm ${C.secondaryFg} capitalize`}>{authRole}</span>
+              <span className={`hidden sm:block text-sm ${C.secondaryFg}`}>
+                {auth.displayName || authRole}
+              </span>
             </button>
+            // @integration:end
           )}
         </div>
       </div>
@@ -844,29 +862,16 @@ function ActivityDetail({
         </div>
       </div>
 
+      {/* @integration:begin the export's arrows are a pointer affordance, hidden on a coarse pointer where a finger drags the strip instead; an export authored for a mouse cannot express that */}
       {lightboxIndex !== null && (
-        <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center" onClick={() => setLightboxIndex(null)}>
-          <button className="absolute top-4 right-4 text-[#7a7568] hover:text-white transition-colors" onClick={() => setLightboxIndex(null)}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-          <button className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7a7568] hover:text-white transition-colors p-2" onClick={(e) => { e.stopPropagation(); setLightboxIndex((prev) => prev !== null ? (prev - 1 + allImages.length) % allImages.length : 0); }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <img src={allImages[lightboxIndex]?.url} alt={allImages[lightboxIndex]?.originalFileName} className="max-w-4xl max-h-[85vh] object-contain" onClick={(e) => e.stopPropagation()} />
-          <button className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7a7568] hover:text-white transition-colors p-2" onClick={(e) => { e.stopPropagation(); setLightboxIndex((prev) => prev !== null ? (prev + 1) % allImages.length : 0); }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 font-mono-data text-[11px] text-[#7a7568]">
-            {lightboxIndex + 1} / {allImages.length}
-          </div>
-        </div>
+        <Lightbox
+          images={allImages}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
+      {/* @integration:end */}
     </main>
   );
 }
@@ -1391,12 +1396,15 @@ function UserProfile({ authRole, onNavigate }: { authRole: AuthRole; onNavigate:
       if (avatarFile) await uploadAvatar(avatarFile);
       else if (avatarRemoved) await removeAvatar();
 
-      await updateProfile({
-        displayName,
-        description: bio,
-        preferredTheme: theme === "light" ? "Light" : "Dark",
-        preferredLanguage: lang,
-      });
+      // The header renders the caller from the store, so the profile just saved goes back into it.
+      applyProfile(
+        await updateProfile({
+          displayName,
+          description: bio,
+          preferredTheme: theme === "light" ? "Light" : "Dark",
+          preferredLanguage: lang,
+        })
+      );
 
       setAvatarFile(null);
       setAvatarRemoved(false);
