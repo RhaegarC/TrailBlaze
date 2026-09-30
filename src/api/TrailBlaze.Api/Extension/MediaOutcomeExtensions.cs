@@ -38,15 +38,14 @@ internal static class MediaOutcomeExtensions
     /// The status code and body minting a read URL becomes.
     /// </summary>
     /// <remarks>
-    /// No forbidden case: being able to see an item is being able to fetch it, so the only refusal is
-    /// not-found — which covers an item this caller may not see, because whether it exists at all is
-    /// the fact being withheld.
+    /// No forbidden case and no unauthorized one: being able to see an item is being able to fetch
+    /// it, so the only refusal is not-found — which covers an item this caller may not see, because
+    /// whether it exists at all is the fact being withheld.
     /// </remarks>
     public static IActionResult ToActionResult(this ControllerBase controller, MediaUrlOutcome outcome) =>
         outcome.Kind switch
         {
             MediaUrlOutcomeKind.Minted => controller.Ok(outcome.Url),
-            MediaUrlOutcomeKind.NoCaller => controller.Unauthorized(),
             _ => controller.NotFound(),
         };
 }
