@@ -25,7 +25,7 @@ public sealed record MediaResponse
     public required DateTimeOffset CreatedOn { get; init; }
 
     /// <summary>Who contributed it — the field the detail view groups by (Decision #27).</summary>
-    public required string UploadedByUserId { get; init; }
+    public string? UploadedByUserId { get; init; }
 
     /// <summary>The uploader's name, resolved on the way out so a group needs no second request.</summary>
     public string? UploaderDisplayName { get; init; }
