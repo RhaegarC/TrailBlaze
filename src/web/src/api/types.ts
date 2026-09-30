@@ -54,7 +54,8 @@ export interface WireMedia {
   sizeBytes: number;
   originalFileName: string;
   createdOn: string;
-  uploadedByUserId: string;
+  /** Absent, not null, for an anonymous caller — the Entra object id never leaves an authenticated response. */
+  uploadedByUserId?: string;
   uploaderDisplayName: string | null;
 }
 

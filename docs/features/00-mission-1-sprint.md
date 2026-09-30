@@ -6,10 +6,12 @@ living reference (decisions log, canonical data model, permission table).
 ## Goal
 
 An activity journal that is public **by default rather than in principle**. Anyone browses the
-`Public` activities, newest first, with their covers; signing in widens that to `Shared` entries
-and the caller's own `Private` ones, and reveals the images and videos each activity carries. One
-shared feed, populated by any signed-in user; the activity's `Type` decides who may read it and
-ownership decides who may edit or delete (Decisions #26/#27).
+`Public` activities, newest first, with their covers and the images and videos each one carries;
+signing in widens that to `Shared` entries and the caller's own `Private` ones. One shared feed,
+populated by any signed-in user; the activity's `Type` decides who may read it and ownership
+decides who may edit or delete (Decisions #26/#27). *(2026-09-30 — the media half of the first
+sentence came out from behind sign-in; the activity's `Type` now decides media too, which is what
+[12](12-anonymous-media-read.md) does.)*
 
 ## How to read these features (working model)
 
@@ -55,11 +57,12 @@ table](../PRD.md#current-state-vs-target) states capability rather than progress
 | 04 | [activity-crud](archive/04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. Plus the **anonymous paged list** — newest entry first, `pageSize` clamped, visibility-scoped. **Who may mutate is 09's; the payload and the detail read are 05's** | archived — merged in PR #15. The list applies the read half of the visibility rule; **the admin branch is not implemented** (no role is readable), and no mutation is authorized |
 | 05 | [public-activity-list](archive/05-public-activity-list.md) | 04 | The read surface's payload and second read: the cover URL, the media count and the creator's display name on a list item; `GET /api/activity/{id}` applying the visibility rule as a **404**; an admin branch that is blocked on a readable role | archived — merged in PR #19. The payload, the detail read and the cover URL it projects (populated by 08) work; **the admin branch of the visibility rule is not implemented** (no role is readable, so it lands with 09) |
 | 06 | [media-upload](archive/06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 50 per contributor per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | archived — merged in PR #17. Upload, metadata listing and item deletion work; **the administrator among the permitted deleters is not implemented** (no role is readable, so it lands with 09), and **fetching the bytes is 07's** *(2026-09-25 — both have now landed: 09 in PR #26, 07 in PR #28, so the slice this row described is closed)* |
-| 07 | [sas-delivery](archive/07-sas-delivery.md) | 06 | `GET /api/media/{id}/url` mints a **short-lived SAS URL**, and **only** for an authenticated caller — rejected before any blob operation otherwise | archived — merged in PR #28. The route, the visibility gate, the clamped TTL policy and the read-only single-blob scope are built and proven, the scope against a live account. **Two claims moved**: the "before any blob operation" count is at the service tier rather than the API tier (a tokenless request is refused by the middleware before the action runs, so the count there would hold by framework ordering), and the API tier's authenticated 200 is not reachable without a tenant |
+| 07 | [sas-delivery](archive/07-sas-delivery.md) | 06 | `GET /api/media/{id}/url` mints a **short-lived SAS URL**, and **only** for an authenticated caller — rejected before any blob operation otherwise | archived — merged in PR #28. The route, the visibility gate, the clamped TTL policy and the read-only single-blob scope are built and proven, the scope against a live account. **The audience widened on 2026-09-30** ([12](12-anonymous-media-read.md)): the route, the gate and the TTL policy are unchanged, but a caller who can read the activity may now mint without a token, and the anonymous refusal became a 404 rather than a 401. **Two claims moved**: the "before any blob operation" count is at the service tier rather than the API tier (a tokenless request is refused by the middleware before the action runs, so the count there would hold by framework ordering), and the API tier's authenticated 200 is not reachable without a tenant |
 | 08 | [cover-images](archive/08-cover-images.md) | 04 | Cover is a **separate upload** whose container **follows the activity's `Type`** — public `covers` for `Public`, private `media` otherwise; a `Type` change across that line **moves** the cover. Never derived from private media | archived — merged in PR #20. The upload route, the routing rule and the visibility-change move are built and proven, the move against a live account; **no ownership rule** (any signed-in caller who can read an entry may set its cover), which lands with 09 |
 | 09 | [permission-enforcement](archive/09-permission-enforcement.md) | 03, 04 | **Two axes enforced in one service**: visibility gates reads, ownership gates mutations, `Admin` overrides both. Anonymous denied everywhere except the two public read endpoints. Media upload is the axis crossing — allowed to any caller who can read the activity | archived — merged in PR #26. `IActivityAuthorizationService` holds the whole rule and every route consults it; the role is read from `users.Role`; 403 and 404 are told apart on the same route. **Two claims are not made here**: the live-pipeline status matrix moves to 11 (the Api tier cannot carry a token into an unreachable database), and the "leaves no blob" half of the rejected-mutation criterion has no tier to live in, so the ordering double is what proves it |
 | 10 | [figma-integration](archive/10-figma-integration.md) | 05, 07, 08, 09 | The Figma-exported app wired to the API: MSAL login, API calls, role gating, **visibility badges**, **media grouped by uploader**, and the **profile screen**. **Non-TDD** — verified manually | archived — merged in PR #31. The export's screens are untouched: the wiring is `src/api/`, `src/auth/`, `src/data/`, `src/config.ts` and marked seams in `App.tsx`, and `scripts/web-seam.py` now fails when a re-export clobbers one of those files without saying so. **Three criteria are not met and are not claimed** — the export renders no `<video>` element, no per-media delete control, and no avatar an anonymous visitor can see, so all three are recorded as export gaps rather than hand-built, per the no-hand-authored-screens non-goal. **No criterion is claimed on the strength of having seen it work**: the browser walkthrough belongs to [11](11-e2e-verification.md), and until it runs the integration is compiled and type-checked but unobserved |
 | 11 | [e2e-verification](11-e2e-verification.md) | 10 | Full-stack pass against a running stack: anonymous `Public`-only list → sign in for `Shared` → media visible → create with `Type` → collaborative upload by a second user → grouped by uploader → edit own → a `Private` entry 404s for a stranger → admin override | not started |
+| 12 | [anonymous-media-read](12-anonymous-media-read.md) | 06, 07, 09 | **A reversal of Decision #2's media half**: the activity's `Type` decides who may read its media, exactly as it decides who may read its text. `GET /api/activity/{id}/media` and `GET /api/media/{id}/url` admit an anonymous caller for a `Public` activity and answer **404** — never 401 — for `Shared`, `Private` or absent. The upload and delete routes stay signed-in, and an anonymous listing carries no uploader id (Decision #30) | in progress |
 
 ## Non-TDD tracks (not feature files)
 
@@ -82,8 +85,9 @@ table](../PRD.md#current-state-vs-target) states capability rather than progress
       is **visibility-scoped**, not merely unauthenticated
 - [ ] Images and videos upload to the private container within the validation caps, to **any
       signed-in caller who can read the activity**, each item recording its uploader
-- [x] Media is reachable only via short-lived SAS URLs minted for authenticated callers
-      — landed in [07](archive/07-sas-delivery.md), merged in PR #28
+- [x] Media is reachable only via short-lived SAS URLs, minted for **any caller who can read the
+      activity** — landed in [07](archive/07-sas-delivery.md), merged in PR #28, where the audience
+      was authenticated callers only; widened on 2026-09-30 by [12](12-anonymous-media-read.md)
 - [ ] Cover images upload separately, into the container the activity's `Type` requires, and render
       in the list; a `Type` change across the public line **moves** the cover
 - [x] Visibility, ownership and admin rules enforced in one service; anonymous denied except the two
@@ -105,10 +109,10 @@ file's.
 
 | Project | Bare machine | With the containers |
 |---|---|---|
-| `TrailBlaze.Service.Test` | 230 / 0 / 230 | 230 / 0 / 230 |
-| `TrailBlaze.Repository.Test` | 47 / 75 / 122 | 122 / 0 / 122 |
-| `TrailBlaze.Api.Test` | 18 / 0 / 18 | 18 / 0 / 18 |
-| **All three** | **295 / 75 / 370** | **370 / 0 / 370** |
+| `TrailBlaze.Service.Test` | 273 / 0 / 273 | 273 / 0 / 273 |
+| `TrailBlaze.Repository.Test` | 47 / 78 / 125 | 125 / 0 / 125 |
+| `TrailBlaze.Api.Test` | 19 / 0 / 19 | 19 / 0 / 19 |
+| **All three** | **339 / 78 / 417** | **417 / 0 / 417** |
 
 Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
 the container tiers skip, and `Category=Container` is the only trait in the solution.
