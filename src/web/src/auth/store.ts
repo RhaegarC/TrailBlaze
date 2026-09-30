@@ -16,6 +16,7 @@ import {
 import { broadcastResponseToMainFrame } from "@azure/msal-browser/redirect-bridge";
 import { useSyncExternalStore } from "react";
 
+import type { WireProfile } from "../api/types";
 import { getProfile } from "../api/endpoints";
 import { setTokenSource } from "../api/client";
 import { entra } from "../config";
@@ -29,6 +30,8 @@ export interface AuthState {
   /** The Entra object id, and therefore what `createdByUserId` on an activity compares against. */
   userId: string;
   displayName: string;
+  /** The `avatars` container is public, so this URL renders without a signature. */
+  avatarUrl: string | null;
   /** Set when the last sign-in attempt failed, so the header can say so rather than nothing. */
   error: string | null;
 }
@@ -54,6 +57,7 @@ const ANONYMOUS: AuthState = {
   role: "visitor",
   userId: "",
   displayName: "",
+  avatarUrl: null,
   error: null,
 };
 
@@ -111,23 +115,32 @@ async function adopt(account: AccountInfo): Promise<void> {
     role: "user",
     userId: "",
     displayName: account.name ?? "",
+    avatarUrl: null,
     error: null,
   });
 
   try {
-    const profile = await getProfile();
-    setState({
-      role: profile.role === "Admin" ? "admin" : "user",
-      // The API's own id for this caller, which is what an activity's `createdByUserId` holds.
-      userId: profile.id,
-      displayName: profile.displayName ?? account.name ?? "",
-    });
+    applyProfile(await getProfile(), account.name ?? "");
   } catch (failure) {
     // Signed in but unidentifiable, which the API answers 401 for. Keeping `visitor`-level
     // affordances while holding a token is the safe half of that: nothing is offered that the
     // server has not just confirmed.
     setState({ error: failure instanceof Error ? failure.message : String(failure) });
   }
+}
+
+/**
+ * Puts a profile the server has just answered with into the store, so anything reading it — the
+ * header — follows the change. The profile screen calls this after a save for exactly that reason.
+ */
+export function applyProfile(profile: WireProfile, fallbackName = ""): void {
+  setState({
+    role: profile.role === "Admin" ? "admin" : "user",
+    // The API's own id for this caller, which is what an activity's `createdByUserId` holds.
+    userId: profile.id,
+    displayName: profile.displayName ?? fallbackName,
+    avatarUrl: profile.avatarUrl ?? null,
+  });
 }
 
 export async function signIn(): Promise<void> {

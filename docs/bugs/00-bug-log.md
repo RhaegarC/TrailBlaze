@@ -8,6 +8,7 @@ Numbering is Project #1 (Mission 1 — TrailBlaze Activity Journal).
 | # | Bug (file) | Severity | Component | Reported | Status | Work item |
 |---|---|---|---|---|---|---|
 | 01 | [01-popup-sign-in-never-completes.md](01-popup-sign-in-never-completes.md) | High | `src/web` — sign-in | 2026-09-28 | Fixed — awaiting the PR | `loginIssue` |
+| 02 | [02-banner-shows-no-identity.md](02-banner-shows-no-identity.md) | Normal | `src/web` — banner | 2026-09-30 | Fixed — awaiting the PR | `fix/banner-identity` |
 
 ## Severity guide
 
