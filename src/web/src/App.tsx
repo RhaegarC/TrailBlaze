@@ -94,9 +94,10 @@ const T = {
     sharedJournal: "Shared Journal",
     heroLine1: "Every trail,",
     heroLine2: "one record.",
-    heroDesc: "A communal log of routes taken, summits chased, and coastlines walked. Public by default — media for those who sign in.",
+    // @integration:begin the export promised media to signed-in visitors, which a Public activity no longer asks for
+    heroDesc: "A communal log of routes taken, summits chased, and coastlines walked. Public by default — photos and videos included.",
     activitiesLogged: "activities logged",
-    visitorCallout: "Sign in to view photos and videos, and to add your own activities to the journal.",
+    visitorCallout: "Sign in to add your own activities to the journal.",
     previous: "Previous",
     next: "Next",
     allActivities: "All activities",
@@ -105,7 +106,8 @@ const T = {
     confirm: "Confirm",
     cancel: "Cancel",
     photosVideos: "Photos & Videos",
-    signInToView: (n: number) => `Sign in to view ${n} photos and videos`,
+    // `signInToView` went with the padlock that used it.
+    // @integration:end
     noMedia: "No media uploaded yet.",
     items: (n: number) => `${n} item${n !== 1 ? "s" : ""}`,
     sasRequired: "SAS required",
@@ -172,9 +174,10 @@ const T = {
     sharedJournal: "共享日志",
     heroLine1: "每一条路，",
     heroLine2: "皆有记录。",
-    heroDesc: "一个共同的旅程记录——路线、山峰与海岸。内容公开，媒体文件需登录查看。",
+    // @integration:begin the export promised media to signed-in visitors, which a Public activity no longer asks for
+    heroDesc: "一个共同的旅程记录——路线、山峰与海岸。内容公开，照片与视频一并可见。",
     activitiesLogged: "条活动记录",
-    visitorCallout: "登录后可查看照片和视频，并添加您自己的活动记录。",
+    visitorCallout: "登录后可添加您自己的活动记录。",
     previous: "上一页",
     next: "下一页",
     allActivities: "所有活动",
@@ -183,7 +186,8 @@ const T = {
     confirm: "确认",
     cancel: "取消",
     photosVideos: "照片与视频",
-    signInToView: (n: number) => `登录后查看 ${n} 张照片和视频`,
+    // `signInToView` went with the padlock that used it.
+    // @integration:end
     noMedia: "暂无媒体文件。",
     items: (n: number) => `${n} 个文件`,
     sasRequired: "需要 SAS",
@@ -590,22 +594,24 @@ function ActivityDetail({
   // @integration:begin the activity and its media come from the API
   const { activity: loaded, loading, error } = useActivity(activityId);
   const activity = loaded ?? undefined;
-  const canViewMedia = authRole !== "visitor";
-  // Not fetched at all for a visitor: the route is signed-in only, and a signed URL is what it
-  // hands back, so an anonymous caller asking for one is a 401 rather than a list.
-  const { media, error: mediaError, reload: reloadMedia } = useActivityMedia(activityId, canViewMedia);
+  // Fetched whoever is reading: the route authorizes on the activity's own read rule.
+  const { media, error: mediaError, reload: reloadMedia } = useActivityMedia(activityId);
   const isOwner = activity?.createdByUserId === currentUserId;
   const canEdit = authRole === "admin" || (authRole === "user" && isOwner);
   // @integration:end
 
+  // @integration:begin the export's fixtures always carried an uploader id; an anonymous listing does not
+  // Grouped by id, falling back to the display name, so a listing with no id still groups by person.
   const mediaByUploader = media.reduce<{ userId: string; name: string; items: MediaItem[] }[]>(
     (groups, item) => {
-      const existing = groups.find((g) => g.userId === item.uploadedByUserId);
+      const key = item.uploadedByUserId || item.uploadedBy;
+      const existing = groups.find((g) => g.userId === key);
       if (existing) { existing.items.push(item); }
-      else { groups.push({ userId: item.uploadedByUserId, name: item.uploadedBy, items: [item] }); }
+      else { groups.push({ userId: key, name: item.uploadedBy, items: [item] }); }
       return groups;
     }, []
   );
+  // @integration:end
 
   const allImages = media.filter((m) => m.kind === "Image");
 
@@ -757,17 +763,9 @@ function ActivityDetail({
             <section>
               <h2 className={`font-display font-semibold text-[22px] ${C.fg} mb-6`}>{t.photosVideos}</h2>
 
-              {authRole === "visitor" ? (
-                <div className={`border border-dashed ${C.border} px-8 py-12 text-center`}>
-                  <div className={`w-10 h-10 mx-auto mb-4 flex items-center justify-center border ${C.border}`}>
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                      <rect x="3" y="7" width="12" height="9" rx="1" stroke="currentColor" strokeWidth="1.2" className={C.dim} />
-                      <path d="M6 7V5C6 3.34315 7.34315 2 9 2C10.6569 2 12 3.34315 12 5V7" stroke="currentColor" strokeWidth="1.2" className={C.dim} />
-                    </svg>
-                  </div>
-                  <p className={`text-[14px] ${C.dim}`}>{t.signInToView(activity.mediaCount)}</p>
-                </div>
-              ) : mediaByUploader.length === 0 ? (
+              {/* @integration:begin the padlock a visitor used to be shown here, gone with the anonymous media read */}
+              {/* @integration:end */}
+              {mediaByUploader.length === 0 ? (
                 <div className={`border border-dashed ${C.border} px-8 py-12 text-center`}>
                   <p className={`text-[14px] ${C.dim}`}>{t.noMedia}</p>
                 </div>

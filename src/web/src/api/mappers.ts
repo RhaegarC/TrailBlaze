@@ -34,6 +34,7 @@ export interface MediaView {
   url: string;
   contentType: string;
   uploadedBy: string;
+  /** Empty for an anonymous caller, who is told the uploader's name but not their id. */
   uploadedByUserId: string;
 }
 
@@ -84,7 +85,7 @@ export function toMediaView(wire: WireMedia, url: string): MediaView {
     url,
     contentType: wire.contentType,
     uploadedBy: wire.uploaderDisplayName ?? "",
-    uploadedByUserId: wire.uploadedByUserId,
+    uploadedByUserId: wire.uploadedByUserId ?? "",
   };
 }
 

@@ -140,17 +140,16 @@ export function useActivity(
 /**
  * The media of one activity, each item carrying a freshly minted read URL.
  *
- * `enabled` is what keeps this off the wire for a visitor: the route is signed-in only, so a
- * fetch from an anonymous screen would be a 401 rather than a list, and the signed URLs are the
- * whole reason the route exists.
+ * No `enabled` flag: both routes authorize on the activity's own read rule, so a screen that may
+ * render the activity is a screen that may fetch its media. A caller who may not read it is
+ * refused 404, which is the same refusal the activity itself gets.
  */
-export function useActivityMedia(activityId: string, enabled: boolean): { media: MediaView[] } & Loadable {
+export function useActivityMedia(activityId: string): { media: MediaView[] } & Loadable {
   const [media, setMedia] = useState<MediaView[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
 
   const [loading, reload] = useLoad(
     async (signal) => {
-      if (!enabled) return [];
       const items = await listMedia(activityId, signal);
       // One URL per item, all in flight at once: the grid renders every item, and a signed URL
       // is cheap to mint. A single failure leaves that one tile without a source rather than
@@ -165,7 +164,7 @@ export function useActivityMedia(activityId: string, enabled: boolean): { media:
       return items.map((item, index) => toMediaView(item, urls[index]));
     },
     setMedia,
-    [activityId, enabled],
+    [activityId],
     setError
   );
 
