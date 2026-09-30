@@ -71,18 +71,16 @@ interface RequestOptions {
   /** Multipart. Passed through untouched; the browser sets the boundary. */
   form?: FormData;
   signal?: AbortSignal;
-  /** Send no bearer token even when one is available — the two anonymous routes. */
-  anonymous?: boolean;
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, form, signal, anonymous = false } = options;
+  const { method = "GET", body, form, signal } = options;
   const headers: Record<string, string> = { Accept: "application/json" };
 
-  if (!anonymous) {
-    const token = await tokenSource();
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
+  // Always offered, never required: a route that is public ignores it, and a visitor has none to
+  // send. Withholding it is what silently narrows a route to its anonymous answer.
+  const token = await tokenSource();
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   if (body !== undefined) headers["Content-Type"] = "application/json";
 

@@ -25,6 +25,7 @@ import {
   type MediaView,
   type ProfileView,
 } from "../api/mappers";
+import { useAuth } from "../auth/store";
 
 interface Loadable {
   loading: boolean;
@@ -90,6 +91,11 @@ export function useActivities(page: number, pageSize: number): ActivitiesPage & 
   });
   const [error, setError] = useState<ApiError | null>(null);
 
+  // Who the caller is, is part of what the list is: signing in admits `Shared` entries and the
+  // caller's own `Private` ones. Adopting an account is asynchronous, so without this the first
+  // fetch of every signed-in session is the anonymous one and nothing ever corrects it.
+  const { status } = useAuth();
+
   const [loading, reload] = useLoad(
     (signal) => listActivities(page, pageSize, signal),
     (result) =>
@@ -99,7 +105,7 @@ export function useActivities(page: number, pageSize: number): ActivitiesPage & 
         pageSize: result.pageSize,
         page: result.page,
       }),
-    [page, pageSize],
+    [page, pageSize, status],
     setError
   );
 
@@ -125,10 +131,14 @@ export function useActivity(
   const [activity, setActivity] = useState<ActivityView | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
+  // Same reason as the list: a `Private` entry answers the owner and the visitor differently, so
+  // the caller belongs in the dependencies rather than in the fetch alone.
+  const { status } = useAuth();
+
   const [loading] = useLoad(
     (signal) => getActivity(id, signal),
     (wire) => setActivity(toActivityView(wire)),
-    [id],
+    [id, status],
     setError
   );
 
@@ -148,6 +158,10 @@ export function useActivityMedia(activityId: string): { media: MediaView[] } & L
   const [media, setMedia] = useState<MediaView[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
 
+  // And again here: a `Shared` activity's media is refused to a visitor and served to a caller who
+  // may read it, so the answer this hook holds is only valid for the caller who asked.
+  const { status } = useAuth();
+
   const [loading, reload] = useLoad(
     async (signal) => {
       const items = await listMedia(activityId, signal);
@@ -164,7 +178,7 @@ export function useActivityMedia(activityId: string): { media: MediaView[] } & L
       return items.map((item, index) => toMediaView(item, urls[index]));
     },
     setMedia,
-    [activityId],
+    [activityId, status],
     setError
   );
 
