@@ -109,10 +109,10 @@ file's.
 
 | Project | Bare machine | With the containers |
 |---|---|---|
-| `TrailBlaze.Service.Test` | 230 / 0 / 230 | 230 / 0 / 230 |
-| `TrailBlaze.Repository.Test` | 47 / 75 / 122 | 122 / 0 / 122 |
-| `TrailBlaze.Api.Test` | 18 / 0 / 18 | 18 / 0 / 18 |
-| **All three** | **295 / 75 / 370** | **370 / 0 / 370** |
+| `TrailBlaze.Service.Test` | 273 / 0 / 273 | 273 / 0 / 273 |
+| `TrailBlaze.Repository.Test` | 47 / 78 / 125 | 125 / 0 / 125 |
+| `TrailBlaze.Api.Test` | 19 / 0 / 19 | 19 / 0 / 19 |
+| **All three** | **339 / 78 / 417** | **417 / 0 / 417** |
 
 Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
 the container tiers skip, and `Category=Container` is the only trait in the solution.
