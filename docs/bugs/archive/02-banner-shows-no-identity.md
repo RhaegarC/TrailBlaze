@@ -1,6 +1,6 @@
 # 02 — The banner shows no avatar or display name after sign-in
 
-Status: **Fixed** — awaiting the pull request · [00-bug-log.md](00-bug-log.md)
+Status: **Archived** — merged to `develop` in PR #38 · [00-bug-log.md](../00-bug-log.md)
 Reported: 2026-09-30 · Severity: **Normal** — the app works and the profile screen is the workaround
 Component: `src/web` — `src/App.tsx`, `src/auth/store.ts`
 
