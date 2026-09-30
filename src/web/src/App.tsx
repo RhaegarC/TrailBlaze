@@ -23,6 +23,7 @@ import {
   useProfile,
 } from "./data/hooks";
 import { failureText, fieldError, loadingText, retryText, signOutText } from "./i18n/failures";
+import { Lightbox } from "./ui/lightbox";
 // @integration:end
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -861,29 +862,16 @@ function ActivityDetail({
         </div>
       </div>
 
+      {/* @integration:begin the export's arrows are a pointer affordance, hidden on a coarse pointer where a finger drags the strip instead; an export authored for a mouse cannot express that */}
       {lightboxIndex !== null && (
-        <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center" onClick={() => setLightboxIndex(null)}>
-          <button className="absolute top-4 right-4 text-[#7a7568] hover:text-white transition-colors" onClick={() => setLightboxIndex(null)}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-          <button className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7a7568] hover:text-white transition-colors p-2" onClick={(e) => { e.stopPropagation(); setLightboxIndex((prev) => prev !== null ? (prev - 1 + allImages.length) % allImages.length : 0); }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <img src={allImages[lightboxIndex]?.url} alt={allImages[lightboxIndex]?.originalFileName} className="max-w-4xl max-h-[85vh] object-contain" onClick={(e) => e.stopPropagation()} />
-          <button className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7a7568] hover:text-white transition-colors p-2" onClick={(e) => { e.stopPropagation(); setLightboxIndex((prev) => prev !== null ? (prev + 1) % allImages.length : 0); }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 font-mono-data text-[11px] text-[#7a7568]">
-            {lightboxIndex + 1} / {allImages.length}
-          </div>
-        </div>
+        <Lightbox
+          images={allImages}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
+      {/* @integration:end */}
     </main>
   );
 }
