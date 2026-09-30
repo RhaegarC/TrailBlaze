@@ -28,7 +28,7 @@ is replaced by evidence that a visitor, a user, and an admin each see exactly wh
 - [10-figma-integration](archive/10-figma-integration.md) (the integrated app this pass drives)
 
 This feature exercises the output of every feature before it — 01 through 10, and the reversal
-[12](12-anonymous-media-read.md) made to the media reads — and cannot pass unless they all pass.
+[12](archive/12-anonymous-media-read.md) made to the media reads — and cannot pass unless they all pass.
 It is last in the ladder by design.
 
 It also carries one thing that was planned elsewhere: **[09](archive/09-permission-enforcement.md)'s
