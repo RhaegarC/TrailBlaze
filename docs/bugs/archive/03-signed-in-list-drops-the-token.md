@@ -1,6 +1,6 @@
 # 03 — A signed-in caller's own `Shared` and `Private` activities are invisible
 
-Status: **Open** — fix in PR #46, `fix/03-signed-in-list-drops-the-token` · [00-bug-log.md](00-bug-log.md)
+Status: **Archived** — merged to `develop` in PR #46 · [00-bug-log.md](../00-bug-log.md)
 Reported: 2026-09-30 · Severity: **High** — a whole class of entries is unreachable, and nothing is
 exposed
 Component: `src/web` — `src/api/endpoints.ts`, `src/api/client.ts`, `src/data/hooks.ts`
@@ -98,7 +98,7 @@ The server half is already asserted, and these tests were passing throughout:
 `A_signed_in_page_reaches_public_shared_and_its_own_private_entries` compile the predicate the
 repository is handed and check it against both callers. What no tier covered is the header the
 client sends — the seam between them is where this bug lived, and it is the seam
-[testing-and-tdd.md](../testing-and-tdd.md) names rather than hides.
+[testing-and-tdd.md](../../testing-and-tdd.md) names rather than hides.
 
 ## Not covered here
 
