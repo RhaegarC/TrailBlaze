@@ -17,22 +17,23 @@ import type {
 
 // ─── Activities ────────────────────────────────────────────────────────────────
 
-/** Anonymous. The visibility filter is what makes that safe. */
+/**
+ * Readable without a token, and wider with one: the visibility filter admits `Public` to everyone,
+ * and a caller's own `Shared` and `Private` entries to that caller. Sending no token here is what
+ * would make those two invisible to the person who owns them.
+ */
 export function listActivities(
   page: number,
   pageSize: number,
   signal?: AbortSignal
 ): Promise<WireActivityPage> {
   const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-  return request<WireActivityPage>(`/api/activity?${query}`, { anonymous: true, signal });
+  return request<WireActivityPage>(`/api/activity?${query}`, { signal });
 }
 
-/** Anonymous. A 404 is what an unreadable activity answers, so absence and refusal look alike. */
+/** Reads the caller's own entries too, for the reason above. A 404 is what an unreadable one answers. */
 export function getActivity(id: string, signal?: AbortSignal): Promise<WireActivity> {
-  return request<WireActivity>(`/api/activity/${encodeURIComponent(id)}`, {
-    anonymous: true,
-    signal,
-  });
+  return request<WireActivity>(`/api/activity/${encodeURIComponent(id)}`, { signal });
 }
 
 export function createActivity(body: WireActivityInput): Promise<WireActivity> {
