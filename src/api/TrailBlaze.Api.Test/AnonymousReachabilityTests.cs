@@ -8,23 +8,29 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
-/// The anonymous surface, asserted as a closed list of two rather than as the absence of a check.
+/// The anonymous surface, asserted as a closed list of four rather than as the absence of a check.
 /// </summary>
 /// <remarks>
 /// Default deny is a property of the endpoint table, so it is read from the endpoint table: every
 /// controller action either carries an explicit anonymous grant or requires authorization, and the
-/// grants are exactly the two read routes. A controller added later without <c>[Authorize]</c>
-/// fails here rather than answering 200 to the internet, which no status-code test could catch
-/// without enumerating the routes by hand.
+/// grants are exactly the four read routes — the activity list, the activity detail, and the two
+/// media reads, each of which authorizes on the entry's <c>Type</c>. A controller added later
+/// without <c>[Authorize]</c> fails here rather than answering 200 to the internet, which no
+/// status-code test could catch without enumerating the routes by hand.
 /// </remarks>
 public sealed class AnonymousReachabilityTests
 {
     /// <summary>What an anonymous caller may reach, and nothing else.</summary>
     private static readonly string[] OpenByDesign =
-        ["GET api/Activity", "GET api/Activity/{id}"];
+    [
+        "GET api/Activity",
+        "GET api/Activity/{activityId}/media",
+        "GET api/Activity/{id}",
+        "GET api/media/{mediaId}/url",
+    ];
 
     [Fact]
-    public void The_routes_an_anonymous_caller_may_reach_are_exactly_two()
+    public void The_routes_an_anonymous_caller_may_reach_are_exactly_four()
     {
         using TrailBlazeApiFactory factory = Configured();
 

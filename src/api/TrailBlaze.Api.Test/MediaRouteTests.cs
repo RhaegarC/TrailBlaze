@@ -7,21 +7,26 @@ using System.Net;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>What this tier cannot reach, said plainly.</b> Every media route carries
-/// <c>[Authorize]</c>, so without a token the actions are never entered: the multipart refusal for a
-/// body carrying no file, and everything the service then decides, are outside this tier's reach.
-/// That is a statement about the fixtures here rather than about the rules — the decisions are
-/// asserted in <c>TrailBlaze.Service.Test</c> against the service directly, and the authenticated
-/// surface wants a token this tier does not yet have.
+/// <b>The read routes admit an anonymous caller; the write routes do not.</b> A read is gated by the
+/// activity's <c>Type</c>, so a <c>Public</c> entry's media is reachable without a token and the
+/// route has to let the request through before that judgement can be made (Decision #2, reversed
+/// 2026-09-30). Upload and delete still ask for a sign-in, and the service refuses a nameless caller
+/// for both as well — the guard and the attribute are two halves of one rule there.
 /// </para>
 /// <para>
-/// <b>The read-URL route does not change that, and the claim it makes is placed accordingly.</b>
-/// Feature 07 asks that the refusal reach the caller <em>before any storage call</em>, and the
-/// recording double that counts those calls lives in <c>TrailBlaze.Service.Test</c> — not here.
-/// It has to: with no token the request is refused by the authentication middleware, so the action
-/// never runs and a zero-interaction assertion here would hold because of the framework's ordering
-/// rather than because of anything this code does. Such a test could not fail if the mint were moved
-/// above the gate, which is the one mistake it would exist to catch.
+/// <b>What this tier cannot reach, said plainly.</b> These tests assert admission, not answers: with
+/// no token and the factory's unreachable store, a request that gets past the door dies on the
+/// connection, so 500 is the whole of the claim and 200, 404 and 403 are all outside this tier's
+/// reach. Those live in <c>TrailBlaze.Service.Test</c>, against the service directly, and in the
+/// feature 11 walkthrough.
+/// </para>
+/// <para>
+/// <b>The read-URL route's storage count is placed accordingly.</b> Feature 07 asks that a refusal
+/// reach the caller <em>before any storage call</em>, and the recording double that counts those
+/// calls lives in <c>TrailBlaze.Service.Test</c> — not here. It has to: a count taken here would
+/// hold because of the framework's ordering rather than because of anything this code does, and
+/// such a test could not fail if the mint were moved above the gate, which is the one mistake it
+/// would exist to catch.
 /// </para>
 /// </remarks>
 public sealed class MediaRouteTests
@@ -30,10 +35,8 @@ public sealed class MediaRouteTests
 
     [Theory]
     [InlineData("POST", "/api/activity/{0}/media")]
-    [InlineData("GET", "/api/activity/{0}/media")]
     [InlineData("DELETE", "/api/media/{0}")]
-    [InlineData("GET", "/api/media/{0}/url")]
-    public async Task A_media_route_turns_an_anonymous_caller_away(string method, string template)
+    public async Task A_media_mutation_route_turns_an_anonymous_caller_away(string method, string template)
     {
         await using TrailBlazeApiFactory factory = Configured();
         using HttpClient client = factory.CreateClient();
@@ -42,6 +45,24 @@ public sealed class MediaRouteTests
             new HttpRequestMessage(new HttpMethod(method), string.Format(template, SomeId)));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/activity/{0}/media")]
+    [InlineData("GET", "/api/media/{0}/url")]
+    public async Task A_media_read_route_lets_an_anonymous_caller_past_the_door(string method, string template)
+    {
+        await using TrailBlazeApiFactory factory = Configured();
+        using HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage response = await client.SendAsync(
+            new HttpRequestMessage(new HttpMethod(method), string.Format(template, SomeId)));
+
+        // 500 is the assertion: the request reached the service and failed on the factory's
+        // unreachable store. A 401 would mean the route is not anonymous and a 404 that no such
+        // route exists, and this tier has neither a database nor a token to tell those apart any
+        // other way.
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
     }
 
     /// <summary>
