@@ -194,9 +194,12 @@ storage assertion in this suite is an assertion about a fake.
 
 **Must be test-first (hot spots):**
 - **Ownership and permission evaluation** — the security boundary of the whole app: owner-only
-  edit/delete, admin override, and anonymous denial on exactly the two public read endpoints.
-- **SAS URL issuance** — that an unauthenticated or unauthorized caller is rejected *before* any
-  blob operation happens, and that expiry is bounded.
+  edit/delete, admin override, and anonymous denial everywhere except the four deliberately public
+  read endpoints, each of which authorizes on the entry's `Type`. The count is asserted as a closed
+  list read off the endpoint table, not by enumerating routes by hand.
+- **SAS URL issuance** — that an unauthorized caller — one with no token where a token is required,
+  or one who may not read the entry — is rejected *before* any blob operation happens, and that
+  expiry is bounded.
 - **Upload validation** — content-type allowlist, size caps, and the per-contributor count cap,
   each with a rejection test at the boundary.
 

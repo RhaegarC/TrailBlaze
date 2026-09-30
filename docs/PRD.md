@@ -6,9 +6,11 @@ Owner: TBD
 ## Vision
 
 An **activity journal** with per-entry visibility. Anyone can browse the list of **Public**
-activities ordered newest first — title, location, date, and a cover image. Signing in
-reveals the media those activities carry and adds the entries their owners marked **Shared**
-(signed-in users only). Entries marked **Private** are visible to their owner alone.
+activities ordered newest first — title, location, date, a cover image, and the images and videos
+the entry carries. Signing in adds the entries their owners marked **Shared** (signed-in users
+only) and the caller's own **Private** ones. Entries marked **Private** are visible to their owner
+alone. *(2026-09-30 — the media of a `Public` entry used to sit behind sign-in; the entry's `Type`
+now decides who may read its media as it already decided who may read its text.)*
 
 TrailBlaze is one **shared journal**, not a set of private diaries: everyone posts to the same
 feed, and the visibility control exists so that some entries can be held back rather than so that
@@ -19,8 +21,9 @@ photos and videos to it, and each item records who uploaded it.
 ## Stakeholders
 
 - **Visitor (anonymous)** — browses the list of **Public** activities and reads their text; sees
-  their cover images; cannot see activity media, cannot see Shared or Private entries, and
-  cannot post.
+  their cover images and their media; cannot see Shared or Private entries, and cannot post.
+  *(2026-09-30 — a visitor used to see no activity media at all; what they receive is the metadata
+  list plus a short-lived SAS URL per item, never an uploader's user id.)*
 - **User (signed in)** — everything a visitor can do, plus: sees **Shared** entries and their
   own **Private** ones; views every visible activity's images and videos; creates activities;
   adds media to any activity they can see; edits or deletes their own; and maintains their own
@@ -140,12 +143,12 @@ Every requirement decision from the grilling session, in order:
 | # | Decision | Resolution |
 |---|---|---|
 | 1 | What the product is | An **activity journal**: a user browses activities newest-entry-first and attaches images/videos to each |
-| 2 | Audience for activity text vs media | **Activity text is public or restricted by the entry's visibility** (see #26); **images and videos always require sign-in** — this half is unchanged and applies at every visibility level |
+| 2 | Audience for activity text vs media | **Both text and media follow the entry's visibility** (see #26). **Reversed 2026-09-30** (was: *"activity text is public or restricted by the entry's visibility; images and videos always require sign-in — this half is unchanged and applies at every visibility level"*). What survives is the half the reversal does not touch: media is never readable *outside* its entry's visibility, so there is one visibility rule and no media that outranks the entry it belongs to |
 | 3 | Is it one journal or many | **One shared journal** — everyone posts to one feed; visibility governs who may read an entry, ownership governs who may edit it. Private entries are an escape hatch within the shared feed, not private journals (see #26) |
 | 4 | Media storage | **Azure Blob Storage** (not local disk, not the database) |
 | 5 | Blob endpoint per environment | **Real Azure Storage account for the application in every environment**, dev included. **Scoped 2026-09-18:** the *test* tier now runs against containers from `docker-compose.test.yml` — Azurite for storage, SQL Edge for the database — so "dev and tests included" no longer holds for tests. Decision #6 is why |
 | 6 | Tests vs. the live Azure dependency | **No fake for storage or for the database.** The tier runs the real implementations against those containers by default, and skips when they are not running. **Reversed 2026-09-18** (was: an in-memory `IStorageRepository` fake in unit tests plus a credentialed integration tier). The fake implemented the contract it was asserting, so it proved that a dictionary tolerates a key — and a fake shadows the real implementation's invariants while appearing to test them |
-| 7 | How media reaches the browser | **Short-lived SAS URLs** issued by an authenticated endpoint; container stays private |
+| 7 | How media reaches the browser | **Short-lived SAS URLs**, minted only after the caller has been authorized to read the activity, and for **any caller who can** — authenticated or anonymous. The container stays private and is never made public. **Widened 2026-09-30** (was: "issued by an authenticated endpoint", which is now the `Shared`/`Private` case rather than every case) |
 | 8 | Authentication | **Entra ID** |
 | 9 | Roles | **User + Admin**; admin can edit/delete any activity |
 | 10 | Which date drives the sort | **`CreatedOn` descending**, tie-broken by id so the order is total and no row can straddle two pages. **Changed 2026-09-19** at feature 04's review (was: the user-chosen activity date, with `CreatedOn` as the tiebreaker). The user-chosen activity date is still captured and still displayed (Decisions #11, #25) — it simply no longer drives the order, so the feed reads as a journal rather than as a calendar |
@@ -164,11 +167,11 @@ Every requirement decision from the grilling session, in order:
 | 23 | Public list behaviour | **Paginated, newest entry first, no search**. `page` is a zero-based index defaulting to 0; `pageSize` defaults to 10 and is clamped to 100 rather than refused |
 | 24 | Upload limits | **50 media per contributor per activity**, images ≤ 10 MB, videos ≤ 200 MB. *The count was raised from 20 and re-scoped from per-activity to per-contributor-per-activity on 2026-09-20, at feature 06's review: media is collaborative (#27), so a single shared budget would let one person fill an activity everyone contributes to* |
 | 25 | Date representation | **Calendar date only** — no time, no timezone, no UTC-midnight conversion |
-| 26 | Per-activity visibility | **`Type` ∈ {`Public`, `Shared`, `Private`}**, required, defaulting to `Public`. `Public` = anonymous may read; `Shared` = signed-in users only; `Private` = the owner only (and admins). Visibility gates **reading**; it never gates media, which needs sign-in at every level (#2). Added from the Figma export, 2026-09-15 — this supersedes the earlier flat "everything is public-read" model and reverses the earlier rejection of private entries in the shared feed, which was rejected on the assumption that private meant *separate journals* |
+| 26 | Per-activity visibility | **`Type` ∈ {`Public`, `Shared`, `Private`}**, required, defaulting to `Public`. `Public` = anonymous may read; `Shared` = signed-in users only; `Private` = the owner only (and admins). Visibility gates **reading** — the entry's media included, by the same rule: a `Public` entry's media is readable anonymously, a `Shared` or `Private` one's is not *(2026-09-30 — this clause read "it never gates media, which needs sign-in at every level (#2)" until #2 was reversed)*. Added from the Figma export, 2026-09-15 — this supersedes the earlier flat "everything is public-read" model and reverses the earlier rejection of private entries in the shared feed, which was rejected on the assumption that private meant *separate journals* |
 | 27 | Media is collaborative | **Any signed-in user who can see an activity may add media to it**, not only its owner. Each `media` row records its **uploader**, and the detail view groups items by uploader. Deletion is allowed to the **uploader or an admin**, and to nobody else: owning the activity an item sits on does not carry the right to remove bytes someone else put there *(narrowed 2026-09-24 — this row read "uploader, the activity's owner, or an admin" until feature 09's review; the activity's owner was removed from the list)*. The cap (#24) bounds what one contributor adds to one activity, not the activity's total — the same collaboration this decision establishes is why it is counted that way |
 | 28 | User profile & preferences | **Display name, bio, avatar, theme and language are stored server-side per user** and edited on a profile screen. Avatar lives in the **public** `avatars` container. Theme ∈ {`Dark`, `Light`}, language ∈ {`en`, `zh`}; both are presentation preferences and carry no authorization meaning |
 | 29 | Cover container follows visibility | A cover is uploaded **directly into the container its activity's visibility requires**: `covers` (public) for a Public activity, `media` (private, SAS-served) for Shared and Private ones. Changing an activity's `Type` across that line **moves the cover** — see "Media storage & delivery". #14's rule that a cover is its own upload and is never derived from private media stands unchanged |
-| 30 | Anonymous payload scope | The anonymous response may carry the activity's **media count** and its **creator's display name**. It may **not** carry a user id, a blob path, a SAS URL, or any per-item media field. Relaxes the stricter rule feature 05 originally stated, which forbade the count as media-derived |
+| 30 | Anonymous payload scope | An anonymous response may carry the activity's **media count** and its **creator's display name**, and — **changed 2026-09-30** — the metadata of a `Public` activity's media, including a SAS URL minted for it. It may **not** carry a user id, and no response carries a blob path. *(This row read "it may not carry a user id, a blob path, a SAS URL, or any per-item media field" until the media surface was opened to a visitor; the activity list and detail payloads still obey that older, stricter shape unchanged, and the media surface is the one named exception. The user-id half was never relaxed and is not: with the `users` primary key being the Entra object id, an anonymous payload names people by display name and never by id.)* Relaxes the stricter rule feature 05 originally stated, which forbade the count as media-derived |
 
 ## Data model
 
@@ -295,14 +298,20 @@ Authorization has two independent axes, and keeping them apart is what makes the
 
 | `Type` | Anonymous | Signed-in non-owner | Owner | Admin |
 |---|---|---|---|---|
-| `Public` | text + cover + media count + creator display name | text + cover + media | full | full |
+| `Public` | text + cover + media (metadata and a SAS URL each) | text + cover + media | full | full |
 | `Shared` | **404** | text + cover + media | full | full |
 | `Private` | **404** | **404** | full | full |
 
-"Media count" and "creator display name" are the full extent of what an anonymous caller receives
-beyond the text and cover (Decision #30): no user id, no blob path, no SAS URL, and no per-item
-media field. The count and the name are what the export's list rows display; the ids behind them
-are not.
+*(2026-09-30 — the `Public`/Anonymous cell read "text + cover + media count + creator display
+name"; the media of a `Public` entry is now readable, so the cell and the paragraph below it
+changed. The three other cells are untouched.)*
+
+An anonymous caller on a `Public` entry receives the media **metadata** — kind, content type, size,
+file name, upload date, and the uploader's **display name** — and a short-lived SAS URL per item,
+and no more than that (Decision #30): **never a user id**, and no response carries a blob path. The
+activity *list* and *detail* payloads keep their older, stricter shape unchanged: there the count
+and the creator's display name remain the whole of what a visitor receives, because those payloads
+are read off the list rows rather than off the media grid.
 
 `GET /api/activity` applies the same rule as a *filter* rather than a 404: an anonymous caller
 pages the Public entries, a signed-in caller pages Public + Shared + their own Private, and an
@@ -323,12 +332,15 @@ admin pages everything.
 Media mutation is the one place the two axes cross: **any signed-in user who can see an activity
 may add media to it** (Decision #27), so the check is visibility, not ownership — except on a
 Private activity they do not own, which they cannot see and therefore cannot contribute to.
-`GET /api/activity/{id}/media` and `GET /api/media/{id}/url` return **401** anonymously and
-**404** for a signed-in caller who cannot read the activity, so the media surface cannot be used
-to probe for a Private entry's existence.
+`GET /api/activity/{id}/media` and `GET /api/media/{id}/url` return **404** for any caller who
+cannot read the activity — anonymous or signed in, and an id that names nothing is answered the
+same way — so the media surface cannot be used to probe for a Private entry's existence.
+*(2026-09-30 — these two read "401 anonymously and 404 for a signed-in caller who cannot read the
+activity"; the anonymous case is the same 404 as every other unreadable one now, not a 401.)*
 
-**Default deny.** Anonymous access is the exception, granted deliberately on exactly two read
-endpoints. **404 and 403 are not interchangeable**: a caller who may not *see* an activity gets
+**Default deny.** Anonymous access is the exception, granted deliberately on exactly **four** read
+endpoints: the activity list, the activity detail, and the two media reads above — the last two
+only ever for an entry whose `Type` admits the caller. **404 and 403 are not interchangeable**: a caller who may not *see* an activity gets
 404, because "this row exists" is itself the fact being withheld; a caller who can see it but may
 not act on it gets 403. Visibility and ownership checks live in one service so the rule is
 enforced in one place.
@@ -344,7 +356,9 @@ answerable from the container name alone:
   deliberately public identity (Decision #28).
 - **`media` (private)** — every activity's images and videos, **plus the covers of Shared and
   Private activities**. Never public. The browser obtains bytes only through a short-lived
-  **SAS URL** minted by an authenticated endpoint.
+  **SAS URL**, minted only for a caller the visibility rule has already admitted *(2026-09-30 —
+  this read "minted by an authenticated endpoint"; the endpoint is now reachable without a token,
+  and the container is unchanged)*.
 
 **The cover follows its activity's visibility** (Decision #29). A cover is still **its own
 upload** and is never derived from, picked from, or re-pointed at private media — that rule
@@ -362,8 +376,11 @@ entry's cover fetchable by anyone who ever saw the link. Both directions are ass
 feature 08.
 
 Because a SAS URL is a bearer token, the **expiry window is the real control**, not the URL's
-secrecy. Unauthenticated requests to the SAS endpoint must fail with 401 before any blob
-operation is attempted.
+secrecy. A request the visibility rule refuses — anonymous or signed in, for an entry the caller
+may not read — must be answered **404**, and must fail *before* any blob operation is attempted.
+*(2026-09-30 — this read "unauthenticated requests to the SAS endpoint must fail with 401"; the
+refusal is now keyed to the activity's readability rather than to the token's presence, which is a
+narrower gate, not a wider one.)*
 
 Validation on upload: content type against an allowlist, size against the caps in Decision #24,
 and a count check against **the contributor's own** existing media on the activity — media is
@@ -380,9 +397,9 @@ everyone together adds.
 | `PUT` | `/api/activity/{id}` | owner/admin | Update, including `Type` — crossing the public line **moves the cover** |
 | `DELETE` | `/api/activity/{id}` | owner/admin | Soft delete — the entry leaves the read path and its media rows and blobs are left untouched, so a restore brings the media back with it |
 | `POST` | `/api/activity/{id}/cover` | owner/admin | Upload/replace cover → `covers` (public) if the activity is `Public`, otherwise `media` (private, SAS) |
-| `GET` | `/api/activity/{id}/media` | anyone who can read the activity | Media metadata, each item carrying its uploader |
+| `GET` | `/api/activity/{id}/media` | anyone who can read the activity — anonymous included | Media metadata, each item carrying its uploader by **display name**. An anonymous listing carries **no** uploader user id (Decision #30); **404** for an entry the caller may not read |
 | `POST` | `/api/activity/{id}/media` | any signed-in caller who can read the activity | Upload image/video → private container (collaborative, Decision #27) |
-| `GET` | `/api/media/{id}/url` | anyone who can read the activity | Mint a short-lived SAS URL |
+| `GET` | `/api/media/{id}/url` | anyone who can read the activity — anonymous included | Mint a short-lived SAS URL after the visibility check, so a refused caller reaches no blob; **404** rather than 401 |
 | `DELETE` | `/api/media/{id}` | uploader / admin | Delete media (row + blob) |
 | `GET` | `/user/me` | user | The caller's own row, inserted on first call — **already implemented** |
 | `PUT` | `/user/me` | self | Update display name, bio, preferred theme and language |
