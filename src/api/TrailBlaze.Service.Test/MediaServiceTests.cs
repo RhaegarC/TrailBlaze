@@ -346,6 +346,12 @@ public sealed class MediaServiceTests
     [InlineData(Contributor, Constant.ActivityType.Private, Owner, false)]
     [InlineData(Owner, Constant.ActivityType.Private, Owner, true)]
     [InlineData(Contributor, Constant.ActivityType.Shared, Contributor, true)]
+
+    // The visitor's arm of the same rule: a Public entry is readable with no token, and it is the
+    // only one that is (Decision #2, reversed 2026-09-30).
+    [InlineData(null, Constant.ActivityType.Public, Owner, true)]
+    [InlineData(null, Constant.ActivityType.Shared, Owner, false)]
+    [InlineData(null, Constant.ActivityType.Private, Owner, false)]
     public async Task Reading_an_activity_a_caller_may_not_see_is_not_found(
         string? caller, string type, string owner, bool found)
     {
@@ -358,16 +364,69 @@ public sealed class MediaServiceTests
     }
 
     /// <summary>
-    /// No token reads nothing rather than everything: the media surface must not become a way in.
+    /// A visitor reads a Public entry's media: the entry's <c>Type</c> decides, exactly as it
+    /// decides who may read its text.
     /// </summary>
     [Fact]
-    public async Task Listing_without_a_caller_is_not_found()
+    public async Task An_anonymous_caller_lists_a_public_activitys_media()
     {
         var harness = new Harness(caller: null);
+        harness.Repository.Items = [Item("one", Contributor)];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        Assert.True(listing.Found);
+        Assert.Equal(["one"], listing.Items.Select(item => item.Id));
+    }
+
+    /// <summary>
+    /// The other half, and why the gate is the activity rather than the token: no token opens a
+    /// Public entry and nothing else.
+    /// </summary>
+    [Theory]
+    [InlineData(Constant.ActivityType.Shared)]
+    [InlineData(Constant.ActivityType.Private)]
+    public async Task An_anonymous_caller_is_refused_a_listing_he_may_not_read(string type)
+    {
+        var harness = new Harness(caller: null);
+        harness.Repository.Activity = Activity(type, Owner);
+        harness.Repository.Items = [Item("one", Contributor)];
 
         MediaListing listing = await harness.Service.ListAsync(ActivityId);
 
         Assert.False(listing.Found);
+    }
+
+    /// <summary>
+    /// The listing names the uploader and does not identify them: the <c>users</c> primary key is
+    /// the Entra object id, so an anonymous payload carries the name and nothing behind it.
+    /// </summary>
+    [Fact]
+    public async Task An_anonymous_listing_withholds_the_uploaders_id()
+    {
+        var harness = new Harness(caller: null);
+        harness.Repository.Items = [Item("one", Contributor)];
+        harness.Repository.Users = [new User { Id = Contributor, DisplayName = "Ada" }];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        // Asserted first so the failure names the refusal rather than an index into an empty list.
+        Assert.True(listing.Found);
+        Assert.Null(listing.Items[0].UploadedByUserId);
+        Assert.Equal("Ada", listing.Items[0].UploaderDisplayName);
+    }
+
+    /// <summary>The same listing read by a signed-in caller keeps the id, which is what the grid's
+    /// per-uploader grouping is keyed on.</summary>
+    [Fact]
+    public async Task A_signed_in_listing_carries_the_uploaders_id()
+    {
+        var harness = new Harness();
+        harness.Repository.Items = [Item("one", Contributor)];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        Assert.Equal(Contributor, listing.Items[0].UploadedByUserId);
     }
 
     [Fact]
@@ -514,6 +573,22 @@ public sealed class MediaServiceTests
     // ---- Minting a read URL ---------------------------------------------------------------
 
     /// <summary>
+    /// A visitor mints a URL for a Public entry's item, which is the half of the media path that
+    /// opened when Decision #2 was reversed.
+    /// </summary>
+    [Fact]
+    public async Task An_anonymous_caller_may_mint_a_public_activitys_media()
+    {
+        var harness = new Harness(caller: null);
+        harness.Repository.Item = Item("one", Contributor);
+
+        MediaUrlOutcome outcome = await harness.Service.CreateReadUrlAsync("one");
+
+        Assert.Equal(MediaUrlOutcomeKind.Minted, outcome.Kind);
+        Assert.Single(harness.Storage.ReadUrls);
+    }
+
+    /// <summary>
     /// The security hot spot of the media path, and the one claim a storage double is still
     /// sanctioned for.
     /// </summary>
@@ -521,17 +596,26 @@ public sealed class MediaServiceTests
     /// The count is the whole of the assertion: one recording double, zero interactions. It can be
     /// made no other way — a real backend records nothing, so "the refusal came before any blob
     /// operation" is invisible to the container tier, which can only see what did happen. This
-    /// double stands in for no storage behaviour and supports no other claim.
+    /// double stands in for no storage behaviour and supports no other claim. The refusal is keyed
+    /// to the entry's readability rather than to the presence of a token, which is why the caller
+    /// here is anonymous and still refused.
     /// </remarks>
-    [Fact]
-    public async Task An_unauthenticated_caller_is_refused_before_storage_is_reached()
+    [Theory]
+    [InlineData(Constant.ActivityType.Shared)]
+    [InlineData(Constant.ActivityType.Private)]
+    public async Task An_anonymous_caller_is_refused_before_storage_is_reached(string type)
     {
         var harness = new Harness(caller: null);
+        harness.Repository.Activity = Activity(type, Owner);
+
+        // The item exists, so the refusal is the visibility gate rather than a row that was absent
+        // anyway — without this the test would pass on the lookup missing.
+        harness.Repository.Item = Item("one", Contributor);
         var storage = new NeverReachedStorage();
 
         MediaUrlOutcome outcome = await harness.ServiceWith(storage).CreateReadUrlAsync("one");
 
-        Assert.Equal(MediaUrlOutcomeKind.NoCaller, outcome.Kind);
+        Assert.Equal(MediaUrlOutcomeKind.NotFound, outcome.Kind);
         Assert.Empty(storage.Reached);
     }
 
@@ -555,6 +639,30 @@ public sealed class MediaServiceTests
 
         Assert.Equal(MediaUrlOutcomeKind.NotFound, outcome.Kind);
         Assert.Empty(storage.Reached);
+    }
+
+    /// <summary>
+    /// An entry that is not there is answered as unreadable rather than as a special case: a
+    /// soft-deleted row leaves the read path entirely, and the service sees the absence.
+    /// </summary>
+    /// <remarks>
+    /// That the query filter is what removes it is the database tier's claim; what is asserted here
+    /// is the answer the service gives when the row is absent, for a caller with no token.
+    /// </remarks>
+    [Fact]
+    public async Task An_anonymous_caller_cannot_list_or_mint_a_deleted_activitys_media()
+    {
+        var harness = new Harness(caller: null);
+        harness.Repository.Activity = null;
+        harness.Repository.Item = Item("one", Contributor);
+        harness.Repository.Items = [Item("one", Contributor)];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+        MediaUrlOutcome outcome = await harness.Service.CreateReadUrlAsync("one");
+
+        Assert.False(listing.Found);
+        Assert.Equal(MediaUrlOutcomeKind.NotFound, outcome.Kind);
+        Assert.Empty(harness.Storage.ReadUrls);
     }
 
     /// <summary>
@@ -585,6 +693,11 @@ public sealed class MediaServiceTests
     [InlineData(Owner, Constant.ActivityType.Private, Owner, false, MediaUrlOutcomeKind.Minted)]
     [InlineData(Contributor, Constant.ActivityType.Shared, Contributor, false, MediaUrlOutcomeKind.Minted)]
     [InlineData(Admin, Constant.ActivityType.Private, Owner, true, MediaUrlOutcomeKind.Minted)]
+
+    // No token, and the same matrix: the entry's readability is the whole of the rule.
+    [InlineData(null, Constant.ActivityType.Public, Owner, false, MediaUrlOutcomeKind.Minted)]
+    [InlineData(null, Constant.ActivityType.Shared, Owner, false, MediaUrlOutcomeKind.NotFound)]
+    [InlineData(null, Constant.ActivityType.Private, Owner, false, MediaUrlOutcomeKind.NotFound)]
     public async Task A_url_is_minted_for_a_caller_who_may_read_the_entry(
         string? caller, string type, string owner, bool isAdmin, MediaUrlOutcomeKind expected)
     {

@@ -27,8 +27,9 @@ is replaced by evidence that a visitor, a user, and an admin each see exactly wh
 
 - [10-figma-integration](archive/10-figma-integration.md) (the integrated app this pass drives)
 
-This feature exercises the output of every feature before it — 01 through 10 — and cannot pass
-unless they all pass. It is last in the ladder by design.
+This feature exercises the output of every feature before it — 01 through 10, and the reversal
+[12](archive/12-anonymous-media-read.md) made to the media reads — and cannot pass unless they all pass.
+It is last in the ladder by design.
 
 It also carries one thing that was planned elsewhere: **[09](archive/09-permission-enforcement.md)'s
 live-pipeline status matrix** — each endpoint driven over the real pipeline with a test token, and
@@ -61,11 +62,22 @@ the app assumes, or whether the real tenant issues the token the API validates.
       clamped server-side when a caller asks for more than the maximum
 - [ ] **Anonymous detail**: `GET /api/activity/{id}` for a `Public` entry returns the activity's
       text, cover, media count, and creator display name, and the rendered page exposes **no**
-      user id, blob path, SAS URL, or private-container byte (Decision #30)
+      user id, blob path, or private-container byte (Decision #30). The *activity* payload carries
+      no per-item media field at all; the media the page renders arrives from the media route
+      below, under its own rule
 - [ ] **Unreadable entries are 404, not 403**: the same detail request for a `Shared` or
       `Private` entry returns **404** to an anonymous caller — not 403, and not a redacted 200
-- [ ] **Anonymous denial**: calling `GET /api/activity/{id}/media` and `GET /api/media/{id}/url`
-      without a token returns **401** in both cases, and no blob operation is reached
+- [ ] **Anonymous media on a `Public` entry**: with no sign-in, a `Public` activity's images and
+      videos render on its detail page, reached through `GET /api/activity/{id}/media` and
+      `GET /api/media/{id}/url` with no token; the listing carries **no** uploader user id, only
+      display names, and no blob path (Decision #30)
+- [ ] **Anonymous refusal everywhere else**: for a `Shared`, `Private` or unknown id, those same
+      two routes answer **404** — not 401, not 403, and not a redacted 200 — and reach no blob
+      operation
+- [ ] ~~**Anonymous denial**: calling `GET /api/activity/{id}/media` and `GET /api/media/{id}/url`
+      without a token returns **401** in both cases, and no blob operation is reached~~
+      **(voided 2026-09-30 — the two reads are authorized by the entry's `Type` now, per Decision #2
+      reversed; the criterion above replaces this one)**
 - [ ] **Sign in**: authenticating through the app against Entra ID succeeds, the token is
       validated by the API, and the caller's `users` row is auto-provisioned on first sight of the
       `oid`

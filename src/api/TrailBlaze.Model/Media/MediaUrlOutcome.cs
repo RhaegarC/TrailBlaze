@@ -1,7 +1,7 @@
 namespace TrailBlaze.Model.Media;
 
 /// <summary>
-/// Which of the three answers minting a read URL produced.
+/// Which of the two answers minting a read URL produced.
 /// </summary>
 public enum MediaUrlOutcomeKind
 {
@@ -10,18 +10,16 @@ public enum MediaUrlOutcomeKind
 
     /// <summary>No item with that id is visible to this caller.</summary>
     NotFound,
-
-    /// <summary>The request names no caller.</summary>
-    NoCaller,
 }
 
 /// <summary>
 /// The result of asking for an item's read URL, and the reason for it.
 /// </summary>
 /// <remarks>
-/// A result rather than an exception, as the other media outcomes are. Three answers and not four:
-/// a caller who may see an item may fetch it, so there is no forbidden case to keep separate, and an
-/// item this caller may not see is answered not-found exactly as an absent one is.
+/// A result rather than an exception, as the other media outcomes are. Two answers and not four: a
+/// caller who may see an item may fetch it, so there is no forbidden case to keep separate, and an
+/// item this caller may not see is answered not-found exactly as an absent one is. There is no
+/// no-caller case either — the mint is a read, so a token is not what it asks for.
 /// </remarks>
 public sealed class MediaUrlOutcome
 {
@@ -31,7 +29,7 @@ public sealed class MediaUrlOutcome
         Url = url;
     }
 
-    /// <summary>Which of the three answers this is.</summary>
+    /// <summary>Which of the two answers this is.</summary>
     public MediaUrlOutcomeKind Kind { get; }
 
     /// <summary>The signed URL and its expiry. Set only when <see cref="Kind"/> is <c>Minted</c>.</summary>
@@ -43,7 +41,4 @@ public sealed class MediaUrlOutcome
 
     /// <summary>No item with that id is visible to this caller.</summary>
     public static MediaUrlOutcome NotFound() => new(MediaUrlOutcomeKind.NotFound, null);
-
-    /// <summary>The request names no caller.</summary>
-    public static MediaUrlOutcome NoCaller() => new(MediaUrlOutcomeKind.NoCaller, null);
 }

@@ -125,7 +125,7 @@ public sealed class MediaService(
                 throw;
             }
 
-            return MediaOutcome.Uploaded(ToResponse(media, uploader?.DisplayName));
+            return MediaOutcome.Uploaded(ToResponse(media, uploader?.DisplayName, caller.IsSignedIn));
         }
         catch (Exception ex)
         {
@@ -140,14 +140,6 @@ public sealed class MediaService(
         try
         {
             Caller caller = await authorization.ResolveAsync();
-
-            // The route carries [Authorize], so a nameless caller cannot arrive. Answering not-found
-            // rather than reading is what keeps this surface from becoming a way to read without a
-            // token, should the route's attribute ever change.
-            if (!caller.IsSignedIn)
-            {
-                return MediaListing.NotFound();
-            }
 
             Activity? activity = await dbRepository.GetAsync<Activity>(row => row.Id == activityId);
 
@@ -174,7 +166,10 @@ public sealed class MediaService(
                 [.. items
                     .OrderBy(item => item.CreatedOn)
                     .ThenBy(item => item.Id)
-                    .Select(item => ToResponse(item, names.GetValueOrDefault(item.CreatedBy ?? string.Empty)))]);
+                    .Select(item => ToResponse(
+                        item,
+                        names.GetValueOrDefault(item.CreatedBy ?? string.Empty),
+                        caller.IsSignedIn))]);
         }
         catch (Exception ex)
         {
@@ -227,11 +222,6 @@ public sealed class MediaService(
         {
             Caller caller = await authorization.ResolveAsync();
 
-            if (!caller.IsSignedIn)
-            {
-                return MediaUrlOutcome.NoCaller();
-            }
-
             Media? media = await dbRepository.GetAsync<Media>(row => row.Id == mediaId);
 
             if (media is null)
@@ -279,7 +269,9 @@ public sealed class MediaService(
 
     /// <summary>The stored item as the client sees it. It carries no path, by design: the bytes are
     /// reached through feature 07, and this is what says there are any.</summary>
-    private static MediaResponse ToResponse(Media media, string? uploaderDisplayName) => new()
+    /// <remarks><paramref name="discloseUploaderId"/> is false for an anonymous caller, who is told
+    /// the uploader's name and not the Entra object id behind it (Decision #30).</remarks>
+    private static MediaResponse ToResponse(Media media, string? uploaderDisplayName, bool discloseUploaderId) => new()
     {
         Id = media.Id,
         Kind = media.Kind,
@@ -287,7 +279,7 @@ public sealed class MediaService(
         SizeBytes = media.SizeBytes,
         OriginalFileName = media.OriginalFileName,
         CreatedOn = media.CreatedOn,
-        UploadedByUserId = media.CreatedBy ?? string.Empty,
+        UploadedByUserId = discloseUploaderId ? media.CreatedBy : null,
         UploaderDisplayName = uploaderDisplayName,
     };
 }

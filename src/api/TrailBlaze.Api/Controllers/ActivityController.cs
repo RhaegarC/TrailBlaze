@@ -167,8 +167,13 @@ public class ActivityController(
     /// <summary>
     /// The metadata of every item an activity carries, oldest first.
     /// </summary>
+    /// <remarks>
+    /// A read, so the activity's <c>Type</c> decides and a token is not what is asked for: a
+    /// <c>Public</c> entry's media is readable anonymously (Decision #2, reversed 2026-09-30).
+    /// </remarks>
     /// <param name="activityId">The activity's id.</param>
     /// <returns>The items; not-found for an activity the caller may not read.</returns>
+    [AllowAnonymous]
     [HttpGet("{activityId}/media")]
     public async Task<IActionResult> ListMedia(string activityId)
     {
@@ -200,12 +205,14 @@ public class ActivityController(
     /// </summary>
     /// <remarks>
     /// A read, so it is gated by visibility and nothing else — no ownership and no admin override
-    /// beyond the one <see cref="IActivityAuthorizationService"/> already applies. The URL is a bearer
-    /// token, so the expiry it comes with is the control, and the window is clamped by the service.
+    /// beyond the one <see cref="IActivityAuthorizationService"/> already applies, and no token,
+    /// since a <c>Public</c> entry's media is readable anonymously. The URL is a bearer token, so the
+    /// expiry it comes with is the control, and the window is clamped by the service.
     /// </remarks>
     /// <param name="mediaId">The item's id.</param>
     /// <returns>The URL and the instant it stops working; not-found for an id that names nothing or
     /// one this caller may not read.</returns>
+    [AllowAnonymous]
     [HttpGet("/api/media/{mediaId}/url")]
     public async Task<IActionResult> GetMediaUrl(string mediaId)
     {
