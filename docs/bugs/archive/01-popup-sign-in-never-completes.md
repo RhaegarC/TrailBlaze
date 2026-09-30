@@ -1,6 +1,6 @@
 # 01 — Popup sign-in never completes
 
-Status: **Fixed** — on `loginIssue`, awaiting its pull request · [00-bug-log.md](00-bug-log.md)
+Status: **Archived** — merged to `develop` in PR #34 · [00-bug-log.md](../00-bug-log.md)
 Reported: 2026-09-28 · Severity: **High** — a major function is broken and nothing is exposed
 Component: `src/web` — `src/auth/store.ts`, `src/config.ts`
 
@@ -35,7 +35,7 @@ standing on `http://localhost:8443/#code=…` and never closes. The app stays a 
 ## Verification
 
 **There is no regression test, because `src/web` has no test tier.** The only hand-written frontend
-work is API integration, verified end-to-end ([testing-and-tdd.md](../testing-and-tdd.md)), and
+work is API integration, verified end-to-end ([testing-and-tdd.md](../../testing-and-tdd.md)), and
 `src/web/package.json` carries no runner — no vitest, no jsdom. Adding one is a toolchain decision,
 not part of this fix, so the change is recorded as `verification-only`:
 
