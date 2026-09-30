@@ -1,6 +1,6 @@
 # 03 — A signed-in caller's own `Shared` and `Private` activities are invisible
 
-Status: **Open** — fix in `fix/03-signed-in-list-drops-the-token` · [00-bug-log.md](00-bug-log.md)
+Status: **Open** — fix in PR #46, `fix/03-signed-in-list-drops-the-token` · [00-bug-log.md](00-bug-log.md)
 Reported: 2026-09-30 · Severity: **High** — a whole class of entries is unreachable, and nothing is
 exposed
 Component: `src/web` — `src/api/endpoints.ts`, `src/api/client.ts`, `src/data/hooks.ts`
@@ -88,8 +88,10 @@ contradicts.
 - `python scripts/web-seam.py` — unchanged from `develop`: the two pre-existing failures in
   `src/web/.gitignore:25` and `src/web/.figma/make/site.json:2`, and nothing new. Both edited files
   are hand-written rather than export-compared, so no seam marker applies.
-- Manual, signed in — **not yet run.** The list now carrying `Shared` entries and the caller's own
-  `Private` ones is the observable claim, and only a browser against a tenant can show it.
+- Manual, signed in — **passed.** Run by the reporter on 2026-09-30: the list carries `Shared`
+  entries and the caller's own `Private` ones, which is the observable claim this bug is about. It is
+  the only check here that could have shown the fix works, and it is why the change is not resting on
+  the gates alone.
 
 The server half is already asserted, and these tests were passing throughout:
 `ActivityServiceTests.An_anonymous_page_reaches_public_entries_only` and
@@ -100,9 +102,9 @@ client sends — the seam between them is where this bug lived, and it is the se
 
 ## Not covered here
 
-- **Feature 11's walkthrough is what would have caught it**, and that pass has not been run. This fix
-  makes its *"signing in widens the list"* criterion reachable in the app for the first time; it does
-  not observe it.
+- **Feature 11's walkthrough is what would have caught it**, and it is still not run. What ran above
+  is the one targeted check this report needed, not that pass. This fix makes the walkthrough's
+  *"signing in widens the list"* criterion reachable in the app for the first time.
 - **The API cannot tell a deliberate anonymous request from a forgotten credential**, and this bug is
   not a reason to make it try. Both reads are public by design; the caller's token widens what a
   signed-in reader sees, and requiring one would take away the anonymous list.
