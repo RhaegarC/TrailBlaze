@@ -41,14 +41,17 @@ public static class Constant
         public static readonly string ImageTypeNotAllowed =
             $"The file must be one of: {string.Join(", ", Upload.ImageContentTypes)}.";
 
-        public static readonly string ImageTooLarge =
-            $"The image must be {Upload.ImageSizeCapBytes / (1024 * 1024)} MB or smaller.";
+        // Methods rather than constants, because the cap they name is configuration: a fixed string
+        // would report the default to an operator who had raised it, telling a caller their file
+        // exceeded a size it was measured against nowhere.
+        public static string ImageTooLarge(long capBytes) =>
+            $"The image must be {capBytes / (1024 * 1024)} MB or smaller.";
 
         public static readonly string VideoTypeNotAllowed =
             $"The file must be one of: {string.Join(", ", Upload.VideoContentTypes)}.";
 
-        public static readonly string VideoTooLarge =
-            $"The video must be {Upload.VideoSizeCapBytes / (1024 * 1024)} MB or smaller.";
+        public static string VideoTooLarge(long capBytes) =>
+            $"The video must be {capBytes / (1024 * 1024)} MB or smaller.";
 
         // Activity validation. Rejections, never rewrites: this is text the caller typed, so
         // shortening it would be storing something they did not write.
@@ -94,6 +97,14 @@ public static class Constant
         /// <summary>How many minutes a media read URL is given. Optional, and held inside
         /// <see cref="SignedUrlLifetime.Maximum"/> whatever it says.</summary>
         public const string MediaUrlTtlMinutes = "MediaUrlTtlMinutes";
+
+        /// <summary>The largest image an upload may carry, in bytes. Optional, and held inside
+        /// <see cref="Upload.MaxImageSizeCapBytes"/> whatever it says.</summary>
+        public const string ImageUploadCapBytes = "ImageUploadCapBytes";
+
+        /// <summary>The largest video an upload may carry, in bytes. Optional, and held inside
+        /// <see cref="Upload.MaxVideoSizeCapBytes"/> whatever it says.</summary>
+        public const string VideoUploadCapBytes = "VideoUploadCapBytes";
     }
 
     /// <summary>
@@ -356,8 +367,13 @@ public static class Constant
     /// </para>
     /// <para>
     /// The caps are Decision #24's. Read as mebibytes rather than decimal megabytes, because
-    /// 10 * 1024 * 1024 is the number a browser, a fetch client and an upload control all
-    /// agree on; 10,000,000 would make "exactly at the cap" a different file for each of them.
+    /// 1024 * 1024 is the number a browser, a fetch client and an upload control all agree on;
+    /// 10,000,000 would make "exactly at the cap" a different file for each of them.
+    /// </para>
+    /// <para>
+    /// The defaults and the ceilings live here while the configured value does not, because a route
+    /// attribute takes a compile-time constant and a setting is not one: <see cref="UploadSizeCaps"/>
+    /// is where configuration is clamped to the ceiling declared below.
     /// </para>
     /// </remarks>
     public static class Upload
@@ -374,25 +390,45 @@ public static class Constant
         public static readonly string[] MediaContentTypes =
             [.. ImageContentTypes, .. VideoContentTypes];
 
-        /// <summary>The image cap: 10 MB. A file exactly at the cap is accepted.</summary>
-        public const long ImageSizeCapBytes = 10L * 1024 * 1024;
+        /// <summary>The image cap applied when none is configured: 25 MB. A file exactly at the cap
+        /// is accepted.</summary>
+        public const long DefaultImageSizeCapBytes = 25L * 1024 * 1024;
 
-        /// <summary>The video cap: 200 MB (Decision #24).</summary>
-        public const long VideoSizeCapBytes = 200L * 1024 * 1024;
+        /// <summary>The video cap applied when none is configured: 200 MB (Decision #24).</summary>
+        public const long DefaultVideoSizeCapBytes = 200L * 1024 * 1024;
+
+        /// <summary>The largest image cap any setting may reach, and the value the image routes
+        /// carry as their request-size limit.</summary>
+        public const long MaxImageSizeCapBytes = 100L * 1024 * 1024;
+
+        /// <summary>The largest video cap any setting may reach, and the value the media route
+        /// carries as its request-size limit.</summary>
+        public const long MaxVideoSizeCapBytes = 512L * 1024 * 1024;
 
         /// <summary>
-        /// The largest request body the media upload route accepts: the video cap plus room for the
-        /// multipart envelope around it.
+        /// The largest request body the media upload route accepts: the video ceiling plus room for
+        /// the multipart envelope around it.
         /// </summary>
         /// <remarks>
-        /// A route limit rather than a validation rule. Kestrel refuses a body over 30 MB and the
-        /// form parser refuses a multipart body over 128 MB, both **before** the service sees
-        /// anything — so without this the documented 400 for an oversize file would arrive as a bare
-        /// 413 for every video over 128 MB, which is most of the ones the cap admits. The envelope
-        /// allowance is what keeps a file exactly at the cap from being refused by its own boundary
-        /// and headers.
+        /// A route limit rather than a validation rule, and derived from the ceiling rather than the
+        /// default: Kestrel refuses a body over 30 MB and the form parser refuses a multipart body
+        /// over 128 MB, both before the service sees anything, so a limit set to the default would
+        /// answer an oversize video with a bare 413 rather than the documented 400. The envelope
+        /// allowance is what keeps a file exactly at the ceiling from being refused by its own
+        /// boundary and headers.
         /// </remarks>
-        public const long MaxMediaRequestBytes = VideoSizeCapBytes + MultipartEnvelopeBytes;
+        public const long MaxMediaRequestBytes = MaxVideoSizeCapBytes + MultipartEnvelopeBytes;
+
+        /// <summary>
+        /// The largest request body the cover and avatar routes accept: the image ceiling plus room
+        /// for the multipart envelope around it.
+        /// </summary>
+        /// <remarks>
+        /// Both routes carried no limit while the image cap was 10 MB, which sat below Kestrel's
+        /// 30 MB default and the form parser's 128 MB one; the ceiling is now above both, so without
+        /// this an acceptable cover would be answered with a bare 413.
+        /// </remarks>
+        public const long MaxImageRequestBytes = MaxImageSizeCapBytes + MultipartEnvelopeBytes;
 
         /// <summary>Room for boundaries and part headers around a file at the cap.</summary>
         private const long MultipartEnvelopeBytes = 64L * 1024;

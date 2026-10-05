@@ -85,7 +85,7 @@ public sealed class MediaServiceTests
             ActivityId,
             new MemoryStream(Bytes),
             "image/png",
-            Constant.Upload.ImageSizeCapBytes,
+            Constant.Upload.DefaultImageSizeCapBytes,
             "ridge.png");
 
         Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
@@ -100,11 +100,13 @@ public sealed class MediaServiceTests
             ActivityId,
             new MemoryStream(Bytes),
             "image/png",
-            Constant.Upload.ImageSizeCapBytes + 1,
+            Constant.Upload.DefaultImageSizeCapBytes + 1,
             "ridge.png");
 
         Assert.Equal(MediaOutcomeKind.Rejected, outcome.Kind);
-        Assert.Equal(Constant.Message.ImageTooLarge, outcome.Errors!["file"].Single());
+        Assert.Equal(
+            Constant.Message.ImageTooLarge(Constant.Upload.DefaultImageSizeCapBytes),
+            outcome.Errors!["file"].Single());
         Assert.Empty(harness.Storage.Uploads);
     }
 
@@ -117,7 +119,7 @@ public sealed class MediaServiceTests
             ActivityId,
             new MemoryStream(Bytes),
             "video/mp4",
-            Constant.Upload.VideoSizeCapBytes,
+            Constant.Upload.DefaultVideoSizeCapBytes,
             "ridge.mp4");
 
         Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
@@ -132,23 +134,25 @@ public sealed class MediaServiceTests
             ActivityId,
             new MemoryStream(Bytes),
             "video/mp4",
-            Constant.Upload.VideoSizeCapBytes + 1,
+            Constant.Upload.DefaultVideoSizeCapBytes + 1,
             "ridge.mp4");
 
         Assert.Equal(MediaOutcomeKind.Rejected, outcome.Kind);
-        Assert.Equal(Constant.Message.VideoTooLarge, outcome.Errors!["file"].Single());
+        Assert.Equal(
+            Constant.Message.VideoTooLarge(Constant.Upload.DefaultVideoSizeCapBytes),
+            outcome.Errors!["file"].Single());
     }
 
     /// <summary>
     /// The two directions of one claim: the cap follows the kind, so a single shared cap would fail
-    /// both. A video at 11 MB is over the image cap and admissible; an image at 11 MB is under the
-    /// video cap and refused.
+    /// both. A video just over the image cap is over that cap and admissible; an image of the same
+    /// size is under the video cap and refused.
     /// </summary>
     [Fact]
     public async Task Each_kind_is_held_to_its_own_cap_and_not_the_other_one()
     {
         var harness = new Harness();
-        long overTheImageCap = Constant.Upload.ImageSizeCapBytes + 1;
+        long overTheImageCap = Constant.Upload.DefaultImageSizeCapBytes + 1;
 
         MediaOutcome video = await harness.Service.UploadAsync(
             ActivityId, new MemoryStream(Bytes), "video/mp4", overTheImageCap, "ridge.mp4");
@@ -158,6 +162,29 @@ public sealed class MediaServiceTests
 
         Assert.Equal(MediaOutcomeKind.Uploaded, video.Kind);
         Assert.Equal(MediaOutcomeKind.Rejected, image.Kind);
+    }
+
+    /// <summary>A cap from configuration is the one enforced, and the one the refusal names.</summary>
+    [Fact]
+    public async Task A_configured_cap_governs_the_upload_and_is_the_one_the_refusal_names()
+    {
+        const long FiveMegabytes = 5L * 1024 * 1024;
+        var harness = new Harness(caps: new UploadSizeCaps(FiveMegabytes, 0));
+
+        MediaOutcome atTheCap = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", FiveMegabytes, "ridge.png");
+
+        MediaOutcome overTheCap = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", FiveMegabytes + 1, "ridge.png");
+
+        // The same bytes as a video, to show the configured image cap left the video cap alone.
+        MediaOutcome video = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "video/mp4", FiveMegabytes + 1, "ridge.mp4");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, atTheCap.Kind);
+        Assert.Equal(MediaOutcomeKind.Rejected, overTheCap.Kind);
+        Assert.Equal("The image must be 5 MB or smaller.", overTheCap.Errors!["file"].Single());
+        Assert.Equal(MediaOutcomeKind.Uploaded, video.Kind);
     }
 
     // ---- What is stored -------------------------------------------------------------------
@@ -863,11 +890,21 @@ public sealed class MediaServiceTests
     {
         private readonly string? _caller;
         private readonly SignedUrlLifetime _lifetime;
+        private readonly UploadSizeCaps _caps;
 
-        public Harness(string? caller = Contributor, bool isAdmin = false, TimeSpan? mediaUrlTtl = null)
+        public Harness(
+            string? caller = Contributor,
+            bool isAdmin = false,
+            TimeSpan? mediaUrlTtl = null,
+            UploadSizeCaps? caps = null)
         {
             _caller = caller;
             _lifetime = new SignedUrlLifetime(mediaUrlTtl ?? SignedUrlLifetime.Default);
+
+            // Zero is "nothing configured" rather than a cap of no bytes: the type reads it as the
+            // absence of a setting and applies the default, which is the same sentinel the lifetime
+            // above carries.
+            _caps = caps ?? new UploadSizeCaps(0, 0);
 
             Repository = new RecordingRepository
             {
@@ -900,7 +937,7 @@ public sealed class MediaServiceTests
                 // The real rule, not a stand-in: the visibility and ownership decisions are the thing
                 // under test in the gate tables, and a double here would be asserting the double.
                 new ActivityAuthorizationService(Repository, new StubUserContext(_caller)),
-                new UploadValidationService(),
+                new UploadValidationService(_caps),
                 _lifetime,
                 logger ?? NullLogger<MediaService>.Instance);
     }

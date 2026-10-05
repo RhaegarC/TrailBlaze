@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TrailBlaze.Interface.Infrastructure;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
+using TrailBlaze.Model;
 
 /// <summary>
 /// That everything the composition root registers can actually be built.
@@ -51,5 +52,28 @@ public sealed class CompositionRootTests
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUploadValidationService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUserContextService>());
+    }
+
+    /// <summary>A cap in configuration is the one applied, and an absent one falls to the default.</summary>
+    [Fact]
+    public void The_upload_caps_come_from_configuration_and_fall_back_to_the_defaults()
+    {
+        using var configured = new TrailBlazeApiFactory(new()
+        {
+            [Constant.ConfigKey.ImageUploadCapBytes] = "5242880",
+        });
+        configured.CreateClient();
+
+        UploadSizeCaps caps = configured.Services.GetRequiredService<UploadSizeCaps>();
+
+        Assert.Equal(5L * 1024 * 1024, caps.AppliedImageBytes);
+        Assert.Equal(Constant.Upload.DefaultVideoSizeCapBytes, caps.AppliedVideoBytes);
+
+        using var bare = new TrailBlazeApiFactory();
+        bare.CreateClient();
+
+        Assert.Equal(
+            Constant.Upload.DefaultImageSizeCapBytes,
+            bare.Services.GetRequiredService<UploadSizeCaps>().AppliedImageBytes);
     }
 }

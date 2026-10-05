@@ -21,7 +21,14 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
     : IClassFixture<TrailBlazeDatabaseFixture>
 {
     /// <summary>A size no <c>int</c> column could hold, so a narrowed column fails here.</summary>
-    private const long VideoSize = Constant.Upload.VideoSizeCapBytes;
+    /// <remarks>
+    /// Above <c>int.MaxValue</c> on purpose, which the value it used to borrow — the video cap — was
+    /// not: that number fits an <c>int</c> comfortably, so the assertion would have held against a
+    /// column narrowed to one and the comment described a check that was not being made. The width
+    /// of the column is what this test is about, so the size is stated here rather than borrowed from
+    /// an upload rule that has no bearing on it.
+    /// </remarks>
+    private const long VideoSize = 3_000_000_000L;
 
     /// <summary>The uploader every cap test counts, and the one the seeded rows belong to.</summary>
     private const string Ada = "oid-ada";
