@@ -1,7 +1,7 @@
 # 13 — Upload size limits become settings
 
-Status: **In progress** · [00-mission-2-sprint.md](00-mission-2-sprint.md)
-Source: [PRD](../PRD.md) — Decision #24 (amended) + "Media storage & delivery" + "API surface"
+Status: **Archived** — merged to `develop` in PR #50 · [00-mission-2-sprint.md](../00-mission-2-sprint.md)
+Source: [PRD](../../PRD.md) — Decision #24 (amended) + "Media storage & delivery" + "API surface"
 
 ## Summary
 
@@ -28,7 +28,7 @@ application still refuses an upload that is plainly out of bounds.
 
 ## Dependencies
 
-- [06-media-upload](archive/06-media-upload.md) — the upload slice and the caps this feature
+- [06-media-upload](06-media-upload.md) — the upload slice and the caps this feature
   replaces
 
 ## The caps
@@ -119,7 +119,7 @@ Until that is run the claim is verified by reading the attributes, not by execut
 - **A cap is not a memory bound, and the file says so rather than implying otherwise.** The
   request-size attribute is a *transport* ceiling, and the form parser spools a body over its buffer
   limit to a temp file, so a 512 MB video is disk rather than RAM. The image path is different:
-  [14](14-image-thumbnails.md) decodes the bytes in-process, so the image cap is also a per-request
+  [14](../14-image-thumbnails.md) decodes the bytes in-process, so the image cap is also a per-request
   memory budget — and a budget is per request, so concurrent uploads multiply it.
 - **The avatar route buffers its body, and this feature makes that buffer bigger.** It is the one
   upload path that holds the bytes in memory before validation rather than streaming them, and its
