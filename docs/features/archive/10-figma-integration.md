@@ -1,6 +1,6 @@
 # 10 — Figma Integration
 
-Status: **Archived** — merged to `develop` in PR #31 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Status: **Archived** — merged to `develop` in PR #31 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../../PRD.md) — Decisions #17/#22/#26–#30 + "Frontend build" + "System overview".
 
 ## Summary
@@ -39,7 +39,7 @@ anyone's, through the interface the designer authored rather than a hand-built o
 
 **Blocked until the Figma Make export exists.** Everything this feature depends on can be
 finished and tested before the export arrives; the export is the gate (see
-[00-mission-1-sprint.md](../00-mission-1-sprint.md) open items).
+[00-mission-1-sprint.md](00-mission-1-sprint.md) open items).
 
 ## Acceptance criteria
 
@@ -119,7 +119,7 @@ API integration, which is verified manually end-to-end. Nothing here adds to `do
 
 What exists instead:
 
-- The manual walkthrough in [11-e2e-verification](../11-e2e-verification.md) is the verification
+- The manual walkthrough in [11-e2e-verification](11-e2e-verification.md) is the verification
   instrument for this feature; the criteria above are its per-screen detail.
 - The backend it calls is fully covered by the existing tiers — no correctness claim about
   permissions, SAS expiry, or upload validation is being made here that 05/07/08/09 do not
@@ -201,5 +201,5 @@ unlisted origin gets no allow header.
 
 **The browser walkthrough has not been run.** No browser is available on the machine this was
 implemented on, so no criterion above is marked met on the strength of having seen it work. That
-pass is [11-e2e-verification](../11-e2e-verification.md)'s, and it is the only thing that closes this
+pass is [11-e2e-verification](11-e2e-verification.md)'s, and it is the only thing that closes this
 feature.

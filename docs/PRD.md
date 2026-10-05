@@ -94,18 +94,22 @@ some work the ladder attributes to features 01–02 already exists:
 | Application-assigned GUID keys, soft delete, and the append-only audit trail | `EntityBase`, `AuditSaveChangesInterceptor`, `AuditLog` |
 
 **Where the code stands against it.** The rows state what the product offers today, not how
-far along its feature is — a feature's own progress lives in the
-[sprint file](features/00-mission-1-sprint.md#feature-breakdown), which is its only home.
+far along its feature is — a feature's own progress lives in a
+[sprint file](features/00-mission-2-sprint.md#feature-breakdown), which is its only home.
+Mission 2's is the live one; [Mission 1's](features/archive/00-mission-1-sprint.md) closed on
+2026-10-05 and is kept as the record of that mission.
 
 | Area | Target (this document) | Code today | Closes in |
 |---|---|---|---|
 | Database engine | **Azure SQL Server** | SQL Server through EF Core (`Microsoft.EntityFrameworkCore.SqlServer`); migrations and snapshot generated against it | feature 01 |
 | API hosting | ACA from a container image | `src/api/Dockerfile` builds the image; `src/api/docker-compose.yml` runs it locally against container engines, which neither target consumes | feature 01 |
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
-| Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers and the filters are in [testing-and-tdd.md](testing-and-tdd.md); the counts are in [00-mission-1-sprint.md](features/00-mission-1-sprint.md) | feature 01 |
+| Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers and the filters are in [testing-and-tdd.md](testing-and-tdd.md); the counts are in [00-mission-2-sprint.md](features/00-mission-2-sprint.md), which is their only home | feature 01 |
 | Blob abstraction | `IStorageRepository`, three containers, no fake | `IStorageRepository` in `TrailBlaze.Interface`, one Azure adapter in `TrailBlaze.Repository`, exercised by the storage tier against Azurite | feature 01 |
+| Storage credential | the API signs read URLs as its own identity, and holds no account key (Decision #33) | **not built** — `BlobConnection` is a required shared-key connection string, and `CreateReadUrlAsync` signs locally from the account key it carries. The adapter's own remarks record this as a constraint of the implementation rather than an oversight | feature 16 |
 | Activity table | the data model below | `activities` exists, migrated by `AddActivities`, with its check-constrained `Type`. The CRUD routes and the anonymous paged list are implemented, the list applying the read half of the visibility rule; **who may mutate an entry is not yet enforced**, and an admin still pages what a user pages because no role is read | feature 04 |
 | Media table | the data model below | `Media` exists, migrated by `AddMedia`, with its check-constrained `Kind` and an index on `ActivityId`. Upload, metadata listing and item deletion are implemented, gated on the read rule; **the administrator is not enforced** — nothing reads a role, so an admin contributes and deletes as an ordinary user until feature 09 | feature 06 |
+| Image derivative & upload caps | an uploaded image is stored with a smaller derivative, and the derivative is what a browser receives (Decision #31); the size caps are configuration with raised defaults (Decision #24) | **not built** — every image is served at the size it was uploaded, and both caps are compile-time constants an operator cannot change without a rebuild | features 13, 14 |
 | Profile columns | `users` carries `Description`, `AvatarBlobPath`, `PreferredTheme`, `PreferredLanguage`, `Email` | all five exist, bounded to the lengths in the data model | feature 02 |
 | Profile API | `PUT /user/me`, `POST`/`DELETE /user/me/avatar` | all four routes exist and return DTOs, and are **untested** ([02-entra-auth.md](features/archive/02-entra-auth.md#testing-status)) | feature 02 |
 | Administrator | one admin, set by hand; role read from the row, never from a claim | `users.Role` is not null, defaults to `User`, and is check-constrained to the closed set. Nothing in the application seeds, promotes or writes it — [03-admin-seeding.md](features/archive/03-admin-seeding.md#decisions) records why | feature 03 |
@@ -148,7 +152,7 @@ Every requirement decision from the grilling session, in order:
 | 4 | Media storage | **Azure Blob Storage** (not local disk, not the database) |
 | 5 | Blob endpoint per environment | **Real Azure Storage account for the application in every environment**, dev included. **Scoped 2026-09-18:** the *test* tier now runs against containers from `docker-compose.test.yml` — Azurite for storage, SQL Edge for the database — so "dev and tests included" no longer holds for tests. Decision #6 is why |
 | 6 | Tests vs. the live Azure dependency | **No fake for storage or for the database.** The tier runs the real implementations against those containers by default, and skips when they are not running. **Reversed 2026-09-18** (was: an in-memory `IStorageRepository` fake in unit tests plus a credentialed integration tier). The fake implemented the contract it was asserting, so it proved that a dictionary tolerates a key — and a fake shadows the real implementation's invariants while appearing to test them |
-| 7 | How media reaches the browser | **Short-lived SAS URLs**, minted only after the caller has been authorized to read the activity, and for **any caller who can** — authenticated or anonymous. The container stays private and is never made public. **Widened 2026-09-30** (was: "issued by an authenticated endpoint", which is now the `Shared`/`Private` case rather than every case) |
+| 7 | How media reaches the browser | **Short-lived SAS URLs**, minted only after the caller has been authorized to read the activity, and for **any caller who can** — authenticated or anonymous. The container stays private and is never made public. **Widened 2026-09-30** (was: "issued by an authenticated endpoint", which is now the `Shared`/`Private` case rather than every case). **Extended 2026-10-05**: the media listing now carries each item's URL and expiry itself, so a client asks once rather than once per item, and media bytes carry a bounded `private` cache directive (Decision #32). The expiry is still the control, and the container is still private. **Restated 2026-10-05**: the signature moves from the account key to the application's own identity (Decision #33), so what mints a URL changes while what a URL *is* does not |
 | 8 | Authentication | **Entra ID** |
 | 9 | Roles | **User + Admin**; admin can edit/delete any activity |
 | 10 | Which date drives the sort | **`CreatedOn` descending**, tie-broken by id so the order is total and no row can straddle two pages. **Changed 2026-09-19** at feature 04's review (was: the user-chosen activity date, with `CreatedOn` as the tiebreaker). The user-chosen activity date is still captured and still displayed (Decisions #11, #25) — it simply no longer drives the order, so the feed reads as a journal rather than as a calendar |
@@ -165,13 +169,16 @@ Every requirement decision from the grilling session, in order:
 | 21 | Admin surface | **Elevated rights only** — no dedicated admin screens |
 | 22 | Backend vs. frontend sequencing | **API-first**; Figma integration is its own late feature |
 | 23 | Public list behaviour | **Paginated, newest entry first, no search**. `page` is a zero-based index defaulting to 0; `pageSize` defaults to 10 and is clamped to 100 rather than refused |
-| 24 | Upload limits | **50 media per contributor per activity**, images ≤ 10 MB, videos ≤ 200 MB. *The count was raised from 20 and re-scoped from per-activity to per-contributor-per-activity on 2026-09-20, at feature 06's review: media is collaborative (#27), so a single shared budget would let one person fill an activity everyone contributes to* |
+| 24 | Upload limits | **50 media per contributor per activity**, and the size caps are **configuration**: `ImageUploadCapBytes` and `VideoUploadCapBytes`, defaulting to 25 MB and 200 MB and clamped to absolute ceilings of 100 MB and 512 MB. The ceiling is not decoration — it is what still refuses a runaway upload, and it is the only value that can live in a route attribute, because the request-size limits take compile-time constants. *The count was raised from 20 and re-scoped from per-activity to per-contributor-per-activity on 2026-09-20, at feature 06's review: media is collaborative (#27), so a single shared budget would let one person fill an activity everyone contributes to. (2026-10-05 — the sizes read "images ≤ 10 MB, videos ≤ 200 MB", fixed constants an operator could not change without a rebuild; the video default is unchanged, and the count is untouched)* |
 | 25 | Date representation | **Calendar date only** — no time, no timezone, no UTC-midnight conversion |
 | 26 | Per-activity visibility | **`Type` ∈ {`Public`, `Shared`, `Private`}**, required, defaulting to `Public`. `Public` = anonymous may read; `Shared` = signed-in users only; `Private` = the owner only (and admins). Visibility gates **reading** — the entry's media included, by the same rule: a `Public` entry's media is readable anonymously, a `Shared` or `Private` one's is not *(2026-09-30 — this clause read "it never gates media, which needs sign-in at every level (#2)" until #2 was reversed)*. Added from the Figma export, 2026-09-15 — this supersedes the earlier flat "everything is public-read" model and reverses the earlier rejection of private entries in the shared feed, which was rejected on the assumption that private meant *separate journals* |
 | 27 | Media is collaborative | **Any signed-in user who can see an activity may add media to it**, not only its owner. Each `media` row records its **uploader**, and the detail view groups items by uploader. Deletion is allowed to the **uploader or an admin**, and to nobody else: owning the activity an item sits on does not carry the right to remove bytes someone else put there *(narrowed 2026-09-24 — this row read "uploader, the activity's owner, or an admin" until feature 09's review; the activity's owner was removed from the list)*. The cap (#24) bounds what one contributor adds to one activity, not the activity's total — the same collaboration this decision establishes is why it is counted that way |
 | 28 | User profile & preferences | **Display name, bio, avatar, theme and language are stored server-side per user** and edited on a profile screen. Avatar lives in the **public** `avatars` container. Theme ∈ {`Dark`, `Light`}, language ∈ {`en`, `zh`}; both are presentation preferences and carry no authorization meaning |
 | 29 | Cover container follows visibility | A cover is uploaded **directly into the container its activity's visibility requires**: `covers` (public) for a Public activity, `media` (private, SAS-served) for Shared and Private ones. Changing an activity's `Type` across that line **moves the cover** — see "Media storage & delivery". #14's rule that a cover is its own upload and is never derived from private media stands unchanged |
 | 30 | Anonymous payload scope | An anonymous response may carry the activity's **media count** and its **creator's display name**, and — **changed 2026-09-30** — the metadata of a `Public` activity's media, including a SAS URL minted for it. It may **not** carry a user id, and no response carries a blob path. *(This row read "it may not carry a user id, a blob path, a SAS URL, or any per-item media field" until the media surface was opened to a visitor; the activity list and detail payloads still obey that older, stricter shape unchanged, and the media surface is the one named exception. The user-id half was never relaxed and is not: with the `users` primary key being the Entra object id, an anonymous payload names people by display name and never by id.)* Relaxes the stricter rule feature 05 originally stated, which forbade the count as media-derived |
+| 31 | How an uploaded image is delivered | **Every image is stored twice** — the original, kept and retrievable, plus a smaller **derivative** produced at upload from a configured quality and maximum dimension — and the **derivative is what a browser receives**. The derivative lives in the same private container as its original and is gated by the same SAS rule, so it adds no second authorization decision. Video is untouched: stored as-is with nothing derived from it, which is Decision #15 exactly as it stands — that row is titled *Video handling* and has always been about video, so nothing here amends or reverses it. A derivative that cannot be produced leaves the original to be served, so a decode failure never fails an upload |
+| 32 | Browser caching of media | Media bytes are served with a **bounded `private` cache directive**, and the media listing carries each item's read URL and expiry so a client asks once rather than once per item. The **SAS expiry remains the control** (Decision #7): the window is far shorter than the shortest SAS lifetime, the directive is `private` so no intermediary stores a copy, and it is never `immutable` — covers in particular change container when an activity's visibility crosses the public line (Decision #29). Caching grants no one new access; it lets the same browser re-show bytes it has already fetched |
+| 33 | Storage credential | The API authenticates to Azure Blob Storage **as its own Entra identity** and signs read URLs with a **user delegation key**, so no storage account key sits in the application's configuration. The key is not removed from the account; what changes is what the application *holds*, and a delegated signature is revocable where a shared-key one is not — a leaked URL can be cut off without rotating the credential the whole application depends on. Obtaining a delegation key is a **network call**, so it is fetched once per lifetime and cached rather than fetched per URL, and the cache is per instance rather than distributed **because a delegation key belongs to the account, not to the caller** — the opposite of a response cache, where caller-dependence is exactly what rules one out. **Two things are not assumed here and are settled before any code**: whether the test tier's emulator can mint a delegation key at all (if it cannot, the delegation path is exercised by no tier, and "the same code against a different account" stops being true), and whether the identity holds the permission that action requires |
 
 ## Data model
 
@@ -222,6 +229,7 @@ erDiagram
         string CreatedBy "who added this item, from EntityBase"
         string Kind "Image | Video"
         string BlobPath "always the private container"
+        string ThumbnailPath "nullable, same private container"
         string ContentType
         bigint SizeBytes
         string OriginalFileName
@@ -252,8 +260,9 @@ erDiagram
 | | `CreatedBy` | nvarchar(max) | the caller's `users.Id`, from `EntityBase`'s audit column; **who added this item** — not necessarily the activity's creator |
 | | `Kind` | nvarchar(16) | `Image` \| `Video` |
 | | `BlobPath` | nvarchar(512) | **private** container; served only via SAS. Also holds covers of Shared/Private activities |
+| | `ThumbnailPath` | nvarchar(512) | nullable; the derivative of an `Image`, in the same **private** container (Decision #31). Empty for a video, for a row stored before the derivative existed, and whenever one could not be produced |
 | | `ContentType` | nvarchar(128) | validated allowlist |
-| | `SizeBytes` | bigint | validated ≤ 10 MB image / ≤ 200 MB video |
+| | `SizeBytes` | bigint | validated against the caps in Decision #24 — configurable, ceilinged at 100 MB image / 512 MB video |
 | | `OriginalFileName` | nvarchar(260) | display only |
 
 Five consequences follow from the conventions above, and features below depend on them:
@@ -358,7 +367,9 @@ answerable from the container name alone:
   Private activities**. Never public. The browser obtains bytes only through a short-lived
   **SAS URL**, minted only for a caller the visibility rule has already admitted *(2026-09-30 —
   this read "minted by an authenticated endpoint"; the endpoint is now reachable without a token,
-  and the container is unchanged)*.
+  and the container is unchanged)*. An uploaded **image** contributes **two** blobs to it — the
+  original and a smaller derivative (Decision #31) — and both are gated identically, so the
+  derivative does not create a second security story and is not a second container to reason about.
 
 **The cover follows its activity's visibility** (Decision #29). A cover is still **its own
 upload** and is never derived from, picked from, or re-pointed at private media — that rule
@@ -397,7 +408,7 @@ everyone together adds.
 | `PUT` | `/api/activity/{id}` | owner/admin | Update, including `Type` — crossing the public line **moves the cover** |
 | `DELETE` | `/api/activity/{id}` | owner/admin | Soft delete — the entry leaves the read path and its media rows and blobs are left untouched, so a restore brings the media back with it |
 | `POST` | `/api/activity/{id}/cover` | owner/admin | Upload/replace cover → `covers` (public) if the activity is `Public`, otherwise `media` (private, SAS) |
-| `GET` | `/api/activity/{id}/media` | anyone who can read the activity — anonymous included | Media metadata, each item carrying its uploader by **display name**. An anonymous listing carries **no** uploader user id (Decision #30); **404** for an entry the caller may not read |
+| `GET` | `/api/activity/{id}/media` | anyone who can read the activity — anonymous included | Media metadata, each item carrying its uploader by **display name** and a short-lived read URL with the instant it lapses (Decision #32), so a client needs no second request per item. An anonymous listing carries **no** uploader user id and no blob path (Decision #30); **404** for an entry the caller may not read |
 | `POST` | `/api/activity/{id}/media` | any signed-in caller who can read the activity | Upload image/video → private container (collaborative, Decision #27) |
 | `GET` | `/api/media/{id}/url` | anyone who can read the activity — anonymous included | Mint a short-lived SAS URL after the visibility check, so a refused caller reaches no blob; **404** rather than 401 |
 | `DELETE` | `/api/media/{id}` | uploader / admin | Delete media (row + blob) |
@@ -418,6 +429,12 @@ list endpoint a **second SAS producer**, alongside `GET /api/media/{id}/url`, wh
 widening recorded in Decision #29's consequences: it means the list mints up to one SAS per
 non-`Public` row per page. Both producers go through the same repository method, so the TTL cap and
 the read-only scope stay single-sourced (feature 07).
+
+*(2026-10-05 — there is a **third** producer: the media listing itself mints one URL per item
+(Decision #32), which is what removes the client's per-item request. It goes through that same
+repository method, so the sentence above holds unchanged — the cap and the scope are still
+single-sourced. The three differ only in how many URLs they mint at once, and the media listing
+mints them from one expiry for the whole page so that a repeated listing yields identical strings.)*
 
 The `/user/...` routes are stated here in lowercase for readability; the implemented controller
 uses the ASP.NET `[controller]` token, which yields `/User/me`. That casing divergence is a known
@@ -454,7 +471,10 @@ writer touches the schema. Until those workflows exist, applying a migration is 
 
 - **Search and filtering** on the list (Decision #23 — pagination only for v1)
 - **Video transcoding and poster thumbnails** (Decision #15) — be aware that an iPhone's HEVC
-  `.mov` will not play in Chrome or Firefox; it is stored faithfully and simply won't render
+  `.mov` will not play in Chrome or Firefox; it is stored faithfully and simply won't render.
+  *(2026-10-05 — this line is and was about **video**; nothing is derived from a video, and a poster
+  frame remains out of scope. Images are a different case: an uploaded image **is** stored with a
+  smaller derivative since Decision #31, so "no thumbnails" should not be read as covering them.)*
 - **Per-media visibility** — visibility is set **per activity** (Decision #26), never per item, so
   there is no "make this one photo public" flag (Decision #14). Items inherit the activity's
   visibility; the *class*-level split now reads: public bytes are covers of Public activities and

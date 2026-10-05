@@ -640,7 +640,7 @@ back to the emulator and needs no secret.
 **How to write a test in either tier, how the containers are isolated, and what a run prints are all
 in [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md), which is their only home. No count
 belongs here**: the counts are in
-[00-mission-1-sprint.md](../../docs/features/00-mission-1-sprint.md), and nowhere else. A number
+[00-mission-2-sprint.md](../../docs/features/00-mission-2-sprint.md), and nowhere else. A number
 restated in four documents goes stale in four, and it did, repeatedly. This section keeps the claim,
 which is what a reviewer needs; the sprint file keeps the measurement, which is what has to be
 re-run.

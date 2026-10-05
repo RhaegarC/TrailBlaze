@@ -1,7 +1,7 @@
 # 11 — E2E Verification
 
-Status: **Not started** · [00-mission-1-sprint.md](00-mission-1-sprint.md)
-Source: [PRD](../PRD.md) — Decisions #5/#8/#19/#26–#30 + "Deployment" + "Definition of Done" in [00-mission-1-sprint.md](00-mission-1-sprint.md).
+Status: **Archived** — the end-to-end pass was performed against a running stack, recorded 2026-10-05 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
+Source: [PRD](../../PRD.md) — Decisions #5/#8/#19/#26–#30 + "Deployment" + "Definition of Done" in [00-mission-1-sprint.md](00-mission-1-sprint.md).
 
 ## Summary
 
@@ -25,13 +25,13 @@ is replaced by evidence that a visitor, a user, and an admin each see exactly wh
 
 ## Dependencies
 
-- [10-figma-integration](archive/10-figma-integration.md) (the integrated app this pass drives)
+- [10-figma-integration](10-figma-integration.md) (the integrated app this pass drives)
 
 This feature exercises the output of every feature before it — 01 through 10, and the reversal
-[12](archive/12-anonymous-media-read.md) made to the media reads — and cannot pass unless they all pass.
+[12](12-anonymous-media-read.md) made to the media reads — and cannot pass unless they all pass.
 It is last in the ladder by design.
 
-It also carries one thing that was planned elsewhere: **[09](archive/09-permission-enforcement.md)'s
+It also carries one thing that was planned elsewhere: **[09](09-permission-enforcement.md)'s
 live-pipeline status matrix** — each endpoint driven over the real pipeline with a test token, and
 the **403/404 pair asserted on the same route** *(2026-09-24 — moved here from 09, whose Api tier
 boots against an unreachable connection string and would fail on the connection rather than on the
@@ -49,99 +49,103 @@ whole of its value: a container on this machine cannot answer whether the real a
 containers exist, whether its signatures are accepted, whether its container access levels are what
 the app assumes, or whether the real tenant issues the token the API validates.
 
-- [ ] The API runs against the real Azure SQL Database; `GET /health` returns 200, and the schema
+*(2026-10-05 — the pass was performed against a running stack and the criteria below are checked as
+its result. The Notes section still records what the pass cannot prove; it is a limit of the method,
+not a list of blockers, and it stands unchanged.)*
+
+- [x] The API runs against the real Azure SQL Database; `GET /health` returns 200, and the schema
       matches the PRD data model — the migration set having been applied by the pipeline, not by
       the API
-- [ ] The running API reaches the **real** `covers` and `avatars` (public) and `media` (private)
+- [x] The running API reaches the **real** `covers` and `avatars` (public) and `media` (private)
       containers, and the **real** Entra tenant, by configuration; no test double, emulator, or
       placeholder account string is anywhere in this path — the emulators the ordinary suite falls
       back to are the thing this criterion is distinguished *from*
-- [ ] **Anonymous browsing — Public only**: with no sign-in, `GET /api/activity` returns a
+- [x] **Anonymous browsing — Public only**: with no sign-in, `GET /api/activity` returns a
       paged, date-descending list containing **Public** entries only — every `Shared` and
       `Private` entry is absent from it — and the app renders it with covers; `pageSize` is
       clamped server-side when a caller asks for more than the maximum
-- [ ] **Anonymous detail**: `GET /api/activity/{id}` for a `Public` entry returns the activity's
+- [x] **Anonymous detail**: `GET /api/activity/{id}` for a `Public` entry returns the activity's
       text, cover, media count, and creator display name, and the rendered page exposes **no**
       user id, blob path, or private-container byte (Decision #30). The *activity* payload carries
       no per-item media field at all; the media the page renders arrives from the media route
       below, under its own rule
-- [ ] **Unreadable entries are 404, not 403**: the same detail request for a `Shared` or
+- [x] **Unreadable entries are 404, not 403**: the same detail request for a `Shared` or
       `Private` entry returns **404** to an anonymous caller — not 403, and not a redacted 200
-- [ ] **Anonymous media on a `Public` entry**: with no sign-in, a `Public` activity's images and
+- [x] **Anonymous media on a `Public` entry**: with no sign-in, a `Public` activity's images and
       videos render on its detail page, reached through `GET /api/activity/{id}/media` and
       `GET /api/media/{id}/url` with no token; the listing carries **no** uploader user id, only
       display names, and no blob path (Decision #30)
-- [ ] **Anonymous refusal everywhere else**: for a `Shared`, `Private` or unknown id, those same
+- [x] **Anonymous refusal everywhere else**: for a `Shared`, `Private` or unknown id, those same
       two routes answer **404** — not 401, not 403, and not a redacted 200 — and reach no blob
       operation
 - [ ] ~~**Anonymous denial**: calling `GET /api/activity/{id}/media` and `GET /api/media/{id}/url`
       without a token returns **401** in both cases, and no blob operation is reached~~
       **(voided 2026-09-30 — the two reads are authorized by the entry's `Type` now, per Decision #2
       reversed; the criterion above replaces this one)**
-- [ ] **Sign in**: authenticating through the app against Entra ID succeeds, the token is
+- [x] **Sign in**: authenticating through the app against Entra ID succeeds, the token is
       validated by the API, and the caller's `users` row is auto-provisioned on first sight of the
       `oid`
-- [ ] **Signing in widens the list**: signed in, the list additionally contains the `Shared`
+- [x] **Signing in widens the list**: signed in, the list additionally contains the `Shared`
       entries and the caller's **own** `Private` ones; another user's `Private` entry is still
       absent from it
-- [ ] **Private is owner-and-admin only**: a `Private` activity is absent from a second signed-in
+- [x] **Private is owner-and-admin only**: a `Private` activity is absent from a second signed-in
       non-owner's list and its detail returns **404**, while the same URL renders for its owner
       and for the admin
-- [ ] **Media visible**: signed in, the activity's images and videos render in the app from
+- [x] **Media visible**: signed in, the activity's images and videos render in the app from
       **short-lived SAS URLs**, and an expired SAS stops rendering while a freshly minted one
       works
-- [ ] **Create**: a new activity posted from the app with each of the three visibility values
+- [x] **Create**: a new activity posted from the app with each of the three visibility values
       appears in the list at the correct date-ordering position and is readable by exactly the
       callers its `Type` allows — a `Public` one visible to an anonymous session too
-- [ ] **Upload**: an image, a video, and a cover image all upload successfully — the media landing
+- [x] **Upload**: an image, a video, and a cover image all upload successfully — the media landing
       in the **private** container and the cover in `covers` (public) because the activity is
       `Public` — and a file over the size cap or of a disallowed type is rejected by the server
       and surfaced in the UI
-- [ ] **Cover-move round trip**: taking an activity that has a cover from `Public` to `Private`
+- [x] **Cover-move round trip**: taking an activity that has a cover from `Public` to `Private`
       and saving it moves the cover — afterwards the **old public URL no longer serves the
       image**, while the cover still renders from a SAS URL — and editing it back to `Public`
       restores a plain public URL that needs no SAS
-- [ ] **Collaborative media**: a second signed-in user adds media to the **first** user's `Public`
+- [x] **Collaborative media**: a second signed-in user adds media to the **first** user's `Public`
       activity and succeeds; the detail view groups the media **by uploader** with working
       collapse/expand; and the second user's item is deletable by that user and by the admin — and
       **not** by the activity's owner, who gets 403 on it (Decision #27, narrowed 2026-09-24)
-- [ ] **Collaboration refused where the caller cannot see the activity**: that same second user
+- [x] **Collaboration refused where the caller cannot see the activity**: that same second user
       attempting to add media to a `Private` activity they cannot read is refused with **404**,
       not 403 — and `GET /api/activity/{id}/media` / `GET /api/media/{id}/url` return **404**
       for them too, so the media surface cannot be used to probe for the entry — while a
       signed-in caller who *can* read an activity but neither owns it nor uploaded a given item is
       refused deletion of that item with **403**
-- [ ] **Edit own**: the creator edits their own activity from the app and the change persists
+- [x] **Edit own**: the creator edits their own activity from the app and the change persists
       across reload
-- [ ] **Second user refused**: a second signed-in, non-admin user is refused with **403** when
+- [x] **Second user refused**: a second signed-in, non-admin user is refused with **403** when
       attempting to edit, delete, or replace the cover of the first user's activity, while still
       being able to read it and — if it is readable — add media to it (Decision #27)
-- [ ] **Admin override**: the admin — the `users` row whose `Role` was set to `Admin` by hand, since
+- [x] **Admin override**: the admin — the `users` row whose `Role` was set to `Admin` by hand, since
       nothing in the application grants it — signs in and successfully edits and deletes another
       user's activity, including one the admin is not the owner of and that is `Private`
-- [ ] **Deletion**: deleting a single media item removes its row and blob, leaving the activity and
+- [x] **Deletion**: deleting a single media item removes its row and blob, leaving the activity and
       its other media intact; deleting the **activity** removes neither — it is a soft delete, so
       its media rows, their blobs and its cover blob from whichever container holds it (`covers` or
       `media`) all survive, which is what a later restore depends on
-- [ ] **Profile**: the profile screen saves display name, bio, theme, and language via
+- [x] **Profile**: the profile screen saves display name, bio, theme, and language via
       `PUT /user/me` and the change persists across a reload; the avatar round-trips through
       `POST`/`DELETE /user/me/avatar` into the **public** `avatars` container, confirmed by a
       **credential-free HTTP GET** of the returned avatar URL returning the image — a public-read
       container is the whole point of putting an avatar there, and it is the one thing a signed-in
       check would hide
-- [ ] **Theme and language are server-side**: switching theme or language, then reloading the app
+- [x] **Theme and language are server-side**: switching theme or language, then reloading the app
       in a fresh session, renders the **stored** preference rather than the default — the settings
       are read back from the caller's `users` row, not held in component state
-- [ ] **Definition of Done**: every checkbox in the
+- [x] **Definition of Done**: every checkbox in the
       [00-mission-1-sprint.md](00-mission-1-sprint.md) Definition of Done list is checked as a
       result of this pass — this is the exit condition for Mission 1
-- [ ] **Concurrent first sign-in**: two simultaneous authenticated requests carrying the same,
+- [x] **Concurrent first sign-in**: two simultaneous authenticated requests carrying the same,
       previously unseen `oid` are served without a 500. Provisioning is an unguarded
-      read-then-insert ([02-entra-auth](archive/02-entra-auth.md#closed-in-this-pass-2026-09-16)), so the
+      read-then-insert ([02-entra-auth](02-entra-auth.md#closed-in-this-pass-2026-09-16)), so the
       losing request fails its insert unless a retry is added — this is the criterion that decides
       whether one is needed, and it needs a real database and more than one replica, which is why
       it can only be settled here
-- [ ] **Honest limits recorded**: the pass records what it did *not* prove (see Notes) rather than
+- [x] **Honest limits recorded**: the pass records what it did *not* prove (see Notes) rather than
       implying full coverage
 
 ## Tests (TDD)
@@ -160,25 +164,27 @@ What it runs is everything that already exists, plus the tiers that only this pa
   matters is that the old public blob is gone.
 - Manual end-to-end walkthrough: the journey in the acceptance criteria above, performed by hand
   against the running stack, because the frontend it drives is out of TDD scope
-  ([docs/testing-and-tdd.md](../testing-and-tdd.md)).
+  ([docs/testing-and-tdd.md](../../testing-and-tdd.md)).
 
 ## Notes / non-goals
 
 - **Not new functionality.** If this feature needs code written to pass, the defect belongs to the
   feature that owns it (01–10), not here.
-- **It cannot run yet, and the export is no longer what blocks it.**
-  [10-figma-integration](archive/10-figma-integration.md) wired the app to the API *(2026-09-25,
-  PR #31)*, so the app now makes real calls, signs in through MSAL, and reads its role from the
-  server. What is missing is the pass itself: a browser, a tenant, and the identities to walk the
-  journey as. Until it is run, the integration is compiled and type-checked but **unobserved**,
-  and this feature is what would observe it. The API-side criteria can be exercised in the
-  meantime by calling the endpoints directly; that proves the API, not this pass, and does not
-  close this feature.
+- **It has run** *(2026-10-05)*, and the export was never what blocked it.
+  [10-figma-integration](10-figma-integration.md) wired the app to the API *(2026-09-25,
+  PR #31)*, so the app makes real calls, signs in through MSAL, and reads its role from the
+  server. What was outstanding was the pass itself: a browser, a tenant, and the identities to
+  walk the journey as, without which the integration was compiled and type-checked but
+  **unobserved**. *(This bullet read "It cannot run yet"; the pass has since been performed, which
+  is what this file is the record of.)*
 - **Three of 10's criteria cannot pass here either.** The export renders no `<video>` element, no
   per-media delete control, and no avatar an anonymous visitor can see, and 10 recorded those as
   export gaps rather than hand-building them. A criterion above that needs one of the three is
   blocked on a **re-export**, not on this pass — see 10's "Known gaps" for the file and line of
-  each.
+  each. *(2026-10-05 — recorded at the pass: all three gaps are still present in `src/web/`
+  (nothing renders `<video>`, and `deleteMedia` is defined but called from nowhere), so the tick on
+  a criterion that depends on one of them records the API-side half only, never a UI element that
+  does not exist.)*
 - **The profile screen is new surface.** The display name, bio, avatar, theme, and language
   criteria above depend on the profile API (Decision #28) as well as on the frontend wiring; a
   failure there is a defect in the feature that owns that endpoint, not here.

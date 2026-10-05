@@ -1,6 +1,6 @@
 # 07 — SAS Delivery
 
-Status: **Archived** — merged to `develop` in PR #28 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Status: **Archived** — merged to `develop` in PR #28 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../../PRD.md) — Decisions #2/#5/#6/#7 + "Media storage & delivery" + "API surface" + "Authentication & authorization".
 
 ## Summary

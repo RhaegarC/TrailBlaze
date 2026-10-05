@@ -1,6 +1,6 @@
 # 06 — Media Upload
 
-Status: **Archived** — merged to `develop` in PR #17 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Status: **Archived** — merged to `develop` in PR #17 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../../PRD.md) — Decisions #2/#4/#6/#15/#24/#26/#27 + "Media storage & delivery" + data-model `media` table + "Authentication & authorization".
 
 > **Archiving this one does not mean the slice is closed.** It shipped upload, the metadata listing

@@ -11,7 +11,8 @@ decides who may *edit* an entry rather than who may read it.
 | Document | What it holds |
 |---|---|
 | [docs/PRD.md](docs/PRD.md) | The product definition — the decisions log, the canonical data model, the permission matrix, and the API surface |
-| [docs/features/00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md) | The feature ladder, dependency order, each feature's status, and the Definition of Done |
+| [docs/features/archive/00-mission-1-sprint.md](docs/features/archive/00-mission-1-sprint.md) | Mission 1's closed feature ladder, dependency order, and Definition of Done |
+| [docs/features/00-mission-2-sprint.md](docs/features/00-mission-2-sprint.md) | Mission 2 — performance: its features, their status, and the live test counts |
 | [docs/testing-and-tdd.md](docs/testing-and-tdd.md) | Test tiers and the RED → GREEN → refactor discipline |
 | [docs/features/backlog.md](docs/features/backlog.md) | Ideas that are *not* yet features |
 
@@ -46,7 +47,7 @@ repository — and runs on slash commands:
 Backend tests run from `src/api/` with `dotnet test`. Two containers back the database and storage
 tiers — start them with `docker compose -f docker-compose.test.yml up -d` first, or those tests
 **skip** rather than fail. See [testing-and-tdd.md](docs/testing-and-tdd.md); the current counts are
-in [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md), which is their only home.
+in [00-mission-2-sprint.md](docs/features/00-mission-2-sprint.md), which is their only home.
 
 ## Running it locally
 
@@ -173,16 +174,19 @@ pointed somewhere else would migrate the wrong database and report success.
 1. **The suite is real but shallow.** `dotnet test` from `src/api/` is green either way: with the two
    test containers running everything passes, and with nothing configured the container-backed tests
    **skip** rather than fail — reported rather than hidden, and a skip is not a pass. The counts are
-   in [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md), and what is covered against
+   in [00-mission-2-sprint.md](docs/features/00-mission-2-sprint.md), and what is covered against
    what is not is status, owned by that file's table. Feature 02's slice — the profile routes, avatar
    upload and upload validator — is **not** covered. "Green" here means the foundation is
    green.
 2. **`develop` was not deployable until feature 09 merged, and now is** *(2026-09-24, PR #26)*.
-   09 imposes the ownership and admin rules; [00-mission-1-sprint.md](docs/features/00-mission-1-sprint.md)
+   09 imposes the ownership and admin rules; [Mission 1's sprint file](docs/features/archive/00-mission-1-sprint.md)
    is where the rule and the sequencing behind it live. [Feature 10](docs/features/archive/10-figma-integration.md)
-   then wired the `src/web/` export to that API *(2026-09-25, PR #31)*, so the mocks are gone — but
-   **no part of it has been observed running**: it compiles and type-checks, and the browser pass
-   that would close it is [feature 11](docs/features/11-e2e-verification.md), not yet run.
+   then wired the `src/web/` export to that API *(2026-09-25, PR #31)*, so the mocks are gone, and
+   [feature 11](docs/features/archive/11-e2e-verification.md) then ran the end-to-end pass against a
+   running stack *(2026-10-05)*, so the integration is observed rather than only compiled. Three
+   export gaps that pass could not close — no `<video>` element, no per-media delete control, and no
+   avatar an anonymous visitor can see — are recorded in
+   [feature 10's Known gaps](docs/features/archive/10-figma-integration.md#known-gaps-in-the-current-export).
 3. **Azure Blob is real in every environment**, tests included — there is no `IStorageRepository`
    fake, so nothing stands in for the real implementation. [testing-and-tdd.md](docs/testing-and-tdd.md)
    states what that costs and what it buys.
