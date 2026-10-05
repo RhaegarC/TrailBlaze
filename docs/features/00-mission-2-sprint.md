@@ -57,7 +57,7 @@ keeps rows 01–12 and is the record of that mission.
 
 | # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
 |---|---|---|---|---|
-| 13 | [upload-size-limits](13-upload-size-limits.md) | 06 | The image and video caps stop being compile-time constants and become **configuration**, with raised defaults (25 MB image / 200 MB video) and **absolute ceilings** (100 MB / 512 MB) that still refuse a runaway upload. The route-level request limits follow the ceilings, so a file the service would accept is never answered with a bare 413 | **In progress** |
+| 13 | [upload-size-limits](archive/13-upload-size-limits.md) | 06 | The image and video caps stop being compile-time constants and become **configuration**, with raised defaults (25 MB image / 200 MB video) and **absolute ceilings** (100 MB / 512 MB) that still refuse a runaway upload. The route-level request limits follow the ceilings, so a file the service would accept is never answered with a bare 413 | archived — merged in PR #50. Both caps come from configuration and clamp to their ceilings, the refusal names the cap in force, and the cover and avatar routes now carry the request-size limits they did not need while the image cap sat below Kestrel's 30 MB default. **One criterion is not claimed**: that an oversize request is answered with the service's 400 rather than a bare 413, on all three upload routes, is `verification-only` — every route is `[Authorize]` and the Api tier holds no token, so the attribute is unreachable from a test, and the manual pass has not been run |
 | 14 | [image-thumbnails](14-image-thumbnails.md) | 06, 07 | **Every uploaded image is stored twice** — the original plus a re-encoded derivative at a configured quality and maximum dimension — and the derivative is what the browser receives. Video is untouched: no transcoding, no poster frame, original streamed as today. Needs a new nullable column, so the PRD data model moves with it | **Not started** |
 | 15 | [media-url-cache](15-media-url-cache.md) | 07, 12 | The media listing **carries each item's read URL and expiry**, collapsing the app's 1+N fan-out into one request; blobs gain a `Cache-Control`; and the SAS expiry is aligned to a window boundary so successive listings mint the *same* URL and a browser cache can hit it. No route is added or removed. Read with 16: minting per item is cheap only while signing stays local | **Not started** |
 | 16 | [user-delegation-sas](16-user-delegation-sas.md) | 07, 12, 15 | **Not performance work.** The storage credential stops being the account key: the API signs read URLs with a **user delegation key** obtained as its own Entra identity, so no account key sits in configuration and the signatures become revocable. The delegation key is cached per key lifetime — the one backend cache this mission actually needs, since it is *not* caller-dependent. **Its first step is to settle whether the emulator can mint one at all**, because if it cannot, no tier exercises the delegation path | **Not started** |
@@ -88,16 +88,18 @@ frozen measurement taken when that mission closed.
 
 | Project | Bare machine | With the containers |
 |---|---|---|
-| `TrailBlaze.Service.Test` | 273 / 0 / 273 | 273 / 0 / 273 |
+| `TrailBlaze.Service.Test` | 281 / 0 / 281 | 281 / 0 / 281 |
 | `TrailBlaze.Repository.Test` | 47 / 78 / 125 | 125 / 0 / 125 |
-| `TrailBlaze.Api.Test` | 19 / 0 / 19 | 19 / 0 / 19 |
-| **All three** | **339 / 78 / 417** | **417 / 0 / 417** |
+| `TrailBlaze.Api.Test` | 20 / 0 / 20 | 20 / 0 / 20 |
+| **All three** | **348 / 78 / 426** | **426 / 0 / 426** |
 
 Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
 the container tiers skip, and `Category=Container` is the only trait in the solution. *(2026-10-05 —
-carried forward from Mission 1's close: this sprint has added no test yet, and the figures above were
-re-measured on a bare machine and unchanged. The container column follows the same test set, which is
-why it moves with it.)*
+[13](archive/13-upload-size-limits.md) added nine test cases, all in the offline tiers, so the
+bare-machine count and the container count moved by the same nine and the container column is
+otherwise the Mission 1 close figure. The Repository row's bare split was taken from a
+`Category!=Container` run and the container half from a `Category=Container` run, which partition the
+same 125.)*
 
 ## Open items
 
@@ -106,9 +108,10 @@ why it moves with it.)*
   rendered result is a browser observation.
 - **A merge that does not exist.** On 2026-10-05 the message "pr merged" arrived naming no pull
   request, and no merge matches it — the newest PR of any state is #48, and neither `origin/develop`
-  nor `origin/master` had moved since 2026-09-30 11:01Z when it was checked. Two undocumented local
-  `release/*` branches exist. Recorded here so it is not lost; it is unrelated to this mission and
-  blocks nothing.
+  nor `origin/master` had moved since 2026-09-30 11:01Z when it was checked. Recorded here so it is
+  not lost; it is unrelated to this mission and blocks nothing. *(2026-10-05 — two merges have landed
+  since, #49 and #50, and both named their number; neither is the message above, so the observation
+  stands as written rather than as an open question.)*
 - **Mission 1 closed on 2026-10-05, with one item unfinished.** [Feature 11](archive/11-e2e-verification.md)'s
   walkthrough ran — it is the only place the Admin override is exercised end to end, and the pass that
   observes [bug 03](../bugs/00-bug-log.md)'s fix, since the media and list reads widen for a signed-in
