@@ -107,7 +107,7 @@ public class ActivityController(
     /// (Decision #27).
     /// </summary>
     /// <remarks>
-    /// Both limits are raised for this route deliberately: a 200 MB video exceeds Kestrel's own 30 MB
+    /// Both limits are raised for this route deliberately: the video ceiling exceeds Kestrel's own 30 MB
     /// body default and the form parser's 128 MB multipart default, either of which would refuse the
     /// upload as a bare 413 before the service could answer with the documented 400.
     /// </remarks>
@@ -138,15 +138,17 @@ public class ActivityController(
     /// Uploads an activity's cover image, replacing any it already has.
     /// </summary>
     /// <remarks>
-    /// No request-size override, unlike the media route: the 10 MB image cap sits below both
-    /// Kestrel's 30 MB body default and the form parser's 128 MB multipart default, so an oversize
-    /// file reaches the service and is answered with the reason a client can act on rather than a
-    /// bare 413.
+    /// Both limits are raised for the same reason as the media route: the image ceiling sits above
+    /// Kestrel's 30 MB body default and the form parser's 128 MB multipart default, either of which
+    /// would answer an acceptable cover with a bare 413 before the service could reach the documented
+    /// 400. The route carried neither while the cap was 10 MB and stayed below both.
     /// </remarks>
     /// <param name="activityId">The activity's id.</param>
     /// <param name="file">The image.</param>
     /// <returns>The cover's URL, the reasons the upload was refused, or not-found.</returns>
     [HttpPost("{activityId}/cover")]
+    [RequestSizeLimit(Constant.Upload.MaxImageRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = Constant.Upload.MaxImageRequestBytes)]
     public async Task<IActionResult> UploadCover(string activityId, [FromForm] IFormFile? file)
     {
         if (file is null)

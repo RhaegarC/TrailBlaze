@@ -622,8 +622,8 @@ public sealed class ActivityServiceTests
     }
 
     /// <summary>
-    /// The cap is inclusive, and the byte over it is refused by the shared image rule — the same
-    /// pair the media route is held to, because it is the same 10 MB.
+    /// The cap is inclusive and comes from configuration — the same pair the media route is held to,
+    /// because it is the same validator.
     /// </summary>
     [Fact]
     public async Task An_image_exactly_at_the_cap_is_accepted()
@@ -631,10 +631,11 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(
-                new RecordingRepository { Existing = Row(Constant.ActivityType.Public) }, storage)
+                new RecordingRepository { Existing = Row(Constant.ActivityType.Public) },
+                storage,
+                caps: new UploadSizeCaps(OneMegabyte, 0))
             .UploadCoverAsync(
-                "the-activity", Bytes(Constant.Upload.ImageSizeCapBytes),
-                "image/jpeg", Constant.Upload.ImageSizeCapBytes);
+                "the-activity", Bytes(OneMegabyte), "image/jpeg", OneMegabyte);
 
         Assert.Equal(CoverOutcomeKind.Uploaded, outcome.Kind);
         Assert.Single(storage.Uploads);
@@ -646,12 +647,14 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(
-                new RecordingRepository { Existing = Row(Constant.ActivityType.Public) }, storage)
+                new RecordingRepository { Existing = Row(Constant.ActivityType.Public) },
+                storage,
+                caps: new UploadSizeCaps(OneMegabyte, 0))
             .UploadCoverAsync(
-                "the-activity", Bytes(Constant.Upload.ImageSizeCapBytes + 1),
-                "image/jpeg", Constant.Upload.ImageSizeCapBytes + 1);
+                "the-activity", Bytes(OneMegabyte + 1), "image/jpeg", OneMegabyte + 1);
 
         Assert.Equal(CoverOutcomeKind.Rejected, outcome.Kind);
+        Assert.Equal("The image must be 1 MB or smaller.", outcome.Errors!["file"].Single());
         Assert.Empty(storage.Uploads);
     }
 
@@ -1207,10 +1210,14 @@ public sealed class ActivityServiceTests
     /// so a client can put the message beside the control that caused it.</summary>
     private const string CoverField = "file";
 
+    /// <summary>A configured image cap, small enough that a file at it is cheap to build.</summary>
+    private const long OneMegabyte = 1024 * 1024;
+
     private static ActivityService Service(
         IDbRepository? repository = null,
         IStorageRepository? storage = null,
-        string? caller = Caller)
+        string? caller = Caller,
+        UploadSizeCaps? caps = null)
     {
         // One repository for both, so a role a test put on the rows is the role the rule reads.
         var rows = repository ?? new RecordingRepository();
@@ -1218,7 +1225,10 @@ public sealed class ActivityServiceTests
         return new(
             rows,
             storage ?? new RecordingStorage(),
-            new UploadValidationService(),
+
+            // Zero is "nothing configured" rather than a cap of no bytes: the type reads it as the
+            // absence of a setting and applies the default.
+            new UploadValidationService(caps ?? new UploadSizeCaps(0, 0)),
             new ActivityAuthorizationService(rows, new StubUserContext(caller)),
             new StubUserContext(caller),
             NullLogger<ActivityService>.Instance);

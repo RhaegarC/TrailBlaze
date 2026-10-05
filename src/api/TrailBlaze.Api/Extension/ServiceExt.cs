@@ -38,6 +38,12 @@ internal static class ServiceExt
                     ? TimeSpan.FromMinutes(minutes)
                     : SignedUrlLifetime.Default));
 
+        // The caps an upload is held to, read the same way: absent, unreadable or non-positive falls
+        // to the default, and a value above the ceiling is clamped there rather than honoured here.
+        services.AddSingleton(_ => new UploadSizeCaps(
+            ParseBytes(configuration[Constant.ConfigKey.ImageUploadCapBytes]),
+            ParseBytes(configuration[Constant.ConfigKey.VideoUploadCapBytes])));
+
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IActivityAuthorizationService, ActivityAuthorizationService>();
         services.AddScoped<IActivityService, ActivityService>();
@@ -53,6 +59,13 @@ internal static class ServiceExt
 
         return services;
     }
+
+    /// <summary>A configured byte count, or zero for an absent or unreadable one, which
+    /// <see cref="UploadSizeCaps"/> reads as the absence of a setting.</summary>
+    private static long ParseBytes(string? value) =>
+        long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long bytes)
+            ? bytes
+            : 0;
 
     /// <summary>Reads a configuration value the application cannot run without, and names it in the
     /// failure.</summary>

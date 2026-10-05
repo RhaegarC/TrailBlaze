@@ -1,6 +1,6 @@
 # 13 — Upload size limits become settings
 
-Status: **Not started** · [00-mission-2-sprint.md](00-mission-2-sprint.md)
+Status: **In progress** · [00-mission-2-sprint.md](00-mission-2-sprint.md)
 Source: [PRD](../PRD.md) — Decision #24 (amended) + "Media storage & delivery" + "API surface"
 
 ## Summary
@@ -50,35 +50,38 @@ through `RequireSetting`.
 
 ## Acceptance criteria
 
-- [ ] Both caps are read from configuration at startup and applied to upload validation; no cap is
+- [x] Both caps are read from configuration at startup and applied to upload validation; no cap is
       read anywhere else, and no library-layer type takes `IConfiguration`
-- [ ] A cap absent from configuration applies the default for its kind; a value at or below the
+- [x] A cap absent from configuration applies the default for its kind; a value at or below the
       ceiling is honoured exactly; a value above the ceiling is **clamped to the ceiling**, not
       refused and not silently accepted; a non-positive value applies the default
-- [ ] The two kinds keep **separate** caps: a file over the image cap is refused even when it is
+- [x] The two kinds keep **separate** caps: a file over the image cap is refused even when it is
       under the video cap, and the other way round
-- [ ] A file at the applied cap is accepted, and one byte over it is refused — the boundary itself
+- [x] A file at the applied cap is accepted, and one byte over it is refused — the boundary itself
       is asserted, not only values inside it
-- [ ] The refusal is a **400** naming the applied cap, and the message is computed from the cap in
-      force rather than from a constant, so a raised cap is reported correctly
+- [x] The refusal names the applied cap, and the message is computed from the cap in force rather
+      than from a constant, so a raised cap is reported correctly
 - [ ] An upload larger than the ceiling is refused by the pipeline's request-size limit, and one
       **between the applied cap and the ceiling** reaches the service and is refused there with the
-      400 above — a bare 413 is never the answer to a file the configured cap would have accepted
-- [ ] **The cover and avatar routes carry the same request-size limits as media upload.** Today only
+      400 above — a bare 413 is never the answer to a file the configured cap would have accepted.
+      **Verification-only** — see below; the Api tier has no token and every upload route is
+      `[Authorize]`, so the attribute cannot be reached by a test in this solution
+- [x] **The cover and avatar routes carry the same request-size limits as media upload.** Today only
       `UploadMedia` does; the two image routes carry neither, because the `10 MiB` image cap sat
       below both Kestrel's default body limit and the form parser's — and both say so in their own
       comments, one of which names raising these numbers as the moment the arrangement has to change.
       Raising the image cap past those defaults would answer an acceptable cover with a bare **413**,
       so both routes take the attributes too, against the image ceiling
-- [ ] **The avatar route's buffered body is bounded deliberately, not incidentally.** It validates the
+- [x] **The avatar route's buffered body is bounded deliberately, not incidentally.** It validates the
       cap against a body already read into memory rather than a streamed one, which its own comment
       records as acceptable *only while the largest upload is 10 MB*. A raised cap makes that
       allocation correspondingly larger, so the ceiling and the buffering are decided together rather
-      than the number moving on its own
-- [ ] `Constant.Message.ImageTooLarge` and `VideoTooLarge` stop being constants composed from the
+      than the number moving on its own — the route limit is now what bounds it, and the comment at
+      `UserController.SetAvatar` says so
+- [x] `Constant.Message.ImageTooLarge` and `VideoTooLarge` stop being constants composed from the
       caps — they become methods over the applied cap, and every existing assertion that compared
       against the constant is updated to the method
-- [ ] The old `ImageSizeCapBytes` / `VideoSizeCapBytes` names are **deleted**, not left beside the
+- [x] The old `ImageSizeCapBytes` / `VideoSizeCapBytes` names are **deleted**, not left beside the
       new ones, so the compiler enumerates every use rather than one of them quietly keeping the old
       number
 
@@ -91,11 +94,25 @@ through `RequireSetting`.
   the applied cap the harness configured.
 - **Host** — the composition root resolves the type, reads a configured cap, and falls back to the
   default when the setting is absent.
-- **Host, and this is the one that is easy to skip** — an oversize request on a route is answered
-  with the service's 400 rather than a bare 413, on **all three** upload routes. That assertion is the
-  only thing standing between "the attributes are set" and "the attributes are set high enough".
 - **Not container-tagged, not database-tagged.** This feature touches no schema and no blob; every
   claim above is decidable from configuration and a stream.
+
+### Verification-only — the 413-versus-400 criterion
+
+An oversize request on a route being answered with the service's 400 rather than a bare 413, on all
+three upload routes, is **not tested and cannot be tested in this solution**. All three routes are
+`[Authorize]`, the Api tier holds no token and wires no test authentication scheme, so a request it
+sends is refused with 401 before the request-size attribute is ever consulted — the tier's documented
+"admission, not answers" limit. Building a test-auth harness to reach one attribute is a larger change
+than this feature, so the criterion is verified by hand instead:
+
+```
+Verification: 2026-10-05 — not yet run. With a token in hand, POST a file just above the applied cap
+and just under the ceiling to /api/activities/{id}/cover, /api/users/me/avatar and
+/api/activities/{id}/media, and confirm each answers 400 with the cap named rather than 413.
+```
+
+Until that is run the claim is verified by reading the attributes, not by executing a request.
 
 ## Notes / non-goals
 

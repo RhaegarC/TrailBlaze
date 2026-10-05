@@ -4,44 +4,45 @@ using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
 
 /// <summary>
-/// The shared upload rules, read from the allowlists and size caps in
-/// <see cref="Constant.Upload"/>.
+/// The shared upload rules: the allowlists in <see cref="Constant.Upload"/> and the size caps
+/// configuration set.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Shared by every upload route — an avatar here, a cover in feature 08, activity media in
-/// feature 06 — so the three cannot answer "is this an image?" differently. The rules are not
-/// per-route: an image is the same set of content types whether it is a face or a landscape,
-/// and the size cap is the same 10 MB.
-/// </para>
-/// <para>
-/// Stateless, so it is registered as a singleton. It is injected rather than kept static so
-/// the routes depend on <see cref="IUploadValidationService"/>: if a cap ever needs to come
-/// from configuration rather than <see cref="Constant"/>, that changes here and no caller
-/// changes at all.
-/// </para>
+/// Shared by every upload route — an avatar, a cover and activity media — so the three cannot answer
+/// "is this an image?" differently or hold it to a different size. The cap comes from
+/// <see cref="UploadSizeCaps"/> rather than from a constant, and the refusal is worded from the same
+/// number, so a raised cap changes both together; that is also why this is injected rather than
+/// static.
 /// </remarks>
-public sealed class UploadValidationService : IUploadValidationService
+public sealed class UploadValidationService(UploadSizeCaps caps) : IUploadValidationService
 {
     /// <inheritdoc/>
-    public string? ValidateImage(string? contentType, long sizeBytes) =>
-        Validate(
+    public string? ValidateImage(string? contentType, long sizeBytes)
+    {
+        long capBytes = caps.AppliedImageBytes;
+
+        return Validate(
             contentType,
             sizeBytes,
             Constant.Upload.ImageContentTypes,
-            Constant.Upload.ImageSizeCapBytes,
+            capBytes,
             Constant.Message.ImageTypeNotAllowed,
-            Constant.Message.ImageTooLarge);
+            Constant.Message.ImageTooLarge(capBytes));
+    }
 
     /// <inheritdoc/>
-    public string? ValidateVideo(string? contentType, long sizeBytes) =>
-        Validate(
+    public string? ValidateVideo(string? contentType, long sizeBytes)
+    {
+        long capBytes = caps.AppliedVideoBytes;
+
+        return Validate(
             contentType,
             sizeBytes,
             Constant.Upload.VideoContentTypes,
-            Constant.Upload.VideoSizeCapBytes,
+            capBytes,
             Constant.Message.VideoTypeNotAllowed,
-            Constant.Message.VideoTooLarge);
+            Constant.Message.VideoTooLarge(capBytes));
+    }
 
     /// <inheritdoc/>
     public string? MediaKindOf(string? contentType) =>

@@ -72,15 +72,15 @@ public class UserController(IUserService userService) : Controller
     /// carrying the new public URL.
     /// </summary>
     /// <remarks>
-    /// The 10 MB cap is checked against a buffered body rather than a streamed one, so the
-    /// bytes are held in memory before they can be rejected. That is acceptable while the
-    /// largest upload is 10 MB and Kestrel's default body limit is 30 MB, which is the outer
-    /// guard; feature 06's 200 MB videos are what will force both numbers to be raised
-    /// deliberately, and that is where the streaming question belongs rather than here.
+    /// The body is buffered rather than streamed, so the bytes are held before they can be rejected —
+    /// which is what the route limits below keep bounded. They are raised because the image ceiling is
+    /// above Kestrel's 30 MB body default, which would otherwise answer an acceptable avatar with 413.
     /// </remarks>
     /// <param name="file">The image to store. Validated against the shared image allowlist and
     /// size cap before anything is written.</param>
     [HttpPost("me/avatar")]
+    [RequestSizeLimit(Constant.Upload.MaxImageRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = Constant.Upload.MaxImageRequestBytes)]
     public async Task<IActionResult> SetAvatar([FromForm] IFormFile? file)
     {
         if (file is null)
