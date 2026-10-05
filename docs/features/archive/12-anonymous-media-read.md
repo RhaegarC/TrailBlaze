@@ -1,6 +1,6 @@
 # 12 — Anonymous read of a Public activity's media
 
-Status: **Archived** — merged to `develop` in PR #43 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Status: **Archived** — merged to `develop` in PR #43 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../../PRD.md) — Decisions #2/#7/#26/#30 + "Permissions" + "Media storage & delivery".
 
 ## Summary
@@ -84,7 +84,7 @@ that a shared journal reads as a journal rather than as a sign-up prompt.
 
 **Left unticked, and this is the only group that is.** Every criterion above names the test that
 holds it; these three name a rendered page, and no tier of this solution renders one. They are
-[11](../11-e2e-verification.md)'s manual pass, which the PR that merged this feature did not run —
+[11](11-e2e-verification.md)'s manual pass, which the PR that merged this feature did not run —
 so the mark here is "not claimed" rather than "not done".
 
 - [ ] a signed-out session renders a `Public` activity's media instead of the sign-in prompt, and
@@ -102,4 +102,4 @@ so the mark here is "not claimed" rather than "not done".
   `develop` before this branch (`src/web/.figma/make/site.json`, `src/web/.gitignore`); they are
   unrelated and stay.
 - **No browser walkthrough.** The API answers above are executed by the test tiers. The rendered
-  page is [11](../11-e2e-verification.md)'s manual pass, and this feature does not claim it.
+  page is [11](11-e2e-verification.md)'s manual pass, and this feature does not claim it.
