@@ -18,6 +18,12 @@ those:
 Nothing here changes what the product *is*. It changes how much of it crosses the network, and how
 much memory the server spends to decide that.
 
+**One row here is not performance work, and it says so.** [16](16-user-delegation-sas.md) moves the
+storage credential from the account key to the application's own identity. It is in this mission
+because it is the one change that would make feature 15's per-item signing cost a network call, so
+the two are read together — but it is a security and configuration change, reviewed on its own
+merits, and its acceptance criteria are about what the application holds rather than what it spends.
+
 ## How to read these features (working model)
 
 - **Backend** is implemented test-first (RED → GREEN → refactor; tiers in
@@ -33,8 +39,11 @@ much memory the server spends to decide that.
   ([schema-change discipline](../PRD.md#data-model)).
 - Status reflects the doc lifecycle (file created → in progress → archived after PR to `develop`).
 
-Numbers continue from Mission 1 — features **13**, **14**, **15** — because its table fixes "number =
-priority (lowest first = next to implement)" and a reader should not have to re-derive the order.
+Numbers continue from Mission 1 — features **13**, **14**, **15**, **16** — because its table fixes
+"number = priority (lowest first = next to implement)" and a reader should not have to re-derive the
+order. A number here is a position in this table, not a claim that the row is the same kind of work
+as its neighbours; 16's row is the one that differs, and it is placed last so it is read after the
+performance it interacts with.
 
 ## Feature breakdown
 
@@ -50,7 +59,8 @@ keeps rows 01–12 and is the record of that mission.
 |---|---|---|---|---|
 | 13 | [upload-size-limits](13-upload-size-limits.md) | 06 | The image and video caps stop being compile-time constants and become **configuration**, with raised defaults (25 MB image / 200 MB video) and **absolute ceilings** (100 MB / 512 MB) that still refuse a runaway upload. The route-level request limits follow the ceilings, so a file the service would accept is never answered with a bare 413 | **Not started** |
 | 14 | [image-thumbnails](14-image-thumbnails.md) | 06, 07 | **Every uploaded image is stored twice** — the original plus a re-encoded derivative at a configured quality and maximum dimension — and the derivative is what the browser receives. Video is untouched: no transcoding, no poster frame, original streamed as today. Needs a new nullable column, so the PRD data model moves with it | **Not started** |
-| 15 | [media-url-cache](15-media-url-cache.md) | 07, 12 | The media listing **carries each item's read URL and expiry**, collapsing the app's 1+N fan-out into one request; blobs gain a `Cache-Control`; and the SAS expiry is aligned to a window boundary so successive listings mint the *same* URL and a browser cache can hit it. No route is added or removed | **Not started** |
+| 15 | [media-url-cache](15-media-url-cache.md) | 07, 12 | The media listing **carries each item's read URL and expiry**, collapsing the app's 1+N fan-out into one request; blobs gain a `Cache-Control`; and the SAS expiry is aligned to a window boundary so successive listings mint the *same* URL and a browser cache can hit it. No route is added or removed. Read with 16: minting per item is cheap only while signing stays local | **Not started** |
+| 16 | [user-delegation-sas](16-user-delegation-sas.md) | 07, 12, 15 | **Not performance work.** The storage credential stops being the account key: the API signs read URLs with a **user delegation key** obtained as its own Entra identity, so no account key sits in configuration and the signatures become revocable. The delegation key is cached per key lifetime — the one backend cache this mission actually needs, since it is *not* caller-dependent. **Its first step is to settle whether the emulator can mint one at all**, because if it cannot, no tier exercises the delegation path | **Not started** |
 
 ## Definition of Done
 
@@ -64,6 +74,8 @@ keeps rows 01–12 and is the record of that mission.
       listing rather than one plus N
 - [ ] Media bytes carry a bounded, `private` cache header, and the SAS expiry remains the control
 - [ ] The data-model change lands in the PRD in the same pull request as the migration
+- [ ] No storage account key is read from configuration: the API signs read URLs as its own identity,
+      and the required setting it replaces still stops startup when absent
 - [ ] Each backend feature merged to `develop` with its tests (RED → GREEN)
 
 ## Current test counts
