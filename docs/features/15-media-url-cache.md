@@ -1,6 +1,6 @@
 # 15 — A listing carries its URLs, and the browser may keep them
 
-Status: **Not started** · [00-mission-2-sprint.md](00-mission-2-sprint.md)
+Status: **In progress** · [00-mission-2-sprint.md](00-mission-2-sprint.md)
 Source: [PRD](../PRD.md) — Decision #7 (amended) + Decision #32 (new) + Decision #30 + "Reading —
 what a caller receives"
 
@@ -61,11 +61,14 @@ lists — and that is a criterion here, not a coincidence, because widening it w
 separate decision.
 
 **Stability, and the rounding that gives it.** The expiry is already rounded down to the whole second
-"which is the precision a SAS carries". This feature rounds the minting instant down to a **one-minute
-boundary** before the window is added, so two mints inside the same minute produce the same string and
-a browser's cache key does not move. The cost is stated rather than hidden: a URL minted late in a
-boundary minute lives slightly less than the configured window — still comfortably inside the cap, and
-the cap is unchanged.
+"which is the precision a SAS carries". This feature rounds the minting instant down to a **boundary
+matched to the cache window** before the window is added, so two mints inside one boundary produce the
+same string and a browser's cache key does not move. The two have to agree or the rounding buys
+nothing: a browser keys its copy by the URL, so a URL that changes sooner than the copy it names
+lapses is a URL that misses a cache it could have hit. The boundary is therefore taken from the cache
+window rather than chosen beside it. The cost is stated rather than hidden: a URL minted late in a
+boundary lives slightly less than the configured window — still comfortably inside the cap, and the
+cap is unchanged.
 
 **Caching is granted, and bounded.** Uploads currently set a content type and nothing else. They gain
 a cache directive: media bytes are `private` with a short lifetime, so a browser may reuse what it
@@ -90,31 +93,35 @@ URL already gives durable reuse without a service worker's versioned lifecycle t
 
 ## Acceptance criteria
 
-- [ ] A media listing carries a read URL and an expiry for **every** item, minted from a single expiry
+- [x] A media listing carries a read URL and an expiry for **every** item, minted from a single expiry
       for the page rather than one instant per item
-- [ ] The app requests a listing **once** and makes no per-item URL request, so a page of images costs
+- [x] The app requests a listing **once** and makes no per-item URL request, so a page of images costs
       one request rather than one plus the number of items
-- [ ] Two listings minted within the same boundary minute produce **identical** URLs for the same
-      item, so a browser's cache key does not move between visits
-- [ ] The SAS lifetime cap is unchanged, and a URL minted at a boundary still has a life inside it —
+- [x] Two listings minted within the same boundary produce **identical** URLs for the same item, so a
+      browser's cache key does not move between visits — and that boundary is the window a browser may
+      reuse the bytes for, so the URL cannot lapse before the copy it names does
+- [x] The SAS lifetime cap is unchanged, and a URL minted at a boundary still has a life inside it —
       the rounding shortens a URL's life by less than one boundary, never lengthens it
-- [ ] Media bytes are served with a **`private`** cache directive and a bounded lifetime; the
+- [x] Media bytes are served with a **`private`** cache directive and a bounded lifetime; the
       directive is not `public`, not `immutable`, and no media URL is treated as content-stable
 - [ ] The app **honours the expiry it is given**: a URL with time left is reused rather than re-minted,
-      and one close to lapsing is refreshed before it is used
-- [ ] A listing still carries **no** blob path and no uploader user id for an anonymous caller
+      and one close to lapsing is refreshed before it is used. **Verification-only** — see below; the
+      rule is implemented and reviewed, and nothing in this solution runs it
+- [x] A listing still carries **no** blob path and no uploader user id for an anonymous caller
       (Decision #30) — the new field is a URL, and the existing payload assertions are extended rather
       than relaxed
-- [ ] **No route is added or removed**: the anonymous surface is still the same four read endpoints,
+- [x] **No route is added or removed**: the anonymous surface is still the same four read endpoints,
       and the media-URL mint route still works and still refuses an unreadable item with 404
-- [ ] An item whose URL has lapsed renders again once refreshed, rather than breaking the page
+- [ ] An item whose URL has lapsed renders again once refreshed, rather than breaking the page.
+      **Verification-only** — see below, and for the same reason
 
 ## Tests (TDD)
 
 - **Unit** — the expiry rule: two mints inside a boundary share one instant, a mint on either side of
-  a boundary does not, and the result is still rounded to what a SAS can carry. The listing's
-  signing behaviour is asserted beside the existing mint assertions, so the "one mint method" claim
-  keeps holding: both paths reach the same repository call rather than each rolling its own.
+  a boundary does not, the boundary is asserted to be the cache window so the two cannot drift apart
+  in silence, and the result is still rounded to what a SAS can carry. The listing's signing behaviour
+  is asserted beside the existing mint assertions, so the "one mint method" claim keeps holding: both
+  paths reach the same repository call rather than each rolling its own.
 - **Unit, on the payload** — the serialized listing carries the URL and the expiry, still carries no
   blob path, and an anonymous listing still carries no user id. These are the assertions that make the
   new field safe to add, so they are extended in the same change rather than after it.
@@ -126,6 +133,22 @@ URL already gives durable reuse without a service worker's versioned lifecycle t
 - **Not assertable here** — the browser's own reuse is a client behaviour. There is no runner in
   `src/web`, so "the second visit did not re-download" is `verification-only`: observed in a browser's
   network panel against a running stack, and recorded as what was seen rather than claimed as tested.
+
+### Verification-only — the two criteria about the app
+
+Both remaining criteria describe what a **browser** does with what it is handed, and `src/web` has no
+test runner — a fact Mission 1's bug log records three times over. What was established by other means
+is weaker and is labelled as such: the client half was read, type-checked and built
+(`npx tsc --noEmit` and `npm run build`, both clean), which shows it compiles and that no path
+fabricates a URL — it does not show a request was or was not made.
+
+```
+Verification: 2026-10-06 — not yet run. Against a running stack, open an activity holding several
+images and confirm in the browser's network panel that the listing request is followed by image
+fetches and by no GET /api/media/{id}/url; revisit inside the same five-minute boundary and confirm
+the image requests are cache hits rather than re-downloads; leave the page open past the signing
+window, reload, and confirm the tiles still render.
+```
 
 ## Notes / non-goals
 
@@ -141,3 +164,37 @@ URL already gives durable reuse without a service worker's versioned lifecycle t
   and why the client is expected to use it rather than ignore it.
 - **Existing clients that ignore the new field keep working**: an extra field is additive, and the
   mint route they already call is still there.
+- **The refresh margin is one whole boundary, and it has to be.** Stability and freshness pull against
+  each other: because the minting instant is rounded down, a re-mint inside the same boundary returns
+  the very string it was meant to replace — so a client that refreshed on a margin shorter than a
+  boundary could decide to mint and be handed back what it already had. The margin is that boundary
+  and no less, which is the shortest at which a refresh can ever produce a longer-lived URL. The cost
+  is that a URL is judged unusable while up to a boundary of life remains — and since the boundary is
+  the browser's own cache window, that is the same moment the browser's copy goes stale, rather than a
+  second number that happens to be nearby.
+- **A revisit is served from cache only inside one boundary, and that is a limit rather than a bug.**
+  The browser keys its copy by the URL, so a visit in the next boundary mints a new string and the
+  bytes are fetched again even though the browser is still holding them. Widening the boundary widened
+  that window to the whole cache window — which is as far as it can go, because a boundary beyond it
+  would leave a URL outliving the copy it names while shortening what a mint late in the boundary
+  gets. Removing the reload case instead would mean the *client* carrying a URL across a reload, which
+  is a decision about holding a bearer token somewhere durable, not a refinement of this one.
+- **The client's cache is emptied on sign-out.** A media URL is a bearer token with a deadline, and
+  the tokens it holds were minted for the session that just ended; leaving them held would let a
+  signed-out browser keep rendering private bytes out of its own cache. That is a small addition
+  beside the existing clearing of the token source, and it is the same reasoning.
+- **The upload path mints too, and that is consistent rather than a second rule.** An upload is
+  answered with the item's URL and expiry, because the bytes are private and there is nothing to
+  render until a URL exists — so the alternative was a client round trip for the one item it just
+  sent. The instant comes from the same `SignedUrlLifetime`, and the mint reaches the same repository
+  call the listing and the mint route use.
+- **The directive is stored on the object, so it is not retroactive.** `Cache-Control` is set as a
+  blob property at upload because the read path is a SAS URL straight to storage and the API never
+  proxies the bytes — so there is no moment at which it could add a header on the way out. The
+  consequence is that media uploaded before this change carries none and keeps being re-fetched until
+  it is re-uploaded. A backfill is a separate piece of work, and unlike the URL half — which lands for
+  every item the moment the listing changes — the caching half is forward-only.
+- **Only media carries the directive, and that is the `null` default doing its job.** Covers and
+  avatars reach the same upload call, so a default directive would apply to the covers whose path
+  changes container when an entry crosses the public line. A cover that did move would carry the
+  header across with it, which is exactly why it must not have one.

@@ -33,6 +33,9 @@ public interface IStorageRepository
     /// <param name="content">The bytes to store.</param>
     /// <param name="contentType">Content type recorded with the blob, so it is served back
     /// correctly rather than as an opaque download.</param>
+    /// <param name="cacheControl">The <c>Cache-Control</c> header to store with the object, or null
+    /// to store none. Null is the default deliberately: this one call stores every kind of object, and
+    /// a default would apply to the covers whose path is not content-stable.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The stored path — what a caller persists and later hands to
     /// <see cref="CreateReadUrlAsync"/> or <see cref="DeleteAsync"/>.</returns>
@@ -41,6 +44,7 @@ public interface IStorageRepository
         string path,
         Stream content,
         string contentType,
+        string? cacheControl = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

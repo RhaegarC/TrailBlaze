@@ -3,13 +3,12 @@ namespace TrailBlaze.Model.Media;
 using System.Text.Json.Serialization;
 
 /// <summary>
-/// One stored item as these routes return it: metadata, and nothing a caller could fetch.
+/// One stored item as these routes return it: its metadata, and the URL its bytes are read by.
 /// </summary>
 /// <remarks>
-/// <c>BlobPath</c> is deliberately absent. The path names an object in the private container, so
-/// returning it would hand out an address that only a SAS is supposed to unlock — the bytes are
-/// reached through feature 07's endpoint, and this payload is what tells a client there is
-/// something to reach.
+/// <c>BlobPath</c> is deliberately absent, and the field carrying the address is named <c>Url</c>
+/// rather than for the path it points at: what a caller may hold is a short-lived link, not the
+/// location of an object in a private container.
 /// </remarks>
 public sealed record MediaResponse
 {
@@ -25,6 +24,12 @@ public sealed record MediaResponse
 
     /// <summary>When it was uploaded, from the row's audit stamp.</summary>
     public required DateTimeOffset CreatedOn { get; init; }
+
+    /// <summary>The URL the bytes are read by, so a listing needs no follow-up request per item.</summary>
+    public required string Url { get; init; }
+
+    /// <summary>When <see cref="Url"/> stops working — the same instant the token carries.</summary>
+    public required DateTimeOffset ExpiresOnUtc { get; init; }
 
     /// <summary>Who contributed it — the field the detail view groups by (Decision #27). Omitted
     /// rather than sent as null to a caller with no token: the <c>users</c> primary key is the
