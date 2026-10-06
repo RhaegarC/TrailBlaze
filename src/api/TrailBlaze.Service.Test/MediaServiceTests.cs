@@ -917,7 +917,7 @@ public sealed class MediaServiceTests
 
         Assert.InRange(
             outcome.Url!.ExpiresOnUtc - DateTimeOffset.UtcNow,
-            TimeSpan.FromMinutes(1),
+            SignedUrlLifetime.Boundary,
             SignedUrlLifetime.Maximum);
     }
 
@@ -925,10 +925,10 @@ public sealed class MediaServiceTests
     /// A configured window longer than the cap is clamped to it rather than honoured.
     /// </summary>
     /// <remarks>
-    /// The lower bound is a whole boundary minute short of the cap, because the minting instant is
-    /// rounded down before the window is added: a mint late in its boundary minute lands up to that
-    /// much earlier. The upper bound is the claim that matters — rounding can shorten a window but
-    /// must never be the way past the cap.
+    /// The lower bound is a whole boundary short of the cap, because the minting instant is rounded
+    /// down before the window is added: a mint late in its boundary lands up to that much earlier. The
+    /// upper bound is the claim that matters — rounding can shorten a window but must never be the way
+    /// past the cap.
     /// </remarks>
     [Fact]
     public async Task A_configured_window_longer_than_the_cap_is_clamped()
@@ -944,7 +944,7 @@ public sealed class MediaServiceTests
 
         Assert.InRange(
             expiresOn - DateTimeOffset.UtcNow,
-            SignedUrlLifetime.Maximum - TimeSpan.FromMinutes(1),
+            SignedUrlLifetime.Maximum - SignedUrlLifetime.Boundary,
             SignedUrlLifetime.Maximum);
     }
 
@@ -952,7 +952,7 @@ public sealed class MediaServiceTests
     /// A configured window that is not positive is the absence of a setting rather than an
     /// instruction to mint a dead link, so the default answers for it.
     /// </summary>
-    /// <remarks>The tolerance is one boundary minute, as the clamp above, and for the same reason.</remarks>
+    /// <remarks>The tolerance is one boundary, as the clamp above, and for the same reason.</remarks>
     [Theory]
     [InlineData(0)]
     [InlineData(-30)]
@@ -967,7 +967,7 @@ public sealed class MediaServiceTests
 
         Assert.InRange(
             expiresOn - DateTimeOffset.UtcNow,
-            SignedUrlLifetime.Default - TimeSpan.FromMinutes(1),
+            SignedUrlLifetime.Default - SignedUrlLifetime.Boundary,
             SignedUrlLifetime.Default);
     }
 

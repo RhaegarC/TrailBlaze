@@ -180,6 +180,11 @@ public static class Constant
     public static class MediaCache
     {
         /// <summary>The window, in seconds, after which a browser must ask again.</summary>
+        /// <remarks>
+        /// Also the window <see cref="SignedUrlLifetime.Boundary"/> rounds to, so changing this moves
+        /// every signed URL's granularity with it — which is the intent, since a URL that changes
+        /// sooner than the copy it names lapses is a URL that misses a cache it could have hit.
+        /// </remarks>
         public const int MaxAgeSeconds = 300;
 
         /// <summary>The directive media bytes are stored with.</summary>

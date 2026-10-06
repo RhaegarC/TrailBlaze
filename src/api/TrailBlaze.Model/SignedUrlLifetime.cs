@@ -32,9 +32,19 @@ public sealed record SignedUrlLifetime(TimeSpan Configured)
         : Configured > Maximum ? Maximum
         : Configured;
 
+    /// <summary>How far the minting instant is rounded down before the window is added.</summary>
+    /// <remarks>
+    /// Taken from <see cref="Constant.MediaCache.MaxAgeSeconds"/> rather than chosen, because the two
+    /// have to agree: that is how long a browser may reuse the bytes, and it keys them by the URL, so
+    /// a URL that changes sooner than the copy it names lapses is a URL that misses a cache it could
+    /// have hit. Every caller rounds by this, covers included — the granularity belongs to minting a
+    /// URL, not to what the URL points at.
+    /// </remarks>
+    public static readonly TimeSpan Boundary = TimeSpan.FromSeconds(Constant.MediaCache.MaxAgeSeconds);
+
     /// <summary>When a URL minted at <paramref name="now"/> stops working.</summary>
     /// <remarks>
-    /// The minting instant is rounded down to the whole minute before the window is added, so two
+    /// The minting instant is rounded down to the whole boundary before the window is added, so two
     /// mints inside one boundary produce one string — a URL that moved between listings is a URL no
     /// browser could have cached. The result is then rounded to the whole second, which is the
     /// precision a SAS carries: an instant with a sub-second part would be truncated on the way into
@@ -43,7 +53,7 @@ public sealed record SignedUrlLifetime(TimeSpan Configured)
     public DateTimeOffset ExpiryFrom(DateTimeOffset now)
     {
         DateTimeOffset utc = now.ToUniversalTime();
-        DateTimeOffset boundary = utc.AddTicks(-(utc.UtcTicks % TimeSpan.TicksPerMinute));
+        DateTimeOffset boundary = utc.AddTicks(-(utc.UtcTicks % Boundary.Ticks));
         DateTimeOffset expiry = boundary.Add(Applied);
 
         return new DateTimeOffset(

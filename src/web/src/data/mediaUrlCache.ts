@@ -7,16 +7,19 @@
  * it is rendered, because a tile whose source lapses mid-session is a broken image rather than a
  * slow one.
  *
- * The margin is a whole minute because the server rounds the minting instant down to a minute
- * boundary: a re-mint inside the same boundary returns the very string it was meant to replace, so
- * a margin shorter than the boundary could decide to refresh and be handed back what it already had.
+ * The margin is one whole boundary because the server rounds the minting instant down before the
+ * window is added: a re-mint inside the same boundary returns the very string it was meant to
+ * replace, so a margin shorter than the boundary could decide to refresh and be handed back what it
+ * already had. That boundary is the browser's own cache window, so the client asks for a new URL at
+ * about the moment the browser's copy of the old one goes stale — which is the same instant, by
+ * construction, rather than a coincidence.
  *
  * Nothing here performs a request. The cache answers questions about what is held; the hook that
  * asks them does the minting.
  */
 
 /** How much life a URL must have left to be worth rendering. */
-export const SafetyMarginSeconds = 60;
+export const SafetyMarginSeconds = 300;
 
 /** One item's URL and the instant it stops working, in the shape the wire carries them. */
 export interface HeldMediaUrl {

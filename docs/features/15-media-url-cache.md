@@ -61,11 +61,14 @@ lists — and that is a criterion here, not a coincidence, because widening it w
 separate decision.
 
 **Stability, and the rounding that gives it.** The expiry is already rounded down to the whole second
-"which is the precision a SAS carries". This feature rounds the minting instant down to a **one-minute
-boundary** before the window is added, so two mints inside the same minute produce the same string and
-a browser's cache key does not move. The cost is stated rather than hidden: a URL minted late in a
-boundary minute lives slightly less than the configured window — still comfortably inside the cap, and
-the cap is unchanged.
+"which is the precision a SAS carries". This feature rounds the minting instant down to a **boundary
+matched to the cache window** before the window is added, so two mints inside one boundary produce the
+same string and a browser's cache key does not move. The two have to agree or the rounding buys
+nothing: a browser keys its copy by the URL, so a URL that changes sooner than the copy it names
+lapses is a URL that misses a cache it could have hit. The boundary is therefore taken from the cache
+window rather than chosen beside it. The cost is stated rather than hidden: a URL minted late in a
+boundary lives slightly less than the configured window — still comfortably inside the cap, and the
+cap is unchanged.
 
 **Caching is granted, and bounded.** Uploads currently set a content type and nothing else. They gain
 a cache directive: media bytes are `private` with a short lifetime, so a browser may reuse what it
@@ -94,8 +97,9 @@ URL already gives durable reuse without a service worker's versioned lifecycle t
       for the page rather than one instant per item
 - [x] The app requests a listing **once** and makes no per-item URL request, so a page of images costs
       one request rather than one plus the number of items
-- [x] Two listings minted within the same boundary minute produce **identical** URLs for the same
-      item, so a browser's cache key does not move between visits
+- [x] Two listings minted within the same boundary produce **identical** URLs for the same item, so a
+      browser's cache key does not move between visits — and that boundary is the window a browser may
+      reuse the bytes for, so the URL cannot lapse before the copy it names does
 - [x] The SAS lifetime cap is unchanged, and a URL minted at a boundary still has a life inside it —
       the rounding shortens a URL's life by less than one boundary, never lengthens it
 - [x] Media bytes are served with a **`private`** cache directive and a bounded lifetime; the
@@ -114,9 +118,10 @@ URL already gives durable reuse without a service worker's versioned lifecycle t
 ## Tests (TDD)
 
 - **Unit** — the expiry rule: two mints inside a boundary share one instant, a mint on either side of
-  a boundary does not, and the result is still rounded to what a SAS can carry. The listing's
-  signing behaviour is asserted beside the existing mint assertions, so the "one mint method" claim
-  keeps holding: both paths reach the same repository call rather than each rolling its own.
+  a boundary does not, the boundary is asserted to be the cache window so the two cannot drift apart
+  in silence, and the result is still rounded to what a SAS can carry. The listing's signing behaviour
+  is asserted beside the existing mint assertions, so the "one mint method" claim keeps holding: both
+  paths reach the same repository call rather than each rolling its own.
 - **Unit, on the payload** — the serialized listing carries the URL and the expiry, still carries no
   blob path, and an anonymous listing still carries no user id. These are the assertions that make the
   new field safe to add, so they are extended in the same change rather than after it.
@@ -140,9 +145,9 @@ fabricates a URL — it does not show a request was or was not made.
 ```
 Verification: 2026-10-06 — not yet run. Against a running stack, open an activity holding several
 images and confirm in the browser's network panel that the listing request is followed by image
-fetches and by no GET /api/media/{id}/url; revisit inside the same boundary minute and confirm the
-image requests are cache hits rather than re-downloads; leave the page open past the signing window,
-reload, and confirm the tiles still render.
+fetches and by no GET /api/media/{id}/url; revisit inside the same five-minute boundary and confirm
+the image requests are cache hits rather than re-downloads; leave the page open past the signing
+window, reload, and confirm the tiles still render.
 ```
 
 ## Notes / non-goals
@@ -159,12 +164,21 @@ reload, and confirm the tiles still render.
   and why the client is expected to use it rather than ignore it.
 - **Existing clients that ignore the new field keep working**: an extra field is additive, and the
   mint route they already call is still there.
-- **The refresh margin is a whole boundary minute, and it has to be.** Stability and freshness pull
-  against each other: because the minting instant is rounded down, a re-mint inside the same boundary
-  minute returns the very string it was meant to replace — so a client that refreshed on a margin
-  shorter than a boundary could decide to mint and be handed back what it already had. Sixty seconds
-  is one boundary, which is the shortest margin at which the refresh can ever produce a longer-lived
-  URL. The cost is that a URL is judged unusable while up to a minute of life remains.
+- **The refresh margin is one whole boundary, and it has to be.** Stability and freshness pull against
+  each other: because the minting instant is rounded down, a re-mint inside the same boundary returns
+  the very string it was meant to replace — so a client that refreshed on a margin shorter than a
+  boundary could decide to mint and be handed back what it already had. The margin is that boundary
+  and no less, which is the shortest at which a refresh can ever produce a longer-lived URL. The cost
+  is that a URL is judged unusable while up to a boundary of life remains — and since the boundary is
+  the browser's own cache window, that is the same moment the browser's copy goes stale, rather than a
+  second number that happens to be nearby.
+- **A revisit is served from cache only inside one boundary, and that is a limit rather than a bug.**
+  The browser keys its copy by the URL, so a visit in the next boundary mints a new string and the
+  bytes are fetched again even though the browser is still holding them. Widening the boundary widened
+  that window to the whole cache window — which is as far as it can go, because a boundary beyond it
+  would leave a URL outliving the copy it names while shortening what a mint late in the boundary
+  gets. Removing the reload case instead would mean the *client* carrying a URL across a reload, which
+  is a decision about holding a bearer token somewhere durable, not a refinement of this one.
 - **The client's cache is emptied on sign-out.** A media URL is a bearer token with a deadline, and
   the tokens it holds were minted for the session that just ended; leaving them held would let a
   signed-out browser keep rendering private bytes out of its own cache. That is a small addition
