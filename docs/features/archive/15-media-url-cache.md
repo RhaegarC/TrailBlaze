@@ -1,7 +1,7 @@
 # 15 — A listing carries its URLs, and the browser may keep them
 
-Status: **In progress** · [00-mission-2-sprint.md](00-mission-2-sprint.md)
-Source: [PRD](../PRD.md) — Decision #7 (amended) + Decision #32 (new) + Decision #30 + "Reading —
+Status: **Archived** — merged to `develop` in PR #52 · [00-mission-2-sprint.md](../00-mission-2-sprint.md)
+Source: [PRD](../../PRD.md) — Decision #7 (amended) + Decision #32 (new) + Decision #30 + "Reading —
 what a caller receives"
 
 ## Summary
@@ -35,9 +35,9 @@ back to it, instead of re-downloading every image on every visit.
 
 ## Dependencies
 
-- [07-sas-delivery](archive/07-sas-delivery.md) — the minting rule this feature extends to the listing
-- [12-anonymous-media-read](archive/12-anonymous-media-read.md) — the anonymous listing this serves
-- [16-user-delegation-sas](16-user-delegation-sas.md) — read with this one, not required by it. This
+- [07-sas-delivery](07-sas-delivery.md) — the minting rule this feature extends to the listing
+- [12-anonymous-media-read](12-anonymous-media-read.md) — the anonymous listing this serves
+- [16-user-delegation-sas](../16-user-delegation-sas.md) — read with this one, not required by it. This
   feature turns one mint per listing into N, and that is cheap **only** while signing stays local.
   16 is the change that would make each signature a network call, and it carries the cache that
   keeps them from becoming one. Neither feature is a prerequisite for the other, but a reader who

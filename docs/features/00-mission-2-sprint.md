@@ -67,7 +67,7 @@ keeps rows 01–12 and is the record of that mission.
 |---|---|---|---|---|
 | 13 | [upload-size-limits](archive/13-upload-size-limits.md) | 06 | The image and video caps stop being compile-time constants and become **configuration**, with raised defaults (25 MB image / 200 MB video) and **absolute ceilings** (100 MB / 512 MB) that still refuse a runaway upload. The route-level request limits follow the ceilings, so a file the service would accept is never answered with a bare 413 | archived — merged in PR #50. Both caps come from configuration and clamp to their ceilings, the refusal names the cap in force, and the cover and avatar routes now carry the request-size limits they did not need while the image cap sat below Kestrel's 30 MB default. **One criterion is not claimed**: that an oversize request is answered with the service's 400 rather than a bare 413, on all three upload routes, is `verification-only` — every route is `[Authorize]` and the Api tier holds no token, so the attribute is unreachable from a test, and the manual pass has not been run |
 | 14 | [image-thumbnails](14-image-thumbnails.md) | 06, 07, **15** | **Every uploaded image is stored twice** — the original plus a re-encoded derivative at a configured quality and maximum dimension — and the derivative is what the browser receives. Video is untouched: no transcoding, no poster frame, original streamed as today. Needs a new nullable column, so the PRD data model moves with it. **Implemented after 15, not before it** — see the numbering note above | **Not started** |
-| 15 | [media-url-cache](15-media-url-cache.md) | 07, 12 | The media listing **carries each item's read URL and expiry**, collapsing the app's 1+N fan-out into one request; blobs gain a `Cache-Control`; and the SAS expiry is aligned to a window boundary so successive listings mint the *same* URL and a browser cache can hit it. No route is added or removed. Read with 16: minting per item is cheap only while signing stays local | **In progress** — the listing mints a URL per item from one page expiry, the minting instant is rounded to a boundary taken from the cache window so successive listings produce the same string for as long as a browser may reuse the bytes, media uploads carry a bounded `private` `Cache-Control`, and the app asks once and holds what it was given. **Two criteria about the browser are not claimed**: no runner exists in `src/web`, so the reuse and the refresh are `verification-only` and the manual pass has not been run |
+| 15 | [media-url-cache](archive/15-media-url-cache.md) | 07, 12 | The media listing **carries each item's read URL and expiry**, collapsing the app's 1+N fan-out into one request; blobs gain a `Cache-Control`; and the SAS expiry is aligned to a window boundary so successive listings mint the *same* URL and a browser cache can hit it. No route is added or removed. Read with 16: minting per item is cheap only while signing stays local archived — merged in PR #52. The listing mints a URL per item from one page expiry, the minting instant is rounded to a boundary taken from the cache window so successive listings produce the same string for as long as a browser may reuse the bytes, media uploads carry a bounded `private` `Cache-Control`, and the app asks once and holds what it was given. **Two criteria about the browser are not claimed**: no runner exists in `src/web`, so the reuse and the refresh are `verification-only` and the manual pass has not been run |
 | 16 | [user-delegation-sas](16-user-delegation-sas.md) | 07, 12, 15 | **Not performance work.** The storage credential stops being the account key: the API signs read URLs with a **user delegation key** obtained as its own Entra identity, so no account key sits in configuration and the signatures become revocable. The delegation key is cached per key lifetime — the one backend cache this mission actually needs, since it is *not* caller-dependent. **Its first step is to settle whether the emulator can mint one at all**, because if it cannot, no tier exercises the delegation path | **Not started** |
 
 ## Definition of Done
@@ -80,7 +80,7 @@ keeps rows 01–12 and is the record of that mission.
 - [ ] Video behaviour is unchanged — stored as-is, no derivative, served as today
 - [x] A media listing carries a read URL and an expiry per item, and the app makes one request for a
       listing rather than one plus N (the app's half is `verification-only` —
-      [15](15-media-url-cache.md) records what was and was not established)
+      [15](archive/15-media-url-cache.md) records what was and was not established)
 - [x] Media bytes carry a bounded, `private` cache header, and the SAS expiry remains the control
 - [ ] The data-model change lands in the PRD in the same pull request as the migration
 - [ ] No storage account key is read from configuration: the API signs read URLs as its own identity,
@@ -110,7 +110,7 @@ otherwise the Mission 1 close figure. The Repository row's bare split was taken 
 `Category!=Container` run and the container half from a `Category=Container` run, which partition the
 same 125.)*
 
-*(2026-10-06 — [15](15-media-url-cache.md) added fourteen test cases: twelve in the service tier's
+*(2026-10-06 — [15](archive/15-media-url-cache.md) added fourteen test cases: twelve in the service tier's
 offline tests, all in `TrailBlaze.Service.Test`, and two in the storage tier, which is
 container-tagged. So the container column moved by fourteen and the bare column by twelve, and the
 two are no longer the same distance apart as they were. **The Repository row's bare split moved for a
@@ -134,7 +134,11 @@ count moved by one because the coupling is asserted rather than commented.)*
 
 - **The web half of 14 and 15 cannot be asserted.** `src/web` has no test runner, which bugs 01–03
   each record, so the client-side claims are `verification-only`: what was run is written down and the
-  rendered result is a browser observation.
+  rendered result is a browser observation. *(2026-10-06 — [15](archive/15-media-url-cache.md) merged
+  with its pass still unrun, and that pass was not decoration: the browser half is where the caching
+  defect lived. The minting boundary was a minute against a five-minute cache window, so a returning
+  visitor re-downloaded — invisible to every backend test, and found by reading the two numbers
+  against each other rather than by running anything. The pass is still outstanding.)*
 - **A merge that does not exist.** On 2026-10-05 the message "pr merged" arrived naming no pull
   request, and no merge matches it — the newest PR of any state is #48, and neither `origin/develop`
   nor `origin/master` had moved since 2026-09-30 11:01Z when it was checked. Recorded here so it is
