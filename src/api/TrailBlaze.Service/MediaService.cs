@@ -15,6 +15,7 @@ public sealed class MediaService(
     IStorageRepository storageRepository,
     IActivityAuthorizationService authorization,
     IUploadValidationService uploadValidation,
+    IThumbnailService thumbnailService,
     SignedUrlLifetime signedUrlLifetime,
     ILogger<MediaService> logger) : IMediaService
 {
@@ -73,7 +74,23 @@ public sealed class MediaService(
 
             User? uploader = await dbRepository.GetAsync<User>(row => row.Id == caller.Id);
 
-            string path = MediaPathFor(activityId, contentType!);
+            // Held so one copy serves both the original and the derivative; a video is streamed
+            // straight through, which is why the two caps stay separate settings. Null means the
+            // bytes ran past the cap the declared length was checked against.
+            byte[]? held = null;
+
+            if (kind == Constant.MediaKind.Image)
+            {
+                held = await BufferAsync(content);
+
+                if (held is null)
+                {
+                    return Rejected(
+                        Constant.Message.ImageTooLarge(uploadValidation.AppliedImageCapBytes));
+                }
+            }
+
+            (string path, string derivativePath) = MediaPathsFor(activityId, contentType!);
 
             var media = new Media
             {
@@ -105,7 +122,11 @@ public sealed class MediaService(
             try
             {
                 await storageRepository.UploadAsync(
-                    Constant.StorageContainer.Media, path, content, contentType!, Constant.MediaCache.Directive);
+                    Constant.StorageContainer.Media,
+                    path,
+                    held is null ? content : new MemoryStream(held),
+                    contentType!,
+                    Constant.MediaCache.Directive);
             }
             catch
             {
@@ -123,6 +144,13 @@ public sealed class MediaService(
                 }
 
                 throw;
+            }
+
+            // After the original, and never at its expense: an optimization that failed must not
+            // turn a stored upload into a failed one.
+            if (held is not null)
+            {
+                await TryStoreDerivativeAsync(media, held, derivativePath);
             }
 
             // Minted here rather than fetched by the client afterwards, so the answer to an upload is
@@ -223,6 +251,14 @@ public sealed class MediaService(
             await dbRepository.DeleteAsync<Media>([media.Id]);
             await storageRepository.DeleteAsync(Constant.StorageContainer.Media, media.BlobPath);
 
+            // A whole blob of its own: leaving it would keep the smaller copy of a deleted picture
+            // reachable by anyone still holding its URL.
+            if (media.ThumbnailPath is not null)
+            {
+                await storageRepository.DeleteAsync(
+                    Constant.StorageContainer.Media, media.ThumbnailPath);
+            }
+
             return MediaOutcome.Deleted();
         }
         catch (Exception ex)
@@ -260,6 +296,8 @@ public sealed class MediaService(
             // token carries are the same value rather than two that ought to agree.
             DateTimeOffset expiresOn = signedUrlLifetime.ExpiryFrom(DateTimeOffset.UtcNow);
 
+            // The original, deliberately, where the listing signs the derivative: signing the
+            // smaller copy here would make the stored original write-only.
             Uri url = await storageRepository.CreateReadUrlAsync(
                 Constant.StorageContainer.Media, media.BlobPath, expiresOn);
 
@@ -281,8 +319,78 @@ public sealed class MediaService(
 
     /// <summary>Where a newly uploaded item is stored: the activity's folder, then a fresh name, so a
     /// client that cached a path is never served the previous bytes under it.</summary>
-    private string MediaPathFor(string activityId, string contentType) =>
-        $"{activityId}/{Guid.NewGuid():N}{uploadValidation.FileExtensionFor(contentType)}";
+    /// <remarks>Both paths come from one name, so the derivative sits beside its original — and the
+    /// suffix is required, since a JPEG's own extension is already the derivative's.</remarks>
+    private (string Original, string Derivative) MediaPathsFor(string activityId, string contentType)
+    {
+        string stem = $"{activityId}/{Guid.NewGuid():N}";
+
+        return (
+            $"{stem}{uploadValidation.FileExtensionFor(contentType)}",
+            $"{stem}{Constant.Thumbnail.PathSuffix}{Constant.Thumbnail.FileExtension}");
+    }
+
+    /// <summary>The uploaded bytes, held in memory, or null when there are more of them than the
+    /// image cap allows.</summary>
+    /// <remarks>Bounded by the cap and not by the length the client declared, which is a claim. One
+    /// byte past the cap is read on purpose, so a file exactly at it is copied and one over is not.
+    /// </remarks>
+    private async Task<byte[]?> BufferAsync(Stream source)
+    {
+        long cap = uploadValidation.AppliedImageCapBytes;
+        long allowed = cap + 1;
+        long read = 0;
+
+        using var held = new MemoryStream();
+        byte[] chunk = new byte[81_920];
+
+        while (read < allowed)
+        {
+            int taken = await source.ReadAsync(
+                chunk.AsMemory(0, (int)Math.Min(chunk.Length, allowed - read)));
+
+            if (taken == 0)
+            {
+                break;
+            }
+
+            held.Write(chunk, 0, taken);
+            read += taken;
+        }
+
+        return read > cap ? null : held.ToArray();
+    }
+
+    /// <summary>Derives a smaller copy and records it, or leaves the item served from its original.</summary>
+    /// <remarks>The column is written only once the bytes are there, and every failure here is logged
+    /// and swallowed rather than raised, because the original has already landed and is the item.
+    /// </remarks>
+    private async Task TryStoreDerivativeAsync(Media media, byte[] original, string derivativePath)
+    {
+        try
+        {
+            ThumbnailResult? derivative = thumbnailService.Create(original);
+
+            if (derivative is null)
+            {
+                return;
+            }
+
+            await storageRepository.UploadAsync(
+                Constant.StorageContainer.Media,
+                derivativePath,
+                new MemoryStream(derivative.Content),
+                derivative.ContentType,
+                Constant.MediaCache.Directive);
+
+            media.ThumbnailPath = derivativePath;
+            await dbRepository.UpdateAsync(media);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Deriving a smaller copy of media {MediaId} failed.", media.Id);
+        }
+    }
 
     /// <summary>The stored item as the client sees it. It carries a URL rather than the path that URL
     /// points at: the bytes are reached through feature 07, and this is what says there are any.</summary>
@@ -296,8 +404,9 @@ public sealed class MediaService(
         bool discloseUploaderId,
         DateTimeOffset expiresOn)
     {
+        // The derivative is what a page loads; an item with none is served from its original.
         Uri url = await storageRepository.CreateReadUrlAsync(
-            Constant.StorageContainer.Media, media.BlobPath, expiresOn);
+            Constant.StorageContainer.Media, media.ThumbnailPath ?? media.BlobPath, expiresOn);
 
         return new MediaResponse
         {

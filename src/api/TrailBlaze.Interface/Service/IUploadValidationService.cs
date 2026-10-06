@@ -21,6 +21,14 @@ using TrailBlaze.Model;
 /// </remarks>
 public interface IUploadValidationService
 {
+    /// <summary>The image cap in force, in bytes.</summary>
+    /// <remarks>
+    /// Exposed because an upload that has to hold an image in memory must bound that copy by the
+    /// same number the validation used. A length the client declared is a claim about a request,
+    /// and a claim must not become the memory one is allowed to allocate.
+    /// </remarks>
+    long AppliedImageCapBytes { get; }
+
     /// <summary>Validates an image against the shared image allowlist and the applied image cap.</summary>
     /// <param name="contentType">The declared content type, as sent by the client.</param>
     /// <param name="sizeBytes">The number of bytes the upload carries.</param>

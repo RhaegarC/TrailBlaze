@@ -105,6 +105,14 @@ public static class Constant
         /// <summary>The largest video an upload may carry, in bytes. Optional, and held inside
         /// <see cref="Upload.MaxVideoSizeCapBytes"/> whatever it says.</summary>
         public const string VideoUploadCapBytes = "VideoUploadCapBytes";
+
+        /// <summary>The quality an image's derivative is re-encoded at. Optional, and held inside
+        /// <see cref="Thumbnail.QualityCeiling"/> whatever it says.</summary>
+        public const string ThumbnailQuality = "ThumbnailQuality";
+
+        /// <summary>The longest edge an image's derivative may have, in pixels. Optional, and held
+        /// inside <see cref="Thumbnail.MaxDimensionCeiling"/> whatever it says.</summary>
+        public const string ThumbnailMaxDimension = "ThumbnailMaxDimension";
     }
 
     /// <summary>
@@ -356,6 +364,10 @@ public static class Constant
 
         public const int BlobPathLength = 512;
 
+        /// <summary>Mirrors <see cref="BlobPathLength"/>: the derivative's path is composed the same
+        /// way, so a column narrower than the original's could not hold one.</summary>
+        public const int ThumbnailPathLength = 512;
+
         public const int ContentTypeLength = 128;
 
         public const int OriginalFileNameLength = 260;
@@ -364,6 +376,63 @@ public static class Constant
         /// column is longer, because EF's key convention bound that one; comparing the two is a
         /// plain string comparison, so the widths need not match.</summary>
         public const int ReferenceIdLength = 128;
+    }
+
+    /// <summary>
+    /// The derivative an uploaded image is stored with (Decision #31): what it is encoded as, and
+    /// the limits that decide whether an upload is decoded at all.
+    /// </summary>
+    /// <remarks>
+    /// The decoder limits are the safety half and are not tunable, unlike the quality and the
+    /// maximum dimension, which are settings precisely so they can be raised without a rebuild.
+    /// <see cref="DecoderMaxDimension"/> and <see cref="DecoderMemoryBytes"/> bound the two
+    /// allocations an upload controls: the pixels a file claims and the memory decoding them takes.
+    /// Both are needed — the per-side limit is what the decoders honour, and a decoded image that
+    /// stays under it can still be large enough to exhaust memory.
+    /// </remarks>
+    public static class Thumbnail
+    {
+        /// <summary>The quality a derivative is re-encoded at unless configuration says otherwise.</summary>
+        /// <remarks>Very lossy on purpose, which is visible on the enlarged view, and a setting so it
+        /// can be turned up.</remarks>
+        public const int QualityDefault = 5;
+
+        /// <summary>The highest quality configuration may ask for.</summary>
+        public const int QualityCeiling = 100;
+
+        /// <summary>The longest edge a derivative may have unless configuration says otherwise.</summary>
+        /// <remarks>The setting that decides whether the enlarged view is legible, since the
+        /// derivative is what every surface receives.</remarks>
+        public const int MaxDimensionDefault = 1600;
+
+        /// <summary>The highest maximum dimension configuration may ask for.</summary>
+        public const int MaxDimensionCeiling = 4096;
+
+        /// <summary>What a derivative is encoded as, and the extension it is named with.</summary>
+        public const string ContentType = "image/jpeg";
+
+        /// <inheritdoc cref="ContentType"/>
+        public const string FileExtension = ".jpg";
+
+        /// <summary>What a derivative's name carries between its stem and its extension.</summary>
+        /// <remarks>Load-bearing: an uploaded JPEG's extension is already <see cref="FileExtension"/>,
+        /// so a derivative named from the stem alone would be written onto the original's path.</remarks>
+        public const string PathSuffix = "-thumb";
+
+        /// <summary>The longest edge an uploaded image may have before it is refused undecoded.</summary>
+        /// <remarks>Refuses a decompression bomb rather than shaping an ordinary photo, and is checked
+        /// against the file's header so the refusal costs no allocation.</remarks>
+        public const int DecoderMaxDimension = 20_000;
+
+        /// <summary>The pixel cache a decode may use, in bytes.</summary>
+        /// <remarks>A ceiling rather than a hint: with the disk cache off in <c>ThumbnailService</c>, a
+        /// file needing more fails to decode instead of spilling to the container's volume.</remarks>
+        public const long DecoderMemoryBytes = 268_435_456;
+
+        /// <summary>The most frames a decode may hold.</summary>
+        /// <remarks>A bound rather than a target of one: this limit refuses a decode, so a single-frame
+        /// list would reject every animation instead of reading its first frame.</remarks>
+        public const long DecoderMaxFrames = 128;
     }
 
     /// <summary>

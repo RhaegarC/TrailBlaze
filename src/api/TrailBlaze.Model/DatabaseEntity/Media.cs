@@ -21,6 +21,11 @@ public sealed class Media : EntityBase
 
     public string ContentType { get; set; } = string.Empty;
 
+    /// <summary>The smaller copy a page loads, beside its original in the private container. Null for
+    /// a video, and for an image with none — an older row, or a decode that yielded nothing — which is
+    /// served from <see cref="BlobPath"/> instead.</summary>
+    public string? ThumbnailPath { get; set; }
+
     /// <summary>The bytes actually stored. A column rather than a blob property, so a listing can
     /// be answered without reaching storage at all.</summary>
     public long SizeBytes { get; set; }

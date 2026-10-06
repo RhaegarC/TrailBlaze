@@ -321,4 +321,76 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
             await storage.DeleteAsync(Container, path);
         }
     }
+
+    /// <summary>
+    /// An original and its derivative are two objects in the same private container, each reached by
+    /// its own URL, and removing one leaves the other alone.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What the derivative needs from storage and cannot get from a double: that two paths in one
+    /// container are genuinely separate objects. The paths differ only by the suffix the feature puts
+    /// between the stem and the extension, so if the backend treated them as one key the derivative
+    /// would silently replace the bytes it was made from — and the suite would never see it, because
+    /// both writes would report success.
+    /// </para>
+    /// <para>
+    /// The derivative's content type is asserted too, and for the same reason the round trip above
+    /// asserts one: a JPEG served without its type is the derivative failing at the only job it has.
+    /// </para>
+    /// </remarks>
+    [SkippableFact]
+    public async Task An_original_and_its_derivative_are_separate_objects_in_the_same_container()
+    {
+        AzureBlobStorageRepository storage = fixture.Repository();
+        const string Container = Constant.StorageContainer.Media;
+        string stem = $"integration/{Guid.NewGuid():N}";
+        string originalPath = $"{stem}.png";
+        string derivativePath = $"{stem}{Constant.Thumbnail.PathSuffix}{Constant.Thumbnail.FileExtension}";
+        byte[] original = "the original's bytes"u8.ToArray();
+        byte[] derivative = "the derivative's bytes"u8.ToArray();
+
+        try
+        {
+            await storage.UploadAsync(
+                Container, originalPath, new MemoryStream(original), "image/png", Constant.MediaCache.Directive);
+            await storage.UploadAsync(
+                Container,
+                derivativePath,
+                new MemoryStream(derivative),
+                Constant.Thumbnail.ContentType,
+                Constant.MediaCache.Directive);
+
+            using var http = new HttpClient();
+
+            // Both fetched before either is deleted, so each answer is about its own object rather
+            // than about what a delete left behind.
+            HttpResponseMessage originalResponse = await http.GetAsync(
+                await storage.CreateReadUrlAsync(Container, originalPath, DateTimeOffset.UtcNow.AddMinutes(5)));
+            HttpResponseMessage derivativeResponse = await http.GetAsync(
+                await storage.CreateReadUrlAsync(Container, derivativePath, DateTimeOffset.UtcNow.AddMinutes(5)));
+
+            Assert.Equal(HttpStatusCode.OK, originalResponse.StatusCode);
+            Assert.Equal(original, await originalResponse.Content.ReadAsByteArrayAsync());
+
+            Assert.Equal(HttpStatusCode.OK, derivativeResponse.StatusCode);
+            Assert.Equal(Constant.Thumbnail.ContentType, derivativeResponse.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(derivative, await derivativeResponse.Content.ReadAsByteArrayAsync());
+
+            // The item's removal takes its original first; the derivative has to survive that, since
+            // the service removes it as a second call and a shared key would make this its death.
+            await storage.DeleteAsync(Container, originalPath);
+
+            HttpResponseMessage afterDelete = await http.GetAsync(
+                await storage.CreateReadUrlAsync(Container, derivativePath, DateTimeOffset.UtcNow.AddMinutes(5)));
+
+            Assert.Equal(HttpStatusCode.OK, afterDelete.StatusCode);
+            Assert.Equal(derivative, await afterDelete.Content.ReadAsByteArrayAsync());
+        }
+        finally
+        {
+            await storage.DeleteAsync(Container, originalPath);
+            await storage.DeleteAsync(Container, derivativePath);
+        }
+    }
 }

@@ -44,11 +44,17 @@ internal static class ServiceExt
             ParseBytes(configuration[Constant.ConfigKey.ImageUploadCapBytes]),
             ParseBytes(configuration[Constant.ConfigKey.VideoUploadCapBytes])));
 
+        // The shape of an image's derivative, read the same way again.
+        services.AddSingleton(_ => new ThumbnailOptions(
+            ParseInt(configuration[Constant.ConfigKey.ThumbnailQuality]),
+            ParseInt(configuration[Constant.ConfigKey.ThumbnailMaxDimension])));
+
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IActivityAuthorizationService, ActivityAuthorizationService>();
         services.AddScoped<IActivityService, ActivityService>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<IUploadValidationService, UploadValidationService>();
+        services.AddScoped<IThumbnailService, ThumbnailService>();
         services.AddScoped<IUserContextService, UserContextService>();
 
         services.AddEntraAuthentication(configuration);
@@ -65,6 +71,13 @@ internal static class ServiceExt
     private static long ParseBytes(string? value) =>
         long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long bytes)
             ? bytes
+            : 0;
+
+    /// <summary>A configured integer, or zero for an absent or unreadable one, which
+    /// <see cref="ThumbnailOptions"/> reads as the absence of a setting.</summary>
+    private static int ParseInt(string? value) =>
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
+            ? number
             : 0;
 
     /// <summary>Reads a configuration value the application cannot run without, and names it in the
