@@ -238,4 +238,87 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
 
         Assert.Null(thrown);
     }
+
+    /// <summary>
+    /// A cache directive given on upload is stored with the object and served back on the response.
+    /// </summary>
+    /// <remarks>
+    /// Only a real backend can answer this. A declared header is not a stored header until something
+    /// stores it, and a fake that implemented the contract would be asserting its own dictionary —
+    /// which is the reason this tier exists rather than a double. The pair matters together: this test
+    /// says the directive survives the round trip, and its neighbour says an upload that gave none is
+    /// not given one on the object's behalf.
+    /// </remarks>
+    [SkippableFact]
+    public async Task A_cache_directive_given_on_upload_is_served_back_with_the_object()
+    {
+        AzureBlobStorageRepository storage = fixture.Repository();
+        const string Container = Constant.StorageContainer.Media;
+        string path = $"integration/{Guid.NewGuid():N}.txt";
+        string directive = Constant.MediaCache.Directive;
+
+        try
+        {
+            await storage.UploadAsync(
+                Container,
+                path,
+                new MemoryStream("trail-blaze"u8.ToArray()),
+                "text/plain",
+                directive);
+
+            Uri readUrl = await storage.CreateReadUrlAsync(
+                Container, path, DateTimeOffset.UtcNow.AddMinutes(5));
+
+            using var http = new HttpClient();
+            HttpResponseMessage response = await http.GetAsync(readUrl);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.NotNull(response.Headers.CacheControl);
+            Assert.True(response.Headers.CacheControl!.Private);
+            Assert.Equal(
+                TimeSpan.FromSeconds(Constant.MediaCache.MaxAgeSeconds),
+                response.Headers.CacheControl.MaxAge);
+        }
+        finally
+        {
+            await storage.DeleteAsync(Container, path);
+        }
+    }
+
+    /// <summary>
+    /// An upload that names no cache directive leaves the property off the object rather than
+    /// inventing one.
+    /// </summary>
+    /// <remarks>
+    /// The other half of the pair, and the reason the parameter is optional rather than defaulted to
+    /// something: covers and avatars are stored through this same call, and a directive supplied here
+    /// would apply to them too. A default of "private" would therefore mark a cover — the one image
+    /// whose container moves — as something a browser may keep.
+    /// </remarks>
+    [SkippableFact]
+    public async Task An_upload_given_no_cache_directive_stores_none()
+    {
+        AzureBlobStorageRepository storage = fixture.Repository();
+        const string Container = Constant.StorageContainer.Media;
+        string path = $"integration/{Guid.NewGuid():N}.txt";
+
+        try
+        {
+            await storage.UploadAsync(
+                Container, path, new MemoryStream("trail-blaze"u8.ToArray()), "text/plain");
+
+            Uri readUrl = await storage.CreateReadUrlAsync(
+                Container, path, DateTimeOffset.UtcNow.AddMinutes(5));
+
+            using var http = new HttpClient();
+            HttpResponseMessage response = await http.GetAsync(readUrl);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Null(response.Headers.CacheControl);
+        }
+        finally
+        {
+            await storage.DeleteAsync(Container, path);
+        }
+    }
 }

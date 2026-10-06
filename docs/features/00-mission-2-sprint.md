@@ -45,6 +45,14 @@ order. A number here is a position in this table, not a claim that the row is th
 as its neighbours; 16's row is the one that differs, and it is placed last so it is read after the
 performance it interacts with.
 
+*(2026-10-05 — **15 was implemented before 14**, so the two rows are out of priority order and the
+rule above is broken once, deliberately. 14's criterion "the media listing signs the derivative"
+presumes a listing that signs anything, and the listing did not: it carried metadata and the app
+fetched one URL per item. Building the derivative first would have meant writing the serving path
+twice — once over the fan-out and again over the listing 15 introduces — so 15 went first and 14 is
+now the switch of which path the listing signs. 14's `Depends on` column records the dependency. No
+other row moves.)*
+
 ## Feature breakdown
 
 Number = priority (lowest first = next to implement); file = `docs/features/NN-name.md`.
@@ -58,8 +66,8 @@ keeps rows 01–12 and is the record of that mission.
 | # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
 |---|---|---|---|---|
 | 13 | [upload-size-limits](archive/13-upload-size-limits.md) | 06 | The image and video caps stop being compile-time constants and become **configuration**, with raised defaults (25 MB image / 200 MB video) and **absolute ceilings** (100 MB / 512 MB) that still refuse a runaway upload. The route-level request limits follow the ceilings, so a file the service would accept is never answered with a bare 413 | archived — merged in PR #50. Both caps come from configuration and clamp to their ceilings, the refusal names the cap in force, and the cover and avatar routes now carry the request-size limits they did not need while the image cap sat below Kestrel's 30 MB default. **One criterion is not claimed**: that an oversize request is answered with the service's 400 rather than a bare 413, on all three upload routes, is `verification-only` — every route is `[Authorize]` and the Api tier holds no token, so the attribute is unreachable from a test, and the manual pass has not been run |
-| 14 | [image-thumbnails](14-image-thumbnails.md) | 06, 07 | **Every uploaded image is stored twice** — the original plus a re-encoded derivative at a configured quality and maximum dimension — and the derivative is what the browser receives. Video is untouched: no transcoding, no poster frame, original streamed as today. Needs a new nullable column, so the PRD data model moves with it | **Not started** |
-| 15 | [media-url-cache](15-media-url-cache.md) | 07, 12 | The media listing **carries each item's read URL and expiry**, collapsing the app's 1+N fan-out into one request; blobs gain a `Cache-Control`; and the SAS expiry is aligned to a window boundary so successive listings mint the *same* URL and a browser cache can hit it. No route is added or removed. Read with 16: minting per item is cheap only while signing stays local | **Not started** |
+| 14 | [image-thumbnails](14-image-thumbnails.md) | 06, 07, **15** | **Every uploaded image is stored twice** — the original plus a re-encoded derivative at a configured quality and maximum dimension — and the derivative is what the browser receives. Video is untouched: no transcoding, no poster frame, original streamed as today. Needs a new nullable column, so the PRD data model moves with it. **Implemented after 15, not before it** — see the numbering note above | **Not started** |
+| 15 | [media-url-cache](15-media-url-cache.md) | 07, 12 | The media listing **carries each item's read URL and expiry**, collapsing the app's 1+N fan-out into one request; blobs gain a `Cache-Control`; and the SAS expiry is aligned to a window boundary so successive listings mint the *same* URL and a browser cache can hit it. No route is added or removed. Read with 16: minting per item is cheap only while signing stays local | **In progress** — the listing mints a URL per item from one page expiry, the minting instant is rounded to a boundary minute so successive listings produce the same string, media uploads carry a bounded `private` `Cache-Control`, and the app asks once and holds what it was given. **Two criteria about the browser are not claimed**: no runner exists in `src/web`, so the reuse and the refresh are `verification-only` and the manual pass has not been run |
 | 16 | [user-delegation-sas](16-user-delegation-sas.md) | 07, 12, 15 | **Not performance work.** The storage credential stops being the account key: the API signs read URLs with a **user delegation key** obtained as its own Entra identity, so no account key sits in configuration and the signatures become revocable. The delegation key is cached per key lifetime — the one backend cache this mission actually needs, since it is *not* caller-dependent. **Its first step is to settle whether the emulator can mint one at all**, because if it cannot, no tier exercises the delegation path | **Not started** |
 
 ## Definition of Done
@@ -70,9 +78,10 @@ keeps rows 01–12 and is the record of that mission.
       the original stays retrievable
 - [ ] A decode that cannot produce a derivative leaves the item stored and served from its original
 - [ ] Video behaviour is unchanged — stored as-is, no derivative, served as today
-- [ ] A media listing carries a read URL and an expiry per item, and the app makes one request for a
-      listing rather than one plus N
-- [ ] Media bytes carry a bounded, `private` cache header, and the SAS expiry remains the control
+- [x] A media listing carries a read URL and an expiry per item, and the app makes one request for a
+      listing rather than one plus N (the app's half is `verification-only` —
+      [15](15-media-url-cache.md) records what was and was not established)
+- [x] Media bytes carry a bounded, `private` cache header, and the SAS expiry remains the control
 - [ ] The data-model change lands in the PRD in the same pull request as the migration
 - [ ] No storage account key is read from configuration: the API signs read URLs as its own identity,
       and the required setting it replaces still stops startup when absent
@@ -88,10 +97,10 @@ frozen measurement taken when that mission closed.
 
 | Project | Bare machine | With the containers |
 |---|---|---|
-| `TrailBlaze.Service.Test` | 281 / 0 / 281 | 281 / 0 / 281 |
-| `TrailBlaze.Repository.Test` | 47 / 78 / 125 | 125 / 0 / 125 |
+| `TrailBlaze.Service.Test` | 292 / 0 / 292 | 292 / 0 / 292 |
+| `TrailBlaze.Repository.Test` | 66 / 61 / 127 | 127 / 0 / 127 |
 | `TrailBlaze.Api.Test` | 20 / 0 / 20 | 20 / 0 / 20 |
-| **All three** | **348 / 78 / 426** | **426 / 0 / 426** |
+| **All three** | **378 / 61 / 439** | **439 / 0 / 439** |
 
 Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
 the container tiers skip, and `Category=Container` is the only trait in the solution. *(2026-10-05 —
@@ -100,6 +109,18 @@ bare-machine count and the container count moved by the same nine and the contai
 otherwise the Mission 1 close figure. The Repository row's bare split was taken from a
 `Category!=Container` run and the container half from a `Category=Container` run, which partition the
 same 125.)*
+
+*(2026-10-06 — [15](15-media-url-cache.md) added thirteen test cases: eleven in the service tier's
+offline tests, all in `TrailBlaze.Service.Test`, and two in the storage tier, which is
+container-tagged. So the container column moved by thirteen and the bare column by eleven, and the
+two are no longer the same distance apart as they were. **The Repository row's bare split moved for a
+second reason, and it is worth stating rather than leaving as a puzzle**: the row above was taken
+with the emulator down, and this one with it up. The storage tier is container-tagged but skips only
+when *nothing answers at its endpoint*, so a bare run on a machine with Azurite running executes its
+19 storage tests and skips only the 61 that need SQL — 47 offline + 19 storage = the 66 passed, 61
+skipped. `Category!=Container` is therefore not the offline run, exactly as
+[testing-and-tdd.md](../testing-and-tdd.md) warns: it reports 47 / 0 / 47 here, and `Category=Container`
+reports 19 / 61 / 80. The two partitions are of the same 127.)*
 
 ## Open items
 

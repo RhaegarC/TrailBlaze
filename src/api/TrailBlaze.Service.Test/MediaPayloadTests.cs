@@ -26,8 +26,8 @@ public sealed class MediaPayloadTests
     public void An_anonymous_payload_names_the_uploader_without_identifying_them() =>
         Assert.Equal(
             [
-                "contentType", "createdOn", "id", "kind", "originalFileName",
-                "sizeBytes", "uploaderDisplayName",
+                "contentType", "createdOn", "expiresOnUtc", "id", "kind", "originalFileName",
+                "sizeBytes", "uploaderDisplayName", "url",
             ],
             NamesOf(Response(uploaderId: null)));
 
@@ -35,8 +35,8 @@ public sealed class MediaPayloadTests
     public void A_signed_in_payload_carries_the_uploaders_id_as_well() =>
         Assert.Equal(
             [
-                "contentType", "createdOn", "id", "kind", "originalFileName",
-                "sizeBytes", "uploadedByUserId", "uploaderDisplayName",
+                "contentType", "createdOn", "expiresOnUtc", "id", "kind", "originalFileName",
+                "sizeBytes", "uploadedByUserId", "uploaderDisplayName", "url",
             ],
             NamesOf(Response(uploaderId: SomebodyElse)));
 
@@ -48,6 +48,15 @@ public sealed class MediaPayloadTests
     public void A_withheld_id_is_absent_rather_than_null() =>
         Assert.DoesNotContain("uploadedByUserId", Serialised(Response(uploaderId: null)));
 
+    /// <summary>
+    /// The item is served from a URL rather than named by its path, which is what keeps the private
+    /// container's addressing out of a payload anybody may fetch.
+    /// </summary>
+    /// <remarks>
+    /// Two assertions, because the field is new and the name is the whole of the first one: a
+    /// property called <c>BlobPath</c> holding a URL would still read as an address a client could
+    /// keep and reuse, and would defeat the claim the second assertion makes.
+    /// </remarks>
     [Fact]
     public void The_response_has_no_blob_path_property() =>
         Assert.DoesNotContain(
@@ -62,6 +71,8 @@ public sealed class MediaPayloadTests
         SizeBytes = 32,
         OriginalFileName = "one.png",
         CreatedOn = new DateTimeOffset(2026, 3, 14, 8, 0, 0, TimeSpan.Zero),
+        Url = "https://signed.invalid/media/blobs/the-item",
+        ExpiresOnUtc = new DateTimeOffset(2026, 3, 14, 8, 15, 0, TimeSpan.Zero),
         UploadedByUserId = uploaderId,
         UploaderDisplayName = "Ada",
     };

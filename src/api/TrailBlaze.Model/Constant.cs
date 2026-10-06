@@ -167,6 +167,25 @@ public static class Constant
         public const string Media = "media";
     }
 
+    /// <summary>
+    /// How long a browser may re-show an item's bytes without asking for them again.
+    /// </summary>
+    /// <remarks>
+    /// Bounded well below <see cref="SignedUrlLifetime.Default"/> because the URL is the control and
+    /// this is not: a cached copy is re-shown after its token has lapsed, which is what a window means
+    /// rather than something the window fails to prevent. <c>private</c> keeps an intermediary from
+    /// storing a copy at all, and it is never <c>immutable</c> — a cover's path changes when an entry
+    /// crosses the public line, so nothing served this way is content-stable.
+    /// </remarks>
+    public static class MediaCache
+    {
+        /// <summary>The window, in seconds, after which a browser must ask again.</summary>
+        public const int MaxAgeSeconds = 300;
+
+        /// <summary>The directive media bytes are stored with.</summary>
+        public static readonly string Directive = $"private, max-age={MaxAgeSeconds}";
+    }
+
     /// <summary>The values <c>User.Role</c> accepts. Changing this list needs a migration, and
     /// <c>CK_Users_Role</c> is composed from it.</summary>
     public static class UserRole

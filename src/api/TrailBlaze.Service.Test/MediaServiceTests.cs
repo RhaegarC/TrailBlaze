@@ -220,7 +220,7 @@ public sealed class MediaServiceTests
         await harness.Service.UploadAsync(
             ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
 
-        (string container, string path, string contentType) = harness.Storage.Uploads.Single();
+        (string container, string path, string contentType, _) = harness.Storage.Uploads.Single();
 
         Assert.Equal(Constant.StorageContainer.Media, container);
         Assert.StartsWith($"{ActivityId}/", path, StringComparison.Ordinal);
@@ -519,6 +519,131 @@ public sealed class MediaServiceTests
         Assert.Equal("one", listing.Items[0].Id);
     }
 
+    // ---- The listing carries its URLs -------------------------------------------------------
+
+    /// <summary>
+    /// Every item in a listing arrives with a URL of its own, so a client that renders a page of
+    /// twenty images makes one request rather than twenty-one.
+    /// </summary>
+    /// <remarks>
+    /// The URL is minted here rather than fetched here: signing is a local computation over the
+    /// account key, so a page's worth costs one loop, while asking a client to fetch each one costs a
+    /// round trip per image. What this tier can assert is which blob was signed and with what instant;
+    /// that the resulting string opens the blob is the container tier's claim.
+    /// </remarks>
+    [Fact]
+    public async Task A_listing_carries_a_url_for_every_item()
+    {
+        var harness = new Harness();
+        harness.Repository.Items = [Item("one", Contributor), Item("two", Contributor)];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        Assert.Equal(2, harness.Storage.ReadUrls.Count);
+        Assert.Equal(
+            ["https://signed.invalid/media/blobs/one", "https://signed.invalid/media/blobs/two"],
+            listing.Items.Select(item => item.Url));
+    }
+
+    /// <summary>
+    /// One instant for the whole page rather than one per item, which is what lets a reader who
+    /// re-lists inside the same minute be handed the same strings back.
+    /// </summary>
+    /// <remarks>
+    /// A per-item instant would still be correct in the sense of "each URL eventually lapses", and
+    /// would still fail this: two items minted microseconds apart land on different strings, and a
+    /// browser's cache key moves for no reason. The expiry each response reports is asserted to be
+    /// that same instant, so a client counting down to it is counting down to what the token carries.
+    /// </remarks>
+    [Fact]
+    public async Task Every_item_in_a_listing_is_signed_from_one_expiry()
+    {
+        var harness = new Harness();
+        harness.Repository.Items = [Item("one", Contributor), Item("two", Contributor)];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        DateTimeOffset signed = Assert.Single(harness.Storage.ReadUrls.Select(url => url.ExpiresOn).Distinct());
+        Assert.Equal([signed, signed], listing.Items.Select(item => item.ExpiresOnUtc));
+    }
+
+    /// <summary>Each URL names that item's own blob, in the private container.</summary>
+    [Fact]
+    public async Task A_listing_signs_each_items_own_blob_in_the_private_container()
+    {
+        var harness = new Harness();
+        harness.Repository.Items = [Item("one", Contributor), Item("two", Contributor)];
+
+        await harness.Service.ListAsync(ActivityId);
+
+        Assert.All(
+            harness.Storage.ReadUrls,
+            url => Assert.Equal(Constant.StorageContainer.Media, url.Container));
+        Assert.Equal(["blobs/one", "blobs/two"], harness.Storage.ReadUrls.Select(url => url.Path));
+    }
+
+    /// <summary>
+    /// An uploaded item is answered with a URL too, so a client needs no second request to show what
+    /// it just sent.
+    /// </summary>
+    [Fact]
+    public async Task An_upload_is_answered_with_a_url_and_its_expiry()
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        (string container, string path, DateTimeOffset expiresOn) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Equal(Constant.StorageContainer.Media, container);
+        Assert.Equal(harness.Repository.Inserted.Single().BlobPath, path);
+        Assert.Equal($"https://signed.invalid/{container}/{path}", outcome.Item!.Url);
+        Assert.Equal(expiresOn, outcome.Item.ExpiresOnUtc);
+    }
+
+    // ---- The cache directive the bytes are stored with --------------------------------------
+
+    /// <summary>
+    /// Media bytes are stored with a bounded, private cache directive: the browser may re-show what it
+    /// already holds, and a shared proxy may not store a copy at all.
+    /// </summary>
+    /// <remarks>
+    /// The three properties are asserted separately because each one is a different failure. The
+    /// directive names the window; <c>private</c> is what keeps an intermediary out; and the absence of
+    /// <c>immutable</c> is what leaves a cover free to move container when an entry's visibility
+    /// changes, which is why nothing here is declared content-stable.
+    /// </remarks>
+    [Fact]
+    public async Task Media_bytes_are_stored_with_a_bounded_private_cache_directive()
+    {
+        var harness = new Harness();
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        (_, _, _, string? directive) = Assert.Single(harness.Storage.Uploads);
+
+        Assert.Equal(Constant.MediaCache.Directive, directive);
+        Assert.StartsWith("private", directive, StringComparison.Ordinal);
+        Assert.Contains("max-age=", directive, StringComparison.Ordinal);
+        Assert.DoesNotContain("immutable", directive, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The window is shorter than the shortest a URL may be given, so a cached copy never outlives the
+    /// credential that fetched it.
+    /// </summary>
+    [Fact]
+    public void The_cache_window_is_shorter_than_the_shortest_signed_url_lifetime()
+    {
+        Assert.InRange(
+            TimeSpan.FromSeconds(Constant.MediaCache.MaxAgeSeconds),
+            TimeSpan.Zero,
+            SignedUrlLifetime.Default);
+    }
+
     // ---- Who may remove -------------------------------------------------------------------
 
     [Theory]
@@ -799,6 +924,12 @@ public sealed class MediaServiceTests
     /// <summary>
     /// A configured window longer than the cap is clamped to it rather than honoured.
     /// </summary>
+    /// <remarks>
+    /// The lower bound is a whole boundary minute short of the cap, because the minting instant is
+    /// rounded down before the window is added: a mint late in its boundary minute lands up to that
+    /// much earlier. The upper bound is the claim that matters — rounding can shorten a window but
+    /// must never be the way past the cap.
+    /// </remarks>
     [Fact]
     public async Task A_configured_window_longer_than_the_cap_is_clamped()
     {
@@ -813,7 +944,7 @@ public sealed class MediaServiceTests
 
         Assert.InRange(
             expiresOn - DateTimeOffset.UtcNow,
-            SignedUrlLifetime.Maximum - TimeSpan.FromSeconds(1),
+            SignedUrlLifetime.Maximum - TimeSpan.FromMinutes(1),
             SignedUrlLifetime.Maximum);
     }
 
@@ -821,6 +952,7 @@ public sealed class MediaServiceTests
     /// A configured window that is not positive is the absence of a setting rather than an
     /// instruction to mint a dead link, so the default answers for it.
     /// </summary>
+    /// <remarks>The tolerance is one boundary minute, as the clamp above, and for the same reason.</remarks>
     [Theory]
     [InlineData(0)]
     [InlineData(-30)]
@@ -835,7 +967,7 @@ public sealed class MediaServiceTests
 
         Assert.InRange(
             expiresOn - DateTimeOffset.UtcNow,
-            SignedUrlLifetime.Default - TimeSpan.FromSeconds(1),
+            SignedUrlLifetime.Default - TimeSpan.FromMinutes(1),
             SignedUrlLifetime.Default);
     }
 
@@ -1078,7 +1210,7 @@ public sealed class MediaServiceTests
     {
         public List<(string Container, string Path, DateTimeOffset ExpiresOn)> ReadUrls { get; } = [];
 
-        public List<(string Container, string Path, string ContentType)> Uploads { get; } = [];
+        public List<(string Container, string Path, string ContentType, string? CacheControl)> Uploads { get; } = [];
 
         public List<string> Deleted { get; } = [];
 
@@ -1089,6 +1221,7 @@ public sealed class MediaServiceTests
             string path,
             Stream content,
             string contentType,
+            string? cacheControl = null,
             CancellationToken cancellationToken = default)
         {
             if (RefuseUploads)
@@ -1096,7 +1229,7 @@ public sealed class MediaServiceTests
                 throw new NotSupportedException(NoStorage);
             }
 
-            Uploads.Add((container, path, contentType));
+            Uploads.Add((container, path, contentType, cacheControl));
             return Task.FromResult(path);
         }
 
@@ -1149,6 +1282,7 @@ public sealed class MediaServiceTests
             string path,
             Stream content,
             string contentType,
+            string? cacheControl = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Mark(nameof(UploadAsync)).ToString());
 

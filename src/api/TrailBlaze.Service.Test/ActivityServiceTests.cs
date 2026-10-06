@@ -593,6 +593,28 @@ public sealed class ActivityServiceTests
     }
 
     /// <summary>
+    /// A cover is stored with no cache directive, because a cover is the one image whose path is not
+    /// content-stable: moving an entry across the public line moves its blob to another container
+    /// (feature 08), so a browser told to hold the bytes for a window would keep serving the copy from
+    /// the container it used to be in.
+    /// </summary>
+    /// <remarks>
+    /// Asserted as the absence rather than left unsaid, so that giving media a directive cannot
+    /// quietly give covers one too by way of a shared helper.
+    /// </remarks>
+    [Fact]
+    public async Task A_cover_is_stored_with_no_cache_directive()
+    {
+        var repository = new RecordingRepository { Existing = Row(Constant.ActivityType.Public) };
+        var storage = new RecordingStorage();
+
+        await Service(repository, storage)
+            .UploadCoverAsync("the-activity", Bytes(1024), "image/png", 1024);
+
+        Assert.Null(Assert.Single(storage.Uploads).CacheControl);
+    }
+
+    /// <summary>
     /// Refused by the shared image rule rather than by a rule of this route's own, and asserted as
     /// "no blob was written" rather than only as the outcome: a rejection that had already stored
     /// the bytes would leave an object nothing points at, and would pass an assertion made on the
@@ -1445,7 +1467,7 @@ public sealed class ActivityServiceTests
 
         public List<(string Container, string Path, DateTimeOffset ExpiresOn)> ReadUrls { get; } = [];
 
-        public List<(string Container, string Path, string ContentType)> Uploads { get; } = [];
+        public List<(string Container, string Path, string ContentType, string? CacheControl)> Uploads { get; } = [];
 
         public List<(string Container, string Path)> Deletes { get; } = [];
 
@@ -1473,9 +1495,10 @@ public sealed class ActivityServiceTests
             string path,
             Stream content,
             string contentType,
+            string? cacheControl = null,
             CancellationToken cancellationToken = default)
         {
-            Uploads.Add((container, path, contentType));
+            Uploads.Add((container, path, contentType, cacheControl));
             return Task.FromResult(path);
         }
 
@@ -1529,6 +1552,7 @@ public sealed class ActivityServiceTests
             string path,
             Stream content,
             string contentType,
+            string? cacheControl = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Mark(nameof(UploadAsync)).ToString());
 

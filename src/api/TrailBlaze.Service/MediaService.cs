@@ -105,7 +105,7 @@ public sealed class MediaService(
             try
             {
                 await storageRepository.UploadAsync(
-                    Constant.StorageContainer.Media, path, content, contentType!);
+                    Constant.StorageContainer.Media, path, content, contentType!, Constant.MediaCache.Directive);
             }
             catch
             {
@@ -125,7 +125,14 @@ public sealed class MediaService(
                 throw;
             }
 
-            return MediaOutcome.Uploaded(ToResponse(media, uploader?.DisplayName, caller.IsSignedIn));
+            // Minted here rather than fetched by the client afterwards, so the answer to an upload is
+            // something renderable. The blobs are private, so there is nothing to show until a URL
+            // exists, and a round trip to mint one would be the client's second request for a single
+            // item.
+            DateTimeOffset expiresOn = signedUrlLifetime.ExpiryFrom(DateTimeOffset.UtcNow);
+
+            return MediaOutcome.Uploaded(
+                await ToResponseAsync(media, uploader?.DisplayName, caller.IsSignedIn, expiresOn));
         }
         catch (Exception ex)
         {
@@ -162,14 +169,24 @@ public sealed class MediaService(
             Dictionary<string, string?> names =
                 uploaders.ToDictionary(user => user.Id, user => user.DisplayName);
 
-            return MediaListing.Of(
-                [.. items
-                    .OrderBy(item => item.CreatedOn)
-                    .ThenBy(item => item.Id)
-                    .Select(item => ToResponse(
-                        item,
-                        names.GetValueOrDefault(item.CreatedBy ?? string.Empty),
-                        caller.IsSignedIn))]);
+            // One instant for the page, not one per item. Signing is local, so this is a loop rather
+            // than a round trip per image — and because the instant is rounded to a boundary, every
+            // item signed from the same one reports the same expiry, which is what lets a second
+            // listing inside the minute hand the browser the same strings back.
+            DateTimeOffset expiresOn = signedUrlLifetime.ExpiryFrom(DateTimeOffset.UtcNow);
+
+            var responses = new List<MediaResponse>(items.Count);
+
+            foreach (Media item in items.OrderBy(item => item.CreatedOn).ThenBy(item => item.Id))
+            {
+                responses.Add(await ToResponseAsync(
+                    item,
+                    names.GetValueOrDefault(item.CreatedBy ?? string.Empty),
+                    caller.IsSignedIn,
+                    expiresOn));
+            }
+
+            return MediaListing.Of(responses);
         }
         catch (Exception ex)
         {
@@ -267,19 +284,33 @@ public sealed class MediaService(
     private string MediaPathFor(string activityId, string contentType) =>
         $"{activityId}/{Guid.NewGuid():N}{uploadValidation.FileExtensionFor(contentType)}";
 
-    /// <summary>The stored item as the client sees it. It carries no path, by design: the bytes are
-    /// reached through feature 07, and this is what says there are any.</summary>
-    /// <remarks><paramref name="discloseUploaderId"/> is false for an anonymous caller, who is told
-    /// the uploader's name and not the Entra object id behind it (Decision #30).</remarks>
-    private static MediaResponse ToResponse(Media media, string? uploaderDisplayName, bool discloseUploaderId) => new()
+    /// <summary>The stored item as the client sees it. It carries a URL rather than the path that URL
+    /// points at: the bytes are reached through feature 07, and this is what says there are any.</summary>
+    /// <remarks>The URL is signed for the instant the caller computed and handed down, so the expiry
+    /// reported and the expiry signed are one value. <paramref name="discloseUploaderId"/> is false for
+    /// an anonymous caller, who is told the uploader's name and not the Entra object id behind it
+    /// (Decision #30).</remarks>
+    private async Task<MediaResponse> ToResponseAsync(
+        Media media,
+        string? uploaderDisplayName,
+        bool discloseUploaderId,
+        DateTimeOffset expiresOn)
     {
-        Id = media.Id,
-        Kind = media.Kind,
-        ContentType = media.ContentType,
-        SizeBytes = media.SizeBytes,
-        OriginalFileName = media.OriginalFileName,
-        CreatedOn = media.CreatedOn,
-        UploadedByUserId = discloseUploaderId ? media.CreatedBy : null,
-        UploaderDisplayName = uploaderDisplayName,
-    };
+        Uri url = await storageRepository.CreateReadUrlAsync(
+            Constant.StorageContainer.Media, media.BlobPath, expiresOn);
+
+        return new MediaResponse
+        {
+            Id = media.Id,
+            Kind = media.Kind,
+            ContentType = media.ContentType,
+            SizeBytes = media.SizeBytes,
+            OriginalFileName = media.OriginalFileName,
+            CreatedOn = media.CreatedOn,
+            Url = url.ToString(),
+            ExpiresOnUtc = expiresOn,
+            UploadedByUserId = discloseUploaderId ? media.CreatedBy : null,
+            UploaderDisplayName = uploaderDisplayName,
+        };
+    }
 }

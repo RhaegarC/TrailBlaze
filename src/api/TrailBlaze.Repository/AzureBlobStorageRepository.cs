@@ -44,6 +44,7 @@ public sealed class AzureBlobStorageRepository : IStorageRepository
         string path,
         Stream content,
         string contentType,
+        string? cacheControl = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(content);
@@ -53,10 +54,17 @@ public sealed class AzureBlobStorageRepository : IStorageRepository
         // Stating the content type is what makes the object serve back as an image rather
         // than as an opaque download, so it travels with the bytes rather than being
         // guessed from the extension at read time.
-        var options = new BlobUploadOptions
+        var headers = new BlobHttpHeaders { ContentType = contentType };
+
+        // Set only when the caller named one. Storage does not decide that a browser may keep
+        // these bytes; it stores the decision the caller made, and an absent header is the
+        // caller having made none.
+        if (cacheControl is not null)
         {
-            HttpHeaders = new BlobHttpHeaders { ContentType = contentType },
-        };
+            headers.CacheControl = cacheControl;
+        }
+
+        var options = new BlobUploadOptions { HttpHeaders = headers };
 
         await blob.UploadAsync(content, options, cancellationToken);
         return path;

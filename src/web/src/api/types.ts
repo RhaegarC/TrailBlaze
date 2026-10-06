@@ -54,6 +54,10 @@ export interface WireMedia {
   sizeBytes: number;
   originalFileName: string;
   createdOn: string;
+  /** The signed read URL, carried by the listing so no per-item request is needed to render. */
+  url: string;
+  /** When `url` stops working. The field exists so the client can reuse a live URL and refresh one. */
+  expiresOnUtc: string;
   /** Absent, not null, for an anonymous caller — the Entra object id never leaves an authenticated response. */
   uploadedByUserId?: string;
   uploaderDisplayName: string | null;

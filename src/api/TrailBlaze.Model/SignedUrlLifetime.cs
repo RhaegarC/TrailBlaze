@@ -34,14 +34,19 @@ public sealed record SignedUrlLifetime(TimeSpan Configured)
 
     /// <summary>When a URL minted at <paramref name="now"/> stops working.</summary>
     /// <remarks>
-    /// Rounded down to the whole second, which is the precision a SAS carries: an instant with a
-    /// sub-second part would be truncated on the way into the token, and the caller would then be
-    /// told a moment the token does not hold.
+    /// The minting instant is rounded down to the whole minute before the window is added, so two
+    /// mints inside one boundary produce one string — a URL that moved between listings is a URL no
+    /// browser could have cached. The result is then rounded to the whole second, which is the
+    /// precision a SAS carries: an instant with a sub-second part would be truncated on the way into
+    /// the token, and the caller would be told a moment the token does not hold.
     /// </remarks>
     public DateTimeOffset ExpiryFrom(DateTimeOffset now)
     {
-        DateTimeOffset utc = now.ToUniversalTime().Add(Applied);
+        DateTimeOffset utc = now.ToUniversalTime();
+        DateTimeOffset boundary = utc.AddTicks(-(utc.UtcTicks % TimeSpan.TicksPerMinute));
+        DateTimeOffset expiry = boundary.Add(Applied);
 
-        return new DateTimeOffset(utc.UtcTicks - (utc.UtcTicks % TimeSpan.TicksPerSecond), TimeSpan.Zero);
+        return new DateTimeOffset(
+            expiry.UtcTicks - (expiry.UtcTicks % TimeSpan.TicksPerSecond), TimeSpan.Zero);
     }
 }
