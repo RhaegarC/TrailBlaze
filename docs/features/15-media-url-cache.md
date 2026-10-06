@@ -174,3 +174,13 @@ reload, and confirm the tiles still render.
   render until a URL exists — so the alternative was a client round trip for the one item it just
   sent. The instant comes from the same `SignedUrlLifetime`, and the mint reaches the same repository
   call the listing and the mint route use.
+- **The directive is stored on the object, so it is not retroactive.** `Cache-Control` is set as a
+  blob property at upload because the read path is a SAS URL straight to storage and the API never
+  proxies the bytes — so there is no moment at which it could add a header on the way out. The
+  consequence is that media uploaded before this change carries none and keeps being re-fetched until
+  it is re-uploaded. A backfill is a separate piece of work, and unlike the URL half — which lands for
+  every item the moment the listing changes — the caching half is forward-only.
+- **Only media carries the directive, and that is the `null` default doing its job.** Covers and
+  avatars reach the same upload call, so a default directive would apply to the covers whose path
+  changes container when an entry crosses the public line. A cover that did move would carry the
+  header across with it, which is exactly why it must not have one.
