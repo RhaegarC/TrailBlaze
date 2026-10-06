@@ -1,6 +1,6 @@
 # 14 — Every image is stored with a derivative
 
-Status: **Not started** · [00-mission-2-sprint.md](00-mission-2-sprint.md)
+Status: **In progress** · [00-mission-2-sprint.md](00-mission-2-sprint.md)
 Source: [PRD](../PRD.md) — Decision #31 (new) + Decision #15 (unchanged, video-scoped) + "Media
 storage & delivery" + "Data model"
 
@@ -62,12 +62,21 @@ whether the enlarged image is legible.
 **Decoding is attacker-controlled, and is bounded.** Once an uploaded image is decoded in-process, a
 small file can expand into a very large allocation, and the file is supplied by whoever uploads it.
 The service therefore sets decoder resource limits **once**, in the type's static constructor —
-maximum width, height and area, a memory ceiling, a single-frame list, and essentially no disk, so a
+maximum width, height and area, a memory ceiling, a bounded frame list, and no disk at all, so a
 hostile file cannot spill to the container's volume — and checks the header before committing to a
 full decode. Width and height are set explicitly because they are the limits the decoders actually
 honour, and an area limit alone is not enough to stop a compressed bomb. Keeping this in the static
 constructor also means the Api layer names no ImageMagick type and no separate bootstrap type is
 introduced into a layer whose files carry the `Service` suffix.
+
+**The frame limit is bounded, not one, and that is a correction the spike forced.** This feature was
+specified with `ListLength = 1` on the assumption that it truncates a decode to its first frame. It
+does not: in this library the property is a limit that is *enforced by refusal*, so setting it to one
+throws on a three-frame GIF rather than yielding its first frame. The limit is therefore set to a
+number no plausible animation exceeds, and single-frame-ness is achieved by reading frame zero — which
+is what the single-frame read does by default. The behaviour the feature wanted is unchanged; only the
+mechanism that was written down for it was wrong, and an implementer following the original wording
+would have found every animated upload refused outright.
 
 **The upload path needs a second read.** The upload action is handed a forward-only stream, and the
 derivative needs the same bytes after the original has been written. The two kinds are already
@@ -76,15 +85,26 @@ applied image cap, because a declared length must never become the memory a requ
 claim — and the same buffer serves both the original upload and the decode; a **video** is streamed
 straight through and never buffered. That asymmetry is why the two caps stay separate settings.
 
+**The bound is on the bytes read, not on the length declared.** A client that declares ten bytes and
+sends ten megabytes is refused with the same `ImageTooLarge` answer the declared-length check gives,
+because the copy stops one byte past the applied cap and reads no further. The declared length is a
+claim about the request; the number of bytes actually taken is the fact, and it is the fact the cap is
+applied to. Nothing is held, and nothing is stored, for a request refused this way.
+
 **Schema.** `Media` gains `ThumbnailPath`: nullable, `nvarchar(512)`, mirroring `BlobPath`. Nullable
-because video and every row that already exists have none. The PRD data model moves with it, in the
-same pull request, as the schema-change discipline requires.
+because video and every row that already exists have none. The PRD's data model already carries the
+column — the planning change that wrote this feature wrote it there too — so this pull request brings
+the migration up to it and updates the PRD's *current state* row, which still said the derivative was
+not built.
 
 **The derivative lands in the same private `media` container**, under a path derived from the
 original's — the same folder, with `-thumb.jpg` in place of its extension. A separate container would
 create a second answer to "is this blob public?" for no gain, and the derivative of a private image
 is still private. The original's path carries a fresh identifier per upload, so the derivative's path
-is unique and its bytes never change beneath it.
+is unique and its bytes never change beneath it. **The suffix is load-bearing rather than cosmetic**,
+which is easy to miss when reading the path convention as a naming preference: a JPEG is stored with
+the very extension the derivative is encoded as, so a derivative named from the stem alone would be
+written onto the original's path and the item would have one blob where its row claims two.
 
 **Which path a route signs.** The media **listing** signs the derivative, so a page loads the smaller
 copy. `GET /api/media/{id}/url` keeps signing the **original**, unchanged — so the stored original
@@ -97,49 +117,65 @@ keeps the existing undo — the original is the item, and the derivative is an o
 
 ## Acceptance criteria
 
-- [ ] Uploading an **image** stores the original and a derivative, and the derivative's path is
+- [x] Uploading an **image** stores the original and a derivative, and the derivative's path is
       recorded on the item; uploading a **video** stores exactly what it did before and records no
       derivative
-- [ ] The derivative is re-encoded, not merely copied, and is **smaller than the original** for a
+- [x] The derivative is re-encoded, not merely copied, and is **smaller than the original** for a
       typical photograph
-- [ ] The configured quality and maximum dimension are applied; an image already inside the maximum
+- [x] The configured quality and maximum dimension are applied; an image already inside the maximum
       dimension is **not enlarged** to meet it
-- [ ] The derivative lives in the **private** `media` container, and is reachable only by a SAS URL
+- [x] The derivative lives in the **private** `media` container, and is reachable only by a SAS URL
       minted after the caller has been authorized to read the item's activity — the same gate as the
       original, with no second rule
-- [ ] The media listing signs the **derivative** when there is one, so a page renders the smaller
+- [x] The media listing signs the **derivative** when there is one, so a page renders the smaller
       copy; `GET /api/media/{id}/url` still signs the **original**
-- [ ] An item with no derivative — a video, an older row, a failed decode — is served from its
+- [x] An item with no derivative — a video, an older row, a failed decode — is served from its
       original, so nothing that worked before stops working
-- [ ] An image whose bytes cannot be decoded is still **stored** and its derivative column left
+- [x] An image whose bytes cannot be decoded is still **stored** and its derivative column left
       empty, rather than the upload failing
-- [ ] Deleting a media item removes its derivative as well as its original
-- [ ] A file that exceeds the decoder's resource limits is **refused rather than allocated**, and the
+- [x] Deleting a media item removes its derivative as well as its original
+- [x] A file that exceeds the decoder's resource limits is **refused rather than allocated**, and the
       refusal is not an out-of-memory crash
-- [ ] The upload's stored bytes are byte-identical to what was sent — the derivative is produced from
+- [x] The upload's stored bytes are byte-identical to what was sent — the derivative is produced from
       the buffer, and does not replace or mutate the original
-- [ ] The `media` table's new column is nullable and bounded, and the PRD data model states it
+- [x] The `media` table's new column is nullable and bounded, and the PRD data model states it
+- [x] The two paths never collide: an uploaded JPEG's derivative does not land on the original's own
+      path. **Asserted, and asserted because it was wrong** — the first implementation built both
+      paths from one stem and, for a JPEG, produced one path twice; the test that names this is what
+      caught it, and the suffix is the fix
 
 ## Tests (TDD)
 
 - **Unit** — the derivative producer is a function over bytes and is exercised against the real
   library, offline: a derivative comes back smaller; its long edge respects the configured maximum;
   an image within the maximum is not enlarged; a transparent source becomes a still JPEG; **bytes
-  that are not an image yield no derivative rather than an exception**; the configured quality takes
-  effect; an animated source yields a single frame. The options type's clamping is asserted beside
-  the cap type's, the same way.
+  that are not an image yield no derivative rather than an exception**; an empty file likewise; the
+  configured quality takes effect; an animated source yields a single frame; and a file whose header
+  describes an image past the decoder's dimension limit is refused **undecoded**, which is asserted
+  with a tiny file either side of the boundary rather than with a real bomb, since a bomb cannot be
+  stored in a repository. The options type's clamping is asserted beside the cap type's, the same way.
+  **Every input is built by a hand-written encoder in the test assembly**, not by the library under
+  test: a fixture generated with Magick.NET would move both sides of each assertion together, and a
+  change in the library's encoder would then be invisible.
 - **Unit, at the service tier** — the upload path with a recording storage double, which is the one
   sanctioned double and records only whether it was called: an image writes both blobs and records
   the derivative's path; a video writes one and records none; an undecodable image still writes the
-  original; a deletion removes both paths; a listing signs the derivative while the mint route signs
-  the original.
+  original; a derivative that throws leaves the original serving rather than failing the upload; the
+  stored bytes are byte-identical to what was sent; a deletion removes both paths and a deletion
+  without a derivative removes one; a listing signs the derivative while the mint route signs the
+  original; and an image whose bytes run past the cap is refused **even when its declared length is
+  under it**.
 - **Model** — the new column's length bound, and that it is **optional** rather than required. The
   model-versus-snapshot comparison regenerates with the migration, so the two move together.
 - **Database (container-tagged)** — the migration applies, and an item round-trips its derivative path
-  in a fresh scope while an item without one round-trips a null. The migration is additive, so the
-  narrowing cases are not affected.
-- **Storage (container-tagged)** — the derivative's declared content type survives the round trip
-  against the real repository, which is the tier that can tell a declared type from a stored one.
+  in a fresh scope while an item without one round-trips a null; the path round-trips at the column's
+  full width, and one character past it is **refused by the engine**, so the number in the model is a
+  bound rather than a comment. The migration is additive, so the narrowing cases are not affected.
+- **Storage (container-tagged)** — an original and its derivative are two objects in the same private
+  container, each reached by its own URL with its own content type, and **removing the original leaves
+  the derivative fetchable**. That last half is the point: the paths differ by nothing but the suffix,
+  so a backend that treated them as one key would make the derivative's write silently replace the
+  bytes it was made from, and both writes would still report success.
 - **Not reachable from the web tier** — the client change is that it renders whatever URL the listing
   gives it, which it already does; there is no runner in `src/web`, so that half is `verification-only`
   and is observed in a browser rather than asserted.

@@ -9,6 +9,7 @@ using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
 using TrailBlaze.Model.DatabaseEntity;
 using TrailBlaze.Model.Media;
+using TrailBlaze.Service.Test.TestSupport;
 
 /// <summary>
 /// What an activity's media may be, who may contribute it, and who may remove it.
@@ -990,7 +991,261 @@ public sealed class MediaServiceTests
         Assert.DoesNotContain(logger.Messages, message => message.Contains(url, StringComparison.Ordinal));
     }
 
+    // ---- The derivative ---------------------------------------------------------------------
+
+    /// <summary>
+    /// An image is written twice — its original and a smaller copy — and the copy's path is what the
+    /// row records.
+    /// </summary>
+    /// <remarks>
+    /// Both blobs and the recorded path are asserted together, because any one of them alone leaves a
+    /// way for the derivative to be stored and never served, or recorded and never stored.
+    /// </remarks>
+    [Fact]
+    public async Task An_image_is_stored_beside_a_derivative_that_the_row_records()
+    {
+        var harness = new Harness();
+        byte[] photo = ImageFixtures.Noisy(400, 300);
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", photo.Length, "ridge.jpg");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Equal(2, harness.Storage.Uploads.Count);
+
+        Media row = harness.Repository.Inserted.Single();
+        string original = harness.Storage.Uploads[0].Path;
+        (string container, string path, string contentType, _) = harness.Storage.Uploads[1];
+
+        Assert.Equal(Constant.StorageContainer.Media, container);
+        Assert.Equal(Constant.Thumbnail.ContentType, contentType);
+        Assert.Equal(row.ThumbnailPath, path);
+        Assert.NotEqual(original, path);
+        Assert.Equal(path, Assert.Single(harness.Repository.Updated).ThumbnailPath);
+    }
+
+    /// <summary>
+    /// The derivative sits beside its original in the same private container and under a name built
+    /// from the same identifier, which is what makes it as unique and as private as the original is.
+    /// </summary>
+    [Fact]
+    public async Task The_derivative_is_named_after_the_original_in_the_same_container()
+    {
+        var harness = new Harness();
+        byte[] photo = ImageFixtures.Noisy(300, 200);
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", photo.Length, "ridge.jpg");
+
+        (string originalContainer, string originalPath, _, _) = harness.Storage.Uploads[0];
+        (string derivativeContainer, string derivativePath, _, _) = harness.Storage.Uploads[1];
+
+        Assert.Equal(originalContainer, derivativeContainer);
+        Assert.StartsWith($"{ActivityId}/", derivativePath);
+        Assert.Equal(Path.GetDirectoryName(originalPath), Path.GetDirectoryName(derivativePath));
+        Assert.Equal(
+            Path.GetFileNameWithoutExtension(originalPath)
+                + Constant.Thumbnail.PathSuffix
+                + Constant.Thumbnail.FileExtension,
+            Path.GetFileName(derivativePath));
+    }
+
+    /// <summary>
+    /// A JPEG's derivative does not land on the original's own path.
+    /// </summary>
+    /// <remarks>
+    /// The case that makes the derivative's name more than a convention: a JPEG is stored with the
+    /// very extension the derivative is encoded as, so a derivative named from the stem alone would
+    /// write over the bytes it was made from and the item would have one blob where it claims two.
+    /// </remarks>
+    [Fact]
+    public async Task A_JPEG_derivative_does_not_take_the_originals_path()
+    {
+        var harness = new Harness();
+        byte[] photo = ImageFixtures.Noisy(300, 200);
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", photo.Length, "ridge.jpg");
+
+        string[] paths = [.. harness.Storage.Uploads.Select(upload => upload.Path)];
+
+        Assert.Equal(2, paths.Distinct().Count());
+    }
+
+    /// <summary>Video gets nothing: no second copy, no path recorded.</summary>
+    [Fact]
+    public async Task A_video_is_stored_once_and_records_no_derivative()
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "video/mp4", Bytes.Length, "ridge.mp4");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Single(harness.Storage.Uploads);
+        Assert.Null(harness.Repository.Inserted.Single().ThumbnailPath);
+        Assert.Empty(harness.Repository.Updated);
+    }
+
+    /// <summary>
+    /// An image whose bytes cannot be decoded is still an item: it is stored, served from its
+    /// original, and its derivative column stays empty rather than the upload failing.
+    /// </summary>
+    [Fact]
+    public async Task An_image_that_cannot_be_decoded_is_still_stored()
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Single(harness.Storage.Uploads);
+        Assert.Null(harness.Repository.Inserted.Single().ThumbnailPath);
+    }
+
+    /// <summary>
+    /// A derivative that cannot be stored leaves the item as it would have been without one, rather
+    /// than failing an upload whose original landed.
+    /// </summary>
+    [Fact]
+    public async Task A_derivative_that_cannot_be_stored_leaves_the_original_serving()
+    {
+        var harness = new Harness(thumbnails: new ExplodingThumbnails());
+        byte[] photo = ImageFixtures.Noisy(300, 200);
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", photo.Length, "ridge.jpg");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Single(harness.Storage.Uploads);
+        Assert.Null(harness.Repository.Inserted.Single().ThumbnailPath);
+    }
+
+    /// <summary>
+    /// The bytes stored as the original are byte-identical to what was sent: the derivative is made
+    /// from a held copy, and holding it must not replace or alter what is uploaded.
+    /// </summary>
+    [Fact]
+    public async Task The_stored_original_is_the_bytes_that_were_sent()
+    {
+        var harness = new Harness();
+        byte[] photo = ImageFixtures.Noisy(300, 200);
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", photo.Length, "ridge.jpg");
+
+        Assert.Equal(photo, harness.Storage.UploadedBytes[0]);
+    }
+
+    /// <summary>The listing signs the derivative, so a page loads the smaller copy.</summary>
+    [Fact]
+    public async Task A_listing_signs_the_derivative_when_there_is_one()
+    {
+        var harness = new Harness();
+        Media item = Item("one", Contributor);
+        item.ThumbnailPath = "blobs/one-thumb.jpg";
+        harness.Repository.Items = [item];
+
+        await harness.Service.ListAsync(ActivityId);
+
+        (_, string path, _) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.Equal("blobs/one-thumb.jpg", path);
+    }
+
+    /// <summary>
+    /// The mint route signs the original, unchanged, so the bytes that were stored stay reachable
+    /// rather than becoming write-only.
+    /// </summary>
+    [Fact]
+    public async Task The_mint_route_signs_the_original_even_when_there_is_a_derivative()
+    {
+        var harness = new Harness();
+        Media item = Item("one", Contributor);
+        item.ThumbnailPath = "blobs/one-thumb.jpg";
+        harness.Repository.Item = item;
+
+        await harness.Service.CreateReadUrlAsync("one");
+
+        (_, string path, _) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.Equal(item.BlobPath, path);
+    }
+
+    /// <summary>An item with no derivative is served from its original, so nothing that worked
+    /// before stops working.</summary>
+    [Fact]
+    public async Task An_item_with_no_derivative_is_served_from_its_original()
+    {
+        var harness = new Harness();
+        Media item = Item("one", Contributor);
+        harness.Repository.Items = [item];
+
+        await harness.Service.ListAsync(ActivityId);
+
+        (_, string path, _) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.Equal(item.BlobPath, path);
+    }
+
+    /// <summary>Removing an item removes both of its blobs: leaving the derivative behind would
+    /// leave the smaller copy of a deleted picture reachable.</summary>
+    [Fact]
+    public async Task Deleting_an_item_removes_its_derivative_too()
+    {
+        var harness = new Harness();
+        Media item = Item("one", Contributor);
+        item.ThumbnailPath = "blobs/one-thumb.jpg";
+        harness.Repository.Item = item;
+
+        await harness.Service.DeleteAsync("one");
+
+        Assert.Equal([item.BlobPath, "blobs/one-thumb.jpg"], harness.Storage.Deleted);
+    }
+
+    /// <summary>An item without a derivative asks storage for exactly one deletion, not two.</summary>
+    [Fact]
+    public async Task Deleting_an_item_without_a_derivative_removes_one_blob()
+    {
+        var harness = new Harness();
+        Media item = Item("one", Contributor);
+        harness.Repository.Item = item;
+
+        await harness.Service.DeleteAsync("one");
+
+        Assert.Equal([item.BlobPath], harness.Storage.Deleted);
+    }
+
+    /// <summary>
+    /// An image whose bytes run past the cap is refused even when its declared length was not,
+    /// because the declared length is a claim and the held copy is bounded by the cap.
+    /// </summary>
+    [Fact]
+    public async Task An_image_longer_than_its_declared_length_is_refused_rather_than_held()
+    {
+        // A cap of one kilobyte, declared honestly at ten bytes by a client sending far more.
+        var harness = new Harness(caps: new UploadSizeCaps(1024, 0));
+        byte[] photo = ImageFixtures.Noisy(300, 200);
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", 10, "ridge.jpg");
+
+        Assert.Equal(MediaOutcomeKind.Rejected, outcome.Kind);
+        Assert.Equal(
+            Constant.Message.ImageTooLarge(1024), outcome.Errors!["file"].Single());
+        Assert.Empty(harness.Storage.Uploads);
+    }
+
     // ---- Scaffolding ----------------------------------------------------------------------
+
+    /// <summary>A producer that fails, so the caller's handling of a broken one is assertable
+    /// without a real file that happens to break it.</summary>
+    private sealed class ExplodingThumbnails : IThumbnailService
+    {
+        public ThumbnailResult? Create(byte[] content) =>
+            throw new InvalidOperationException("This producer was asked to fail.");
+    }
 
     private static Activity Activity(string type, string owner) => new()
     {
@@ -1028,10 +1283,16 @@ public sealed class MediaServiceTests
             string? caller = Contributor,
             bool isAdmin = false,
             TimeSpan? mediaUrlTtl = null,
-            UploadSizeCaps? caps = null)
+            UploadSizeCaps? caps = null,
+            IThumbnailService? thumbnails = null)
         {
             _caller = caller;
             _lifetime = new SignedUrlLifetime(mediaUrlTtl ?? SignedUrlLifetime.Default);
+
+            // The real producer by default, so "an undecodable image still stores the original" is
+            // decided by bytes rather than by a double's opinion of them. Set before the service is
+            // built, because the constructor captures it.
+            Thumbnails = thumbnails ?? new ThumbnailService(new ThumbnailOptions(0, 0));
 
             // Zero is "nothing configured" rather than a cap of no bytes: the type reads it as the
             // absence of a setting and applies the default, which is the same sentinel the lifetime
@@ -1059,6 +1320,9 @@ public sealed class MediaServiceTests
 
         public MediaService Service { get; }
 
+        /// <summary>The producer the service was built with, real unless a test named another.</summary>
+        public IThumbnailService Thumbnails { get; }
+
         /// <summary>The same wiring over a different storage double, for the tests whose storage is
         /// the thing being recorded and not the default recorder.</summary>
         public MediaService ServiceWith(IStorageRepository storage, ILogger<MediaService>? logger = null) =>
@@ -1070,6 +1334,7 @@ public sealed class MediaServiceTests
                 // under test in the gate tables, and a double here would be asserting the double.
                 new ActivityAuthorizationService(Repository, new StubUserContext(_caller)),
                 new UploadValidationService(_caps),
+                Thumbnails,
                 _lifetime,
                 logger ?? NullLogger<MediaService>.Instance);
     }
@@ -1109,6 +1374,9 @@ public sealed class MediaServiceTests
         public Media? Proposed { get; private set; }
 
         public List<Media> Inserted { get; } = [];
+
+        /// <summary>Every row handed to an update, which is how a derivative's path is recorded.</summary>
+        public List<Media> Updated { get; } = [];
 
         public List<string> DeletedMedia { get; } = [];
 
@@ -1187,7 +1455,11 @@ public sealed class MediaServiceTests
             return Task.FromResult(ids.Count);
         }
 
-        public Task<int> UpdateAsync<T>(T item) where T : EntityBase => throw new NotSupportedException(NoWrites);
+        public Task<int> UpdateAsync<T>(T item) where T : EntityBase
+        {
+            Updated.Add((Media)(object)item);
+            return Task.FromResult(1);
+        }
 
         public Task<int> UpdateAsync<T>(List<T> items) where T : EntityBase =>
             throw new NotSupportedException(NoWrites);
@@ -1212,6 +1484,10 @@ public sealed class MediaServiceTests
 
         public List<(string Container, string Path, string ContentType, string? CacheControl)> Uploads { get; } = [];
 
+        /// <summary>The bytes each upload carried, read out of the stream it was handed, so "what was
+        /// stored is what was sent" is answerable without a store.</summary>
+        public List<byte[]> UploadedBytes { get; } = [];
+
         public List<string> Deleted { get; } = [];
 
         public bool RefuseUploads { get; set; }
@@ -1229,7 +1505,12 @@ public sealed class MediaServiceTests
                 throw new NotSupportedException(NoStorage);
             }
 
+            using var captured = new MemoryStream();
+            content.CopyTo(captured);
+
+            UploadedBytes.Add(captured.ToArray());
             Uploads.Add((container, path, contentType, cacheControl));
+
             return Task.FromResult(path);
         }
 
