@@ -30,7 +30,7 @@ Three consequences, in order of importance:
 3. **Minting stops being free.** `GetUserDelegationKeyAsync` is a **network call**, so the key has
    to be fetched once and cached rather than fetched per URL. This is the one place in Mission 2
    where backend caching is the right answer, and it is why this feature exists separately from
-   [15](15-media-url-cache.md) rather than inside it.
+   [15](archive/15-media-url-cache.md) rather than inside it.
 
 ## Story
 
@@ -44,7 +44,7 @@ application depends on.
 - [07](archive/07-sas-delivery.md) — the mint whose signing this changes
 - [12](archive/12-anonymous-media-read.md) — the anonymous read the mint serves; the *service* signs,
   so an anonymous caller is unaffected by the credential change
-- [15](15-media-url-cache.md) — puts one URL per item into a listing, which is what makes the
+- [15](archive/15-media-url-cache.md) — puts one URL per item into a listing, which is what makes the
   per-mint cost noticeable enough to cache
 
 ## Acceptance criteria
@@ -102,7 +102,7 @@ application depends on.
   answer decides whether this feature is adoptable as written or needs a real-account tier, and it
   comes before any code.
 - **This is not a performance feature.** It is in Mission 2 because it is the change that *creates*
-  the backend caching requirement [15](15-media-url-cache.md) does not have, and because the two are
+  the backend caching requirement [15](archive/15-media-url-cache.md) does not have, and because the two are
   read together: 15 removes N round trips from the browser and adds N signatures on the server, and
   16 is what makes those signatures cost a network call if they are not cached.
 - **What is cacheable here, and what is not.** The line is caller-dependence, and it is worth drawing
