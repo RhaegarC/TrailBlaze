@@ -107,7 +107,7 @@ public static class Constant
         public const string VideoUploadCapBytes = "VideoUploadCapBytes";
 
         /// <summary>The quality an image's derivative is re-encoded at. Optional, and held inside
-        /// <see cref="Thumbnail.QualityCeiling"/> whatever it says.</summary>
+        /// <see cref="Upload.QualityCeiling"/> whatever it says.</summary>
         public const string ThumbnailQuality = "ThumbnailQuality";
     }
 
@@ -467,8 +467,17 @@ public static class Constant
         
         /// <summary>Suffix of thumbnail.</summary>
         public const string PathSuffix = "-thumb";
-        
+
         /// <summary>Extension of thumbnail.</summary>
         public const string FileExtension = ".webp";
+
+        /// <summary>Content type of thumbnail.</summary>
+        public const string ContentType = "image/webp";
+
+        /// <summary>Quality thumbnail is encoded at when nothing is configured.</summary>
+        public const uint QualityDefault = 75;
+
+        /// <summary>The highest a configured quality reaches.</summary>
+        public const uint QualityCeiling = 100;
     }
 }

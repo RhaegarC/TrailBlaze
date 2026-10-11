@@ -1,6 +1,5 @@
 namespace TrailBlaze.Service;
 
-using ImageMagick;
 using Microsoft.Extensions.Logging;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
@@ -8,7 +7,6 @@ using TrailBlaze.Model;
 using TrailBlaze.Model.Authorization;
 using TrailBlaze.Model.DatabaseEntity;
 using TrailBlaze.Model.Media;
-using TrailBlaze.Service.Utility;
 
 /// <inheritdoc/>
 public sealed class MediaService(
@@ -16,6 +14,7 @@ public sealed class MediaService(
     IStorageRepository storageRepository,
     IActivityAuthorizationService authorization,
     IUploadValidationService uploadValidation,
+    IMediaHelperService mediaHelper,
     SignedUrlLifetime signedUrlLifetime,
     ILogger<MediaService> logger) : IMediaService
 {
@@ -316,12 +315,13 @@ public sealed class MediaService(
     {
         try
         {
-            var webpStream = await MediaHelper.GetThumbnailStreamAsync(content);
+            Stream derivative = await mediaHelper.GetThumbnailStreamAsync(content);
+
             await storageRepository.UploadAsync(
                 Constant.StorageContainer.Media,
                 derivativePath,
-                webpStream,
-                media.ContentType,
+                derivative,
+                Constant.Upload.ContentType,
                 Constant.MediaCache.Directive);
 
             media.ThumbnailPath = derivativePath;

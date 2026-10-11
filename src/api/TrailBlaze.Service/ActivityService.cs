@@ -1,6 +1,5 @@
 namespace TrailBlaze.Service;
 
-using ImageMagick;
 using Microsoft.Extensions.Logging;
 using TrailBlaze.Interface.Infrastructure;
 using TrailBlaze.Interface.Repository;
@@ -9,13 +8,13 @@ using TrailBlaze.Model;
 using TrailBlaze.Model.Activity;
 using TrailBlaze.Model.Authorization;
 using TrailBlaze.Model.DatabaseEntity;
-using TrailBlaze.Service.Utility;
 
 /// <inheritdoc/>
 public sealed class ActivityService(
     IDbRepository dbRepository,
     IStorageRepository storageRepository,
     IUploadValidationService uploadValidation,
+    IMediaHelperService mediaHelper,
     IActivityAuthorizationService authorization,
     IUserContextService userContext,
     ILogger<ActivityService> logger) : IActivityService
@@ -276,8 +275,8 @@ public sealed class ActivityService(
             string container = CoverContainerFor(activity.Type);
             string? previous = activity.CoverImageBlobPath;
             string path = $"{activityId}/{Guid.NewGuid():N}{Constant.Upload.FileExtension}";
-            var webpStream = await MediaHelper.GetThumbnailStreamAsync(content);
-            await storageRepository.UploadAsync(container, path, webpStream, contentType!);
+            Stream cover = await mediaHelper.GetThumbnailStreamAsync(content);
+            await storageRepository.UploadAsync(container, path, cover, Constant.Upload.ContentType);
 
             // The row after the bytes, and the old blob after the row. A failure at either step then
             // leaves an object nothing points at, which is inert, rather than a row pointing at

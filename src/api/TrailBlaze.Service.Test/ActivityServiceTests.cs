@@ -7,6 +7,7 @@ using TrailBlaze.Interface.Repository;
 using TrailBlaze.Model;
 using TrailBlaze.Model.Activity;
 using TrailBlaze.Model.DatabaseEntity;
+using TrailBlaze.Service.Test.TestSupport;
 
 /// <summary>
 /// The activity rules, and what the service hands a store.
@@ -586,10 +587,14 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(repository, storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), contentType, 1024);
+            .UploadCoverAsync("the-activity", Cover(), contentType, 1024);
 
         Assert.Equal(CoverOutcomeKind.Uploaded, outcome.Kind);
-        Assert.Equal(contentType, Assert.Single(storage.Uploads).ContentType);
+
+        // Stored as the derivative, which every allowlisted type is decoded into: the cover is a
+        // WebP whatever the client declared, so the declared type is an input to the allowlist check
+        // and not the type the blob is served back as.
+        Assert.Equal(Constant.Upload.ContentType, Assert.Single(storage.Uploads).ContentType);
     }
 
     /// <summary>
@@ -609,7 +614,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         await Service(repository, storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/png", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/png", 1024);
 
         Assert.Null(Assert.Single(storage.Uploads).CacheControl);
     }
@@ -635,7 +640,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(repository, storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), contentType, 1024);
+            .UploadCoverAsync("the-activity", Cover(), contentType, 1024);
 
         Assert.Equal(CoverOutcomeKind.Rejected, outcome.Kind);
         Assert.Contains(CoverField, outcome.Errors!.Keys);
@@ -657,7 +662,7 @@ public sealed class ActivityServiceTests
                 storage,
                 caps: new UploadSizeCaps(OneMegabyte, 0))
             .UploadCoverAsync(
-                "the-activity", Bytes(OneMegabyte), "image/jpeg", OneMegabyte);
+                "the-activity", Cover(), "image/jpeg", OneMegabyte);
 
         Assert.Equal(CoverOutcomeKind.Uploaded, outcome.Kind);
         Assert.Single(storage.Uploads);
@@ -695,7 +700,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         await Service(new RecordingRepository { Existing = Row(type) }, storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.Equal(expected, Assert.Single(storage.Uploads).Container);
     }
@@ -716,7 +721,7 @@ public sealed class ActivityServiceTests
 
         CoverOutcome outcome = await Service(
                 new RecordingRepository { Existing = Row(type) }, storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.NotNull(outcome.Cover!.CoverImageUrl);
 
@@ -739,7 +744,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         await Service(repository, storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         string stored = Assert.Single(storage.Uploads).Path;
 
@@ -759,7 +764,7 @@ public sealed class ActivityServiceTests
         };
 
         await Service(repository, new RecordingStorage())
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Activity saved = Assert.Single(repository.Saved);
 
@@ -784,7 +789,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         await Service(repository, storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         string stored = Assert.Single(storage.Uploads).Path;
         (string container, string path) = Assert.Single(storage.Deletes);
@@ -805,7 +810,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         await Service(new RecordingRepository { Existing = Row(Constant.ActivityType.Public) }, storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.Empty(storage.Deletes);
     }
@@ -824,7 +829,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(repository, storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), "video/mp4", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "video/mp4", 1024);
 
         Assert.Equal(CoverOutcomeKind.Rejected, outcome.Kind);
         Assert.Empty(storage.Uploads);
@@ -839,7 +844,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(new RecordingRepository(), storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.Equal(CoverOutcomeKind.NotFound, outcome.Kind);
         Assert.Empty(storage.Uploads);
@@ -866,7 +871,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(repository, storage, Caller)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.Equal(CoverOutcomeKind.NotFound, outcome.Kind);
         Assert.Empty(storage.Uploads);
@@ -886,7 +891,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(repository, storage, caller: null)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.Equal(CoverOutcomeKind.NoCaller, outcome.Kind);
         Assert.Empty(storage.Uploads);
@@ -905,7 +910,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         await Service(repository, storage)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.Equal(Constant.StorageContainer.Media, Assert.Single(storage.Uploads).Container);
         Assert.Single(repository.Saved);
@@ -1039,7 +1044,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(repository, storage, Caller)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.Equal(expected, outcome.Kind);
         Assert.Empty(storage.Uploads);
@@ -1056,7 +1061,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(repository, storage, Caller)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.Equal(CoverOutcomeKind.Uploaded, outcome.Kind);
         Assert.Single(storage.Uploads);
@@ -1073,7 +1078,7 @@ public sealed class ActivityServiceTests
         var storage = new RecordingStorage();
 
         CoverOutcome outcome = await Service(repository, storage, Caller)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.Equal(CoverOutcomeKind.Uploaded, outcome.Kind);
         Assert.Single(storage.Uploads);
@@ -1099,7 +1104,7 @@ public sealed class ActivityServiceTests
         };
 
         CoverOutcome outcome = await Service(repository, storage, Caller)
-            .UploadCoverAsync("the-activity", Bytes(1024), "image/jpeg", 1024);
+            .UploadCoverAsync("the-activity", Cover(), "image/jpeg", 1024);
 
         Assert.Empty(storage.Reached);
         Assert.Equal(CoverOutcomeKind.Forbidden, outcome.Kind);
@@ -1251,6 +1256,11 @@ public sealed class ActivityServiceTests
             // Zero is "nothing configured" rather than a cap of no bytes: the type reads it as the
             // absence of a setting and applies the default.
             new UploadValidationService(caps ?? new UploadSizeCaps(0, 0)),
+
+            // The real producer, so what a cover is stored as is decided by the bytes and not by a
+            // double's opinion of them. Zero is "nothing configured", so it applies the default
+            // quality.
+            new MediaHelperService(0),
             new ActivityAuthorizationService(rows, new StubUserContext(caller)),
             new StubUserContext(caller),
             NullLogger<ActivityService>.Instance);
@@ -1274,6 +1284,12 @@ public sealed class ActivityServiceTests
 
     /// <summary>A stream of exactly this many bytes, which is all the size rule reads.</summary>
     private static MemoryStream Bytes(long length) => new(new byte[length]);
+
+    /// <summary>
+    /// A real image, because the cover route decodes what it is handed: these bytes are the source
+    /// of the WebP it stores, so a stand-in of zeros is reported rather than stored.
+    /// </summary>
+    private static MemoryStream Cover() => new(ImageFixtures.Gradient(64, 48));
 
     private static Activity Row(
         string type,

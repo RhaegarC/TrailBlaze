@@ -346,7 +346,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
         const string Container = Constant.StorageContainer.Media;
         string stem = $"integration/{Guid.NewGuid():N}";
         string originalPath = $"{stem}.png";
-        string derivativePath = $"{stem}{Constant.Thumbnail.PathSuffix}{Constant.Thumbnail.FileExtension}";
+        string derivativePath = $"{stem}{Constant.Upload.PathSuffix}{Constant.Upload.FileExtension}";
         byte[] original = "the original's bytes"u8.ToArray();
         byte[] derivative = "the derivative's bytes"u8.ToArray();
 
@@ -358,7 +358,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
                 Container,
                 derivativePath,
                 new MemoryStream(derivative),
-                Constant.Thumbnail.ContentType,
+                Constant.Upload.ContentType,
                 Constant.MediaCache.Directive);
 
             using var http = new HttpClient();
@@ -374,7 +374,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
             Assert.Equal(original, await originalResponse.Content.ReadAsByteArrayAsync());
 
             Assert.Equal(HttpStatusCode.OK, derivativeResponse.StatusCode);
-            Assert.Equal(Constant.Thumbnail.ContentType, derivativeResponse.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(Constant.Upload.ContentType, derivativeResponse.Content.Headers.ContentType?.MediaType);
             Assert.Equal(derivative, await derivativeResponse.Content.ReadAsByteArrayAsync());
 
             // The item's removal takes its original first; the derivative has to survive that, since

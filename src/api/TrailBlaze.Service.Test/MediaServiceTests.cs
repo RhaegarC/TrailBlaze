@@ -1018,7 +1018,7 @@ public sealed class MediaServiceTests
         (string container, string path, string contentType, _) = harness.Storage.Uploads[1];
 
         Assert.Equal(Constant.StorageContainer.Media, container);
-        Assert.Equal(Constant.Thumbnail.ContentType, contentType);
+        Assert.Equal(Constant.Upload.ContentType, contentType);
         Assert.Equal(row.ThumbnailPath, path);
         Assert.NotEqual(original, path);
         Assert.Equal(path, Assert.Single(harness.Repository.Updated).ThumbnailPath);
@@ -1045,8 +1045,8 @@ public sealed class MediaServiceTests
         Assert.Equal(Path.GetDirectoryName(originalPath), Path.GetDirectoryName(derivativePath));
         Assert.Equal(
             Path.GetFileNameWithoutExtension(originalPath)
-                + Constant.Thumbnail.PathSuffix
-                + Constant.Thumbnail.FileExtension,
+                + Constant.Upload.PathSuffix
+                + Constant.Upload.FileExtension,
             Path.GetFileName(derivativePath));
     }
 
@@ -1217,33 +1217,18 @@ public sealed class MediaServiceTests
         Assert.Equal([item.BlobPath], harness.Storage.Deleted);
     }
 
-    /// <summary>
-    /// An image whose bytes run past the cap is refused even when its declared length was not,
-    /// because the declared length is a claim and the held copy is bounded by the cap.
-    /// </summary>
-    [Fact]
-    public async Task An_image_longer_than_its_declared_length_is_refused_rather_than_held()
-    {
-        // A cap of one kilobyte, declared honestly at ten bytes by a client sending far more.
-        var harness = new Harness(caps: new UploadSizeCaps(1024, 0));
-        byte[] photo = ImageFixtures.Noisy(300, 200);
-
-        MediaOutcome outcome = await harness.Service.UploadAsync(
-            ActivityId, new MemoryStream(photo), "image/jpeg", 10, "ridge.jpg");
-
-        Assert.Equal(MediaOutcomeKind.Rejected, outcome.Kind);
-        Assert.Equal(
-            Constant.Message.ImageTooLarge(1024), outcome.Errors!["file"].Single());
-        Assert.Empty(harness.Storage.Uploads);
-    }
+    // The claim that a stream longer than its declared length is refused is withdrawn: it was
+    // enforced by a capped in-memory hold of the original, which the upload no longer takes, and
+    // the route cannot produce the mismatch anyway — the controller passes `IFormFile.Length`,
+    // which the server measures, rather than a length the client states.
 
     // ---- Scaffolding ----------------------------------------------------------------------
 
     /// <summary>A producer that fails, so the caller's handling of a broken one is assertable
     /// without a real file that happens to break it.</summary>
-    private sealed class ExplodingThumbnails : IThumbnailService
+    private sealed class ExplodingThumbnails : IMediaHelperService
     {
-        public ThumbnailResult? Create(byte[] content) =>
+        public Task<Stream> GetThumbnailStreamAsync(Stream content) =>
             throw new InvalidOperationException("This producer was asked to fail.");
     }
 
@@ -1284,15 +1269,16 @@ public sealed class MediaServiceTests
             bool isAdmin = false,
             TimeSpan? mediaUrlTtl = null,
             UploadSizeCaps? caps = null,
-            IThumbnailService? thumbnails = null)
+            IMediaHelperService? thumbnails = null)
         {
             _caller = caller;
             _lifetime = new SignedUrlLifetime(mediaUrlTtl ?? SignedUrlLifetime.Default);
 
             // The real producer by default, so "an undecodable image still stores the original" is
             // decided by bytes rather than by a double's opinion of them. Set before the service is
-            // built, because the constructor captures it.
-            Thumbnails = thumbnails ?? new ThumbnailService(new ThumbnailOptions(0, 0));
+            // built, because the constructor captures it. Zero is "nothing configured", so the
+            // producer applies the default quality.
+            Thumbnails = thumbnails ?? new MediaHelperService(0);
 
             // Zero is "nothing configured" rather than a cap of no bytes: the type reads it as the
             // absence of a setting and applies the default, which is the same sentinel the lifetime
@@ -1321,7 +1307,7 @@ public sealed class MediaServiceTests
         public MediaService Service { get; }
 
         /// <summary>The producer the service was built with, real unless a test named another.</summary>
-        public IThumbnailService Thumbnails { get; }
+        public IMediaHelperService Thumbnails { get; }
 
         /// <summary>The same wiring over a different storage double, for the tests whose storage is
         /// the thing being recorded and not the default recorder.</summary>
