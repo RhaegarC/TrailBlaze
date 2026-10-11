@@ -44,17 +44,11 @@ internal static class ServiceExt
             ParseBytes(configuration[Constant.ConfigKey.ImageUploadCapBytes]),
             ParseBytes(configuration[Constant.ConfigKey.VideoUploadCapBytes])));
 
-        // The shape of an image's derivative, read the same way again.
-        services.AddSingleton(_ => new ThumbnailOptions(
-            ParseInt(configuration[Constant.ConfigKey.ThumbnailQuality]),
-            ParseInt(configuration[Constant.ConfigKey.ThumbnailMaxDimension])));
-
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IActivityAuthorizationService, ActivityAuthorizationService>();
         services.AddScoped<IActivityService, ActivityService>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<IUploadValidationService, UploadValidationService>();
-        services.AddScoped<IThumbnailService, ThumbnailService>();
         services.AddScoped<IUserContextService, UserContextService>();
 
         services.AddEntraAuthentication(configuration);

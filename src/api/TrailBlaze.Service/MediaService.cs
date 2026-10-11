@@ -1,7 +1,7 @@
 namespace TrailBlaze.Service;
 
+using ImageMagick;
 using Microsoft.Extensions.Logging;
-using TrailBlaze.Interface.Infrastructure;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
@@ -15,7 +15,6 @@ public sealed class MediaService(
     IStorageRepository storageRepository,
     IActivityAuthorizationService authorization,
     IUploadValidationService uploadValidation,
-    IThumbnailService thumbnailService,
     SignedUrlLifetime signedUrlLifetime,
     ILogger<MediaService> logger) : IMediaService
 {
@@ -74,22 +73,6 @@ public sealed class MediaService(
 
             User? uploader = await dbRepository.GetAsync<User>(row => row.Id == caller.Id);
 
-            // Held so one copy serves both the original and the derivative; a video is streamed
-            // straight through, which is why the two caps stay separate settings. Null means the
-            // bytes ran past the cap the declared length was checked against.
-            byte[]? held = null;
-
-            if (kind == Constant.MediaKind.Image)
-            {
-                held = await BufferAsync(content);
-
-                if (held is null)
-                {
-                    return Rejected(
-                        Constant.Message.ImageTooLarge(uploadValidation.AppliedImageCapBytes));
-                }
-            }
-
             (string path, string derivativePath) = MediaPathsFor(activityId, contentType!);
 
             var media = new Media
@@ -124,7 +107,7 @@ public sealed class MediaService(
                 await storageRepository.UploadAsync(
                     Constant.StorageContainer.Media,
                     path,
-                    held is null ? content : new MemoryStream(held),
+                    content,
                     contentType!,
                     Constant.MediaCache.Directive);
             }
@@ -146,17 +129,12 @@ public sealed class MediaService(
                 throw;
             }
 
-            // After the original, and never at its expense: an optimization that failed must not
-            // turn a stored upload into a failed one.
-            if (held is not null)
+            if (kind == Constant.MediaKind.Image)
             {
-                await TryStoreDerivativeAsync(media, held, derivativePath);
+                content.Position = 0;
+                await TryStoreDerivativeAsync(media, content, derivativePath);
             }
 
-            // Minted here rather than fetched by the client afterwards, so the answer to an upload is
-            // something renderable. The blobs are private, so there is nothing to show until a URL
-            // exists, and a round trip to mint one would be the client's second request for a single
-            // item.
             DateTimeOffset expiresOn = signedUrlLifetime.ExpiryFrom(DateTimeOffset.UtcNow);
 
             return MediaOutcome.Uploaded(
@@ -327,60 +305,29 @@ public sealed class MediaService(
 
         return (
             $"{stem}{uploadValidation.FileExtensionFor(contentType)}",
-            $"{stem}{Constant.Thumbnail.PathSuffix}{Constant.Thumbnail.FileExtension}");
-    }
-
-    /// <summary>The uploaded bytes, held in memory, or null when there are more of them than the
-    /// image cap allows.</summary>
-    /// <remarks>Bounded by the cap and not by the length the client declared, which is a claim. One
-    /// byte past the cap is read on purpose, so a file exactly at it is copied and one over is not.
-    /// </remarks>
-    private async Task<byte[]?> BufferAsync(Stream source)
-    {
-        long cap = uploadValidation.AppliedImageCapBytes;
-        long allowed = cap + 1;
-        long read = 0;
-
-        using var held = new MemoryStream();
-        byte[] chunk = new byte[81_920];
-
-        while (read < allowed)
-        {
-            int taken = await source.ReadAsync(
-                chunk.AsMemory(0, (int)Math.Min(chunk.Length, allowed - read)));
-
-            if (taken == 0)
-            {
-                break;
-            }
-
-            held.Write(chunk, 0, taken);
-            read += taken;
-        }
-
-        return read > cap ? null : held.ToArray();
+            $"{stem}{Constant.Upload.PathSuffix}{Constant.Upload.FileExtension}");
     }
 
     /// <summary>Derives a smaller copy and records it, or leaves the item served from its original.</summary>
     /// <remarks>The column is written only once the bytes are there, and every failure here is logged
     /// and swallowed rather than raised, because the original has already landed and is the item.
     /// </remarks>
-    private async Task TryStoreDerivativeAsync(Media media, byte[] original, string derivativePath)
+    private async Task TryStoreDerivativeAsync(Media media, Stream content, string derivativePath)
     {
         try
         {
-            ThumbnailResult? derivative = thumbnailService.Create(original);
-
-            if (derivative is null)
-            {
-                return;
-            }
-
+            string? quality = Environment.GetEnvironmentVariable(Constant.ConfigKey.ThumbnailQuality);
+            using var webpStream = new MemoryStream();
+            using var image = new MagickImage(content);
+            image.AutoOrient();
+            image.Format = MagickFormat.WebP;
+            image.Quality = Convert.ToUInt32(quality);
+            await image.WriteAsync(webpStream);
             await storageRepository.UploadAsync(
                 Constant.StorageContainer.Media,
                 derivativePath,
-                new MemoryStream(derivative.Content),
-                derivative.ContentType,
+                content,
+                media.ContentType,
                 Constant.MediaCache.Directive);
 
             media.ThumbnailPath = derivativePath;
