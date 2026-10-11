@@ -8,6 +8,7 @@ using TrailBlaze.Model;
 using TrailBlaze.Model.Authorization;
 using TrailBlaze.Model.DatabaseEntity;
 using TrailBlaze.Model.Media;
+using TrailBlaze.Service.Utility;
 
 /// <inheritdoc/>
 public sealed class MediaService(
@@ -131,7 +132,6 @@ public sealed class MediaService(
 
             if (kind == Constant.MediaKind.Image)
             {
-                content.Position = 0;
                 await TryStoreDerivativeAsync(media, content, derivativePath);
             }
 
@@ -316,17 +316,11 @@ public sealed class MediaService(
     {
         try
         {
-            string? quality = Environment.GetEnvironmentVariable(Constant.ConfigKey.ThumbnailQuality);
-            using var webpStream = new MemoryStream();
-            using var image = new MagickImage(content);
-            image.AutoOrient();
-            image.Format = MagickFormat.WebP;
-            image.Quality = Convert.ToUInt32(quality);
-            await image.WriteAsync(webpStream);
+            var webpStream = await MediaHelper.GetThumbnailStreamAsync(content);
             await storageRepository.UploadAsync(
                 Constant.StorageContainer.Media,
                 derivativePath,
-                content,
+                webpStream,
                 media.ContentType,
                 Constant.MediaCache.Directive);
 

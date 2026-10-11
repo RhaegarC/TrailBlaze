@@ -1,5 +1,6 @@
 namespace TrailBlaze.Service;
 
+using ImageMagick;
 using Microsoft.Extensions.Logging;
 using TrailBlaze.Interface.Infrastructure;
 using TrailBlaze.Interface.Repository;
@@ -8,6 +9,7 @@ using TrailBlaze.Model;
 using TrailBlaze.Model.Activity;
 using TrailBlaze.Model.Authorization;
 using TrailBlaze.Model.DatabaseEntity;
+using TrailBlaze.Service.Utility;
 
 /// <inheritdoc/>
 public sealed class ActivityService(
@@ -270,11 +272,12 @@ public sealed class ActivityService(
 
             // Derived from the entry's type, which a change across the public line moves the blob
             // for — so the previous cover is in this same container by the time a replace arrives.
+            // Only save Thumbnail for cover
             string container = CoverContainerFor(activity.Type);
             string? previous = activity.CoverImageBlobPath;
-            string path = CoverPathFor(activityId, contentType!);
-
-            await storageRepository.UploadAsync(container, path, content, contentType!);
+            string path = $"{activityId}/{Guid.NewGuid():N}{Constant.Upload.FileExtension}";
+            var webpStream = await MediaHelper.GetThumbnailStreamAsync(content);
+            await storageRepository.UploadAsync(container, path, webpStream, contentType!);
 
             // The row after the bytes, and the old blob after the row. A failure at either step then
             // leaves an object nothing points at, which is inert, rather than a row pointing at
@@ -439,11 +442,6 @@ public sealed class ActivityService(
         type == Constant.ActivityType.Public
             ? Constant.StorageContainer.Covers
             : Constant.StorageContainer.Media;
-
-    /// <summary>The activity's folder, then a fresh name, so a client that cached the previous cover
-    /// is never served these bytes under the old path.</summary>
-    private string CoverPathFor(string activityId, string contentType) =>
-        $"{activityId}/{Guid.NewGuid():N}{uploadValidation.FileExtensionFor(contentType)}";
 
     /// <summary>
     /// Moves the cover when an edit crosses the public line, copying it to the container the new type
