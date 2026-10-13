@@ -66,7 +66,7 @@ keeps rows 01–12 and is the record of that mission.
 | # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
 |---|---|---|---|---|
 | 13 | [upload-size-limits](archive/13-upload-size-limits.md) | 06 | The image and video caps stop being compile-time constants and become **configuration**, with raised defaults (25 MB image / 200 MB video) and **absolute ceilings** (100 MB / 512 MB) that still refuse a runaway upload. The route-level request limits follow the ceilings, so a file the service would accept is never answered with a bare 413 | archived — merged in PR #50. Both caps come from configuration and clamp to their ceilings, the refusal names the cap in force, and the cover and avatar routes now carry the request-size limits they did not need while the image cap sat below Kestrel's 30 MB default. **One criterion is not claimed**: that an oversize request is answered with the service's 400 rather than a bare 413, on all three upload routes, is `verification-only` — every route is `[Authorize]` and the Api tier holds no token, so the attribute is unreachable from a test, and the manual pass has not been run |
-| 14 | [image-thumbnails](14-image-thumbnails.md) | 06, 07, **15** | **Every uploaded image is stored twice** — the original plus a re-encoded derivative at a configured quality, with **no resize** — and the derivative is what the browser receives. Video is untouched: no transcoding, no poster frame, original streamed as today. Needs a new nullable column, so the PRD data model moves with it. **Implemented after 15, not before it** — see the numbering note above. *(2026-10-11 — the maximum dimension this row used to name is **gone**: the derivative keeps the original's pixel dimensions, and the decoder's resource limits went with it. A **cover** is the other change and goes the other way: it is stored as the derivative alone, with no original kept, so for a cover "stored twice" is not what happens.)* | **In progress** |
+| 14 | [image-thumbnails](archive/14-image-thumbnails.md) | 06, 07, **15** | **Every uploaded image is stored twice** — the original plus a re-encoded derivative at a configured quality, with **no resize** — and the derivative is what the browser receives. Video is untouched: no transcoding, no poster frame, original streamed as today. Needs a new nullable column, so the PRD data model moves with it. **Implemented after 15, not before it** — see the numbering note above. *(2026-10-11 — the maximum dimension this row used to name is **gone**: the derivative keeps the original's pixel dimensions, and the decoder's resource limits went with it. A **cover** is the other change and goes the other way: it is stored as the derivative alone, with no original kept, so for a cover "stored twice" is not what happens.)* | archived — merged in PR #54. An uploaded image is stored with a re-encoded WebP derivative in the same private `media` container, the listing signs it while the mint route keeps signing the original, and a **cover** is stored as the derivative alone; video is untouched. **One consequence is recorded rather than fixed**: the producer reads `ThumbnailQuality` from the process environment and applies it as it stands, so an unset value encodes at quality 0 and one that will not parse throws — absorbed by the media upload and returned as a 500 by the cover route. The web half is `verification-only` and the browser pass has not been run |
 | 15 | [media-url-cache](archive/15-media-url-cache.md) | 07, 12 | The media listing **carries each item's read URL and expiry**, collapsing the app's 1+N fan-out into one request; blobs gain a `Cache-Control`; and the SAS expiry is aligned to a window boundary so successive listings mint the *same* URL and a browser cache can hit it. No route is added or removed. Read with 16: minting per item is cheap only while signing stays local | archived — merged in PR #52. The listing mints a URL per item from one page expiry, the minting instant is rounded to a boundary taken from the cache window so successive listings produce the same string for as long as a browser may reuse the bytes, media uploads carry a bounded `private` `Cache-Control`, and the app asks once and holds what it was given. **Two criteria about the browser are not claimed**: no runner exists in `src/web`, so the reuse and the refresh are `verification-only` and the manual pass has not been run |
 | 16 | [user-delegation-sas](16-user-delegation-sas.md) | 07, 12, 15 | **Not performance work.** The storage credential stops being the account key: the API signs read URLs with a **user delegation key** obtained as its own Entra identity, so no account key sits in configuration and the signatures become revocable. The delegation key is cached per key lifetime — the one backend cache this mission actually needs, since it is *not* caller-dependent. **Its first step is to settle whether the emulator can mint one at all**, because if it cannot, no tier exercises the delegation path | **Not started** |
 
@@ -74,17 +74,17 @@ keeps rows 01–12 and is the record of that mission.
 
 - [ ] The image and video caps are read from configuration; absent gives the default, above the
       ceiling clamps to it; the refusal is a documented 400, not a 413
-- [ ] An uploaded image is stored with a derivative and the browser is served the derivative, while
+- [x] An uploaded image is stored with a derivative and the browser is served the derivative, while
       the original stays retrievable — **for media**. A cover keeps no original and is the derivative
       alone
-- [ ] A decode that cannot produce a derivative leaves the item stored and served from its original —
+- [x] A decode that cannot produce a derivative leaves the item stored and served from its original —
       **for media**. A cover has nothing to fall back to and fails the upload instead
-- [ ] Video behaviour is unchanged — stored as-is, no derivative, served as today
+- [x] Video behaviour is unchanged — stored as-is, no derivative, served as today
 - [x] A media listing carries a read URL and an expiry per item, and the app makes one request for a
       listing rather than one plus N (the app's half is `verification-only` —
       [15](archive/15-media-url-cache.md) records what was and was not established)
 - [x] Media bytes carry a bounded, `private` cache header, and the SAS expiry remains the control
-- [ ] The data-model change lands in the PRD in the same pull request as the migration
+- [x] The data-model change lands in the PRD in the same pull request as the migration
 - [ ] No storage account key is read from configuration: the API signs read URLs as its own identity,
       and the required setting it replaces still stops startup when absent
 - [ ] Each backend feature merged to `develop` with its tests (RED → GREEN)
@@ -132,7 +132,7 @@ visitor re-downloaded, which is the case the feature was written for. The bounda
 the cache window rather than chosen beside it, and the client's refresh margin moved with it. The
 count moved by one because the coupling is asserted rather than commented.)*
 
-*(2026-10-11 — [14](14-image-thumbnails.md) moved the counts, and it also **removed** cases, which is
+*(2026-10-11 — [14](archive/14-image-thumbnails.md) moved the counts, and it also **removed** cases, which is
 worth separating out rather than reporting as a net. `TrailBlaze.Service.Test` is +26: fourteen in the
 new `MediaHelperServiceTests`, one covering the derivative's stream still being readable after the
 producer returns — the claim that caught a disposed-stream defect the first version of the type
