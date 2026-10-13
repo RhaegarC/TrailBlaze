@@ -1,7 +1,7 @@
 # 14 — Every image is stored with a derivative
 
-Status: **In progress** · [00-mission-2-sprint.md](00-mission-2-sprint.md)
-Source: [PRD](../PRD.md) — Decision #31 (new, changed 2026-10-11) + Decision #15 (unchanged,
+Status: **Archived** — merged to `develop` in PR #54 · [00-mission-2-sprint.md](../00-mission-2-sprint.md)
+Source: [PRD](../../PRD.md) — Decision #31 (new, changed 2026-10-11) + Decision #15 (unchanged,
 video-scoped) + "Media storage & delivery" + "Data model"
 
 ## Summary
@@ -37,9 +37,9 @@ does not cost me several megabytes of data and several seconds of waiting.
 
 ## Dependencies
 
-- [06-media-upload](archive/06-media-upload.md) — the upload path the derivative is produced on
-- [07-sas-delivery](archive/07-sas-delivery.md) — the SAS the derivative is served through
-- [15-media-url-cache](archive/15-media-url-cache.md) — **implemented first**, out of number order. The
+- [06-media-upload](06-media-upload.md) — the upload path the derivative is produced on
+- [07-sas-delivery](07-sas-delivery.md) — the SAS the derivative is served through
+- [15-media-url-cache](15-media-url-cache.md) — **implemented first**, out of number order. The
   criterion "the media listing signs the derivative" presumes a listing that signs anything, and
   until 15 landed it did not: the listing carried metadata and the app fetched one URL per item.
   Building the derivative against that would have meant writing the serving path twice, so 15 goes

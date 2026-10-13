@@ -119,7 +119,7 @@ Until that is run the claim is verified by reading the attributes, not by execut
 - **A cap is not a memory bound, and the file says so rather than implying otherwise.** The
   request-size attribute is a *transport* ceiling, and the form parser spools a body over its buffer
   limit to a temp file, so a 512 MB video is disk rather than RAM. The image path is different:
-  [14](../14-image-thumbnails.md) decodes the bytes in-process, so the image cap is also a per-request
+  [14](14-image-thumbnails.md) decodes the bytes in-process, so the image cap is also a per-request
   memory budget — and a budget is per request, so concurrent uploads multiply it.
 - **The avatar route buffers its body, and this feature makes that buffer bigger.** It is the one
   upload path that holds the bytes in memory before validation rather than streaming them, and its
