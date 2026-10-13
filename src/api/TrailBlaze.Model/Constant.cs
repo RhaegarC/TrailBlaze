@@ -106,8 +106,8 @@ public static class Constant
         /// <see cref="Upload.MaxVideoSizeCapBytes"/> whatever it says.</summary>
         public const string VideoUploadCapBytes = "VideoUploadCapBytes";
 
-        /// <summary>The quality an image's derivative is re-encoded at. Optional, and held inside
-        /// <see cref="Upload.QualityCeiling"/> whatever it says.</summary>
+        /// <summary>The quality an image's derivative is re-encoded at, read from the process
+        /// environment. Optional, and applied as it stands: there is no default and no ceiling.</summary>
         public const string ThumbnailQuality = "ThumbnailQuality";
     }
 

@@ -99,10 +99,10 @@ frozen measurement taken when that mission closed.
 
 | Project | Bare machine | With the containers |
 |---|---|---|
-| `TrailBlaze.Service.Test` | 319 / 0 / 319 | 319 / 0 / 319 |
+| `TrailBlaze.Service.Test` | 313 / 0 / 313 | 313 / 0 / 313 |
 | `TrailBlaze.Repository.Test` | 69 / 64 / 133 | 133 / 0 / 133 |
 | `TrailBlaze.Api.Test` | 20 / 0 / 20 | 20 / 0 / 20 |
-| **All three** | **408 / 64 / 472** | **472 / 0 / 472** |
+| **All three** | **402 / 64 / 466** | **466 / 0 / 466** |
 
 Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
 the container tiers skip, and `Category=Container` is the only trait in the solution. *(2026-10-05 —
@@ -148,6 +148,20 @@ gives. **Three of the four claims that went are recorded in the feature file as 
 faked** — the maximum dimension, the decoder's resource limits, and the declared-length guard — and
 the count is lower for them than it would have been had a test been invented to keep each one
 green.)*
+
+*(2026-10-13 — the derivative's producer stopped being a type of its own and became a member of
+`MediaService`, so the test class named above no longer exists and the table moved with it.
+`TrailBlaze.Service.Test` is **−6**. `MediaHelperServiceTests` held fourteen cases: eight moved into
+`MediaServiceTests`, which is the class the type they cover belongs to now, and six went with the
+quality clamp and the two constants it read — leaving one assertion that the setting reaches the
+encoder in place of four about what it is held to. The file is deleted rather than re-pointed, so the
+net is the difference and not a sum. The other two projects are unchanged, and the partition behind
+the Repository row is **re-measured rather than carried**: the 133 splits `Category!=Container` 49 /
+`Category=Container` 84, and the 69 that pass bare is 49 offline plus 20 of those 84 — the storage
+tier again running because Azurite was up, which is the reason the note above gives. One claim went
+unattested with the move, and it is recorded in the feature file as withdrawn rather than replaced:
+the clamp is the only withdrawal in that list whose behaviour was removed by a change of placement
+rather than by a decision, and it is the one to read before the PR merges.)*
 
 ## Open items
 

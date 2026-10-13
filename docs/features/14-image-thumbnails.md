@@ -53,18 +53,28 @@ third-party types, and never the Api project. `Magick.NET-Q8-AnyCPU`; the `AnyCP
 native binaries for `linux-x64`, and `src/api/Dockerfile` is Debian-based, so the deployed image
 needs nothing added to it.
 
-**Placement follows the layer rules.** `IMediaHelperService` in `TrailBlaze.Interface/Service/`;
-`MediaHelperService` in `TrailBlaze.Service/`, carrying that layer's suffix. *(2026-10-11 — this was
-`IThumbnailService` / `ThumbnailService` with an options type and a result record in
-`TrailBlaze.Model/`. The two value types are gone and the remaining contract returns the stream
-itself; the quality the options type clamped is now clamped by the service, and the content type the
-result carried is `Constant.Upload.ContentType`.)*
+**The producer is a member of `MediaService`, and both upload paths reach it there.** There is no
+type of its own: `GetThumbnailStreamAsync` sits on `IMediaService` / `MediaService` beside the
+listing and the mint, and the cover route calls it through the same contract that the media upload
+does. *(2026-10-11 — this was `IThumbnailService` / `ThumbnailService` with an options type and a
+result record in `TrailBlaze.Model/`, then briefly a singleton `IMediaHelperService` /
+`MediaHelperService`. The two value types are gone, the second pair was folded into the media
+service, and the remaining contract returns the stream itself; the content type the result carried is
+`Constant.Upload.ContentType`.)*
 
-**The service is registered in the composition root and takes the configured quality.** It is a
-singleton built from `ThumbnailQuality`, read the same way `SignedUrlLifetime` and `UploadSizeCaps`
-are read beside it: absent, unreadable or non-positive falls to `Constant.Upload.QualityDefault`, and
-a value above `Constant.Upload.QualityCeiling` is clamped there rather than honoured. Nothing else
-reads the setting, and the Api layer names no ImageMagick type.
+**The quality is read inside the producer, from the process environment, and applied as it stands.**
+`ThumbnailQuality` is read through `Environment.GetEnvironmentVariable` on each call — not through
+`IConfiguration`, and not in the composition root as the caps and the SAS window are — and its value
+becomes the encoder's quality with nothing in between. `Constant.Upload.QualityDefault` and
+`QualityCeiling` went with the singleton, and so did the clamp that had used `SignedUrlLifetime` as
+its pattern. *(2026-10-13 — three consequences are recorded rather than corrected, because they are
+what the code does. An unconfigured process encodes at quality **0**: `Convert.ToUInt32` answers a
+null string with zero, and nothing sets the variable, which appears in neither `appsettings.json` nor
+`docker-compose.yml`. A value that will not parse **throws** rather than falling back — a
+`FormatException` for text, an `OverflowException` for a negative — and the two routes meet that
+differently: the media upload swallows it in the derivative's own guard, so the item is stored with
+no derivative and nothing backfills one, while the cover route re-raises it and the client sees a
+500. And a value above 100 is passed to the encoder rather than clamped.)*
 
 **The derivative is WebP, and it is a re-encode.** The source is decoded, auto-oriented, and written
 out as `image/webp` at the applied quality. *(**2026-10-11** — three properties the first design had
@@ -153,16 +163,18 @@ because video and every row that already exists have none.
 
 ## Tests (TDD)
 
-- **Unit — the producer** (`MediaHelperServiceTests`, offline, against the real library, every input
-  built by a hand-written encoder in the test assembly rather than by the library under test): **the
-  returned stream is readable after the call returns** (the claim that caught the disposed-stream
-  defect the first version of this type shipped); the derivative is a WebP however the source was
-  encoded; it comes back smaller than a noisy photograph; a transparent source keeps its size; an
-  animated source yields a single frame; bytes that are not an image, and an empty file, are
-  **reported rather than returned**, so a caller cannot store an empty stream as a success; and the
-  configured quality takes effect. The quality clamp is asserted beside it: a value inside the
-  ceiling is honoured, one above it is clamped, and a non-positive or unparsable one falls to the
-  default — which is itself asserted, because every unconfigured deployment encodes at it.
+- **Unit — the producer** (in `MediaServiceTests`, which is the class the type belongs to now;
+  offline, against the real library, every input built by a hand-written encoder in the test assembly
+  rather than by the library under test): **the returned stream is readable after the call returns**
+  (the claim that caught the disposed-stream defect the first version of this type shipped); the
+  derivative is a WebP however the source was encoded; it comes back smaller than a noisy photograph;
+  a transparent source keeps its size; an animated source yields a single frame; bytes that are not an
+  image, and an empty file, are **reported rather than returned**, so a caller cannot store an empty
+  stream as a success; and the configured quality takes effect. That last one **sets the environment
+  variable and restores it**, because reading it is the producer's own job and there is no other way
+  in — which is why the class sits in a collection that serialises it against the rest of the
+  assembly. The clamp that used to be asserted beside it has nothing left to assert, and is withdrawn
+  below.
 - **Unit, at the service tier** — the upload path with a recording storage double, which is the one
   sanctioned double and records only whether it was called: an image writes both blobs and records
   the derivative's path, and the derivative is stored as `Constant.Upload.ContentType`; a video writes
@@ -188,9 +200,9 @@ because video and every row that already exists have none.
 
 ### Claims withdrawn rather than faked
 
-Two criteria above are struck rather than met, and two tests went with them. Neither is a coverage
-gap being hidden: the behaviour each named **does not exist**, and a test asserting otherwise would
-be an assertion that cannot fail.
+Four claims are struck rather than met, and the tests that named them went with them. None is a
+coverage gap being hidden: the behaviour each named **does not exist**, and a test asserting
+otherwise would be an assertion that cannot fail.
 
 - **The maximum-dimension criterion** — the resize is gone, so there is nothing to assert.
 - **The decoder-resource-limit criterion** — the limits are gone. This is the one worth re-reading
@@ -198,6 +210,13 @@ be an assertion that cannot fail.
 - **The declared-length guard** (`An_image_longer_than_its_declared_length_is_refused_rather_than_held`)
   — the cap-bounded copy it tested is gone with the buffering, and the route cannot produce the
   mismatch: the controller passes `IFormFile.Length`, which the server measures.
+- **The quality ceiling and the non-positive fallback** — six cases, withdrawn with the clamp and the
+  two constants they read. What replaced them is one assertion that the setting *reaches* the
+  encoder, not four about what it is held to; the difference is exactly the clamping that is gone.
+  *(2026-10-13 — these are the only claims in this list whose behaviour was removed by a change of
+  placement rather than by a decision, and they are recorded here so the next reader does not read
+  their absence as an oversight. See the quality paragraph in the Design section for what the code
+  does instead.)*
 
 ## Notes / non-goals
 
@@ -206,13 +225,16 @@ be an assertion that cannot fail.
 - **An animated image becomes a still.** The derivative is a single frame.
 - **Existing images are not backfilled.** A row with no derivative serves its original, which is
   correct and slower. A backfill is a separate piece of work and would mint new paths.
-- **The quality default is 75**, and it is a setting precisely so it can be turned up or down without
-  a rebuild. *(2026-10-11 — the first design defaulted to quality 5, chosen beside a 1600-pixel cap
-  and a JPEG target. With the cap gone and the format WebP, 5 encodes the full-size image into
-  something no one would want to look at, so the default moved and the ceiling stayed at 100.)*
+- **The quality is a setting with no default and no ceiling.** *(2026-10-11 — the first design
+  defaulted to quality 5, chosen beside a 1600-pixel cap and a JPEG target. With the cap gone and the
+  format WebP, 5 encodes the full-size image into something no one would want to look at, so a
+  default of 75 was chosen and a ceiling of 100 held it. **2026-10-13** — both went with the
+  singleton the setting used to be read in, so what is left is the setting itself, read from the
+  environment and applied as it stands: see the quality paragraph in the Design section for what that
+  means for a deployment that sets nothing.)*
 - **The derivative is not stripped of metadata.** See the Design section: the orientation tag is
   applied and removed, and the rest — GPS included — is carried into the derivative. For a cover this
-  is a public blob. Making this a decision rather than a consequence is one line in
-  `MediaHelperService`, and it is deliberately left to the review rather than taken here.
+  is a public blob. Making this a decision rather than a consequence is one line in `MediaService`,
+  and it is deliberately left to the review rather than taken here.
 - **This is CPU work on the request thread.** The derivative is produced during the upload, so an
   upload is slower than it was; that is the cost of the download being faster.

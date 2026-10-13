@@ -1248,20 +1248,28 @@ public sealed class ActivityServiceTests
     {
         // One repository for both, so a role a test put on the rows is the role the rule reads.
         var rows = repository ?? new RecordingRepository();
+        var blobs = storage ?? new RecordingStorage();
+
+        // Zero is "nothing configured" rather than a cap of no bytes: the type reads it as the
+        // absence of a setting and applies the default.
+        var validation = new UploadValidationService(caps ?? new UploadSizeCaps(0, 0));
+        var auth = new ActivityAuthorizationService(rows, new StubUserContext(caller));
 
         return new(
             rows,
-            storage ?? new RecordingStorage(),
-
-            // Zero is "nothing configured" rather than a cap of no bytes: the type reads it as the
-            // absence of a setting and applies the default.
-            new UploadValidationService(caps ?? new UploadSizeCaps(0, 0)),
+            blobs,
+            validation,
 
             // The real producer, so what a cover is stored as is decided by the bytes and not by a
-            // double's opinion of them. Zero is "nothing configured", so it applies the default
-            // quality.
-            new MediaHelperService(0),
-            new ActivityAuthorizationService(rows, new StubUserContext(caller)),
+            // double's opinion of them. Nothing on this path reads the signed-URL window.
+            new MediaService(
+                rows,
+                blobs,
+                auth,
+                validation,
+                new SignedUrlLifetime(SignedUrlLifetime.Default),
+                NullLogger<MediaService>.Instance),
+            auth,
             new StubUserContext(caller),
             NullLogger<ActivityService>.Instance);
     }

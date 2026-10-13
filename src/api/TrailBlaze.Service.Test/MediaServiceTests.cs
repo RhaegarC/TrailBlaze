@@ -1,5 +1,6 @@
 namespace TrailBlaze.Service.Test;
 
+using ImageMagick;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Linq.Expressions;
@@ -12,14 +13,18 @@ using TrailBlaze.Model.Media;
 using TrailBlaze.Service.Test.TestSupport;
 
 /// <summary>
-/// What an activity's media may be, who may contribute it, and who may remove it.
+/// What an activity's media may be, who may contribute it, and who may remove it — and the smaller
+/// copy an uploaded image is stored beside.
 /// </summary>
 /// <remarks>
 /// The rules exercised here are decided from the request and the activity alone, which is what makes
 /// them answerable without a store. The one claim this tier cannot make is that a blob really landed
 /// or really went: that needs a real account, and it is asserted in
-/// <c>TrailBlaze.Repository.Test</c>'s container tier instead.
+/// <c>TrailBlaze.Repository.Test</c>'s container tier instead. In a collection of its own, which
+/// serialises it against the rest of the assembly, because the derivative is encoded at a quality
+/// read from the process environment and the one test that sets it would set it for its neighbours.
 /// </remarks>
+[Collection(nameof(ProcessEnvironmentCollection))]
 public sealed class MediaServiceTests
 {
     private const string Owner = "the-owners-object-id";
@@ -1108,10 +1113,15 @@ public sealed class MediaServiceTests
     /// A derivative that cannot be stored leaves the item as it would have been without one, rather
     /// than failing an upload whose original landed.
     /// </summary>
+    /// <remarks>
+    /// The storage double refuses its second write, so it is the derivative's upload that fails and
+    /// not the original's — the decode path is a different claim, and its neighbour covers it.
+    /// </remarks>
     [Fact]
     public async Task A_derivative_that_cannot_be_stored_leaves_the_original_serving()
     {
-        var harness = new Harness(thumbnails: new ExplodingThumbnails());
+        var harness = new Harness();
+        harness.Storage.RefuseUploadOn = 2;
         byte[] photo = ImageFixtures.Noisy(300, 200);
 
         MediaOutcome outcome = await harness.Service.UploadAsync(
@@ -1222,15 +1232,167 @@ public sealed class MediaServiceTests
     // the route cannot produce the mismatch anyway — the controller passes `IFormFile.Length`,
     // which the server measures, rather than a length the client states.
 
-    // ---- Scaffolding ----------------------------------------------------------------------
+    // The claims that the quality is clamped to a ceiling, and that a non-positive or unparsable
+    // configured value falls to a default, are withdrawn with the type that carried them: the
+    // quality is now read and applied as it stands, so there is no ceiling and no default to assert.
 
-    /// <summary>A producer that fails, so the caller's handling of a broken one is assertable
-    /// without a real file that happens to break it.</summary>
-    private sealed class ExplodingThumbnails : IMediaHelperService
+    // ---- The producer ---------------------------------------------------------------------
+
+    /// <summary>The service the producer tests drive. The decode is decided by the bytes alone, so
+    /// nothing the harness supplies is read — but it is the real wiring, not a stand-in.</summary>
+    private static MediaService Producer() => new Harness().Service;
+
+    /// <summary>The derivative's bytes, read the way storage reads them: from the stream the producer
+    /// handed back, after it returned.</summary>
+    private static async Task<byte[]> DerivativeBytes(byte[] content)
     {
-        public Task<Stream> GetThumbnailStreamAsync(Stream content) =>
-            throw new InvalidOperationException("This producer was asked to fail.");
+        using Stream derivative = await Producer().GetThumbnailStreamAsync(new MemoryStream(content));
+        using var buffer = new MemoryStream();
+
+        await derivative.CopyToAsync(buffer);
+
+        return buffer.ToArray();
     }
+
+    private static async Task<MagickImage> Decode(byte[] content) => new(await DerivativeBytes(content));
+
+    /// <summary>
+    /// The stream is still open once the call has returned, because the caller uploads from it
+    /// afterwards: a derivative disposed on the way out hands the caller a closed stream that every
+    /// read rejects.
+    /// </summary>
+    [Fact]
+    public async Task The_derivative_stream_is_readable_after_the_call_returns()
+    {
+        Stream derivative = await Producer().GetThumbnailStreamAsync(
+            new MemoryStream(ImageFixtures.Gradient(400, 300)));
+
+        Assert.True(derivative.CanRead);
+
+        byte[] bytes = new byte[derivative.Length];
+        int read = await derivative.ReadAsync(bytes);
+
+        Assert.Equal(bytes.Length, read);
+        Assert.NotEmpty(bytes);
+    }
+
+    /// <summary>The derivative is re-encoded, not a copy of the original's bytes.</summary>
+    [Fact]
+    public async Task The_derivative_is_a_WebP_however_the_source_was_encoded()
+    {
+        byte[] source = ImageFixtures.Gradient(400, 300);
+
+        using MagickImage image = await Decode(source);
+
+        Assert.Equal(MagickFormat.WebP.ToString(), image.Format.ToString());
+        Assert.NotEqual(source, await DerivativeBytes(source));
+    }
+
+    /// <summary>
+    /// The claim the whole feature exists for: what the browser receives is smaller than what was
+    /// uploaded.
+    /// </summary>
+    /// <remarks>
+    /// The source is noise on purpose. A smooth image compresses so well as a PNG that a lossy
+    /// re-encode of it can be larger, which would make this assertion about the format rather than
+    /// about the derivative; a photograph is what the feature is for, and noise is what a photograph
+    /// is to a compressor.
+    /// </remarks>
+    [Fact]
+    public async Task A_derivative_comes_back_smaller_than_the_photograph_it_came_from()
+    {
+        byte[] photo = ImageFixtures.Noisy(900, 700);
+
+        byte[] derivative = await DerivativeBytes(photo);
+
+        Assert.True(
+            derivative.Length < photo.Length,
+            $"The derivative ({derivative.Length} bytes) is not smaller than its source "
+            + $"({photo.Length} bytes).");
+    }
+
+    /// <summary>A source with transparency keeps its size: WebP carries an alpha channel, so the
+    /// derivative is a still rather than a flattening encode.</summary>
+    [Fact]
+    public async Task A_transparent_source_keeps_its_size()
+    {
+        using MagickImage image = await Decode(ImageFixtures.Transparent(200, 150));
+
+        Assert.Equal(200u, image.Width);
+        Assert.Equal(150u, image.Height);
+    }
+
+    /// <summary>An animated source yields one frame, not a moving derivative.</summary>
+    [Fact]
+    public async Task An_animated_source_yields_a_single_frame()
+    {
+        using var frames = new MagickImageCollection(
+            await DerivativeBytes(ImageFixtures.AnimatedGif(64, 64, frames: 3)));
+
+        Assert.Single(frames);
+    }
+
+    /// <summary>
+    /// Bytes that are not an image are reported to the caller rather than answered with an empty
+    /// derivative: a media item keeps its original and survives the failure, and a caller that
+    /// stored an empty stream in its place would be serving a broken image as a success.
+    /// </summary>
+    [Fact]
+    public async Task Bytes_that_are_not_an_image_are_reported_rather_than_returned()
+    {
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => Producer().GetThumbnailStreamAsync(new MemoryStream(ImageFixtures.NotAnImage)));
+    }
+
+    /// <summary>The same answer for an empty file, which is what a client that sent nothing sends.</summary>
+    [Fact]
+    public async Task An_empty_file_is_reported_rather_than_returned()
+    {
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => Producer().GetThumbnailStreamAsync(new MemoryStream([])));
+    }
+
+    /// <summary>
+    /// The configured quality takes effect, which is only observable on an image with detail to
+    /// discard: at quality 5 far more of the source survives as approximation than at quality 95.
+    /// </summary>
+    /// <remarks>
+    /// The setting is read from the process environment by the producer itself, so this is the only
+    /// way to reach it and the only test that writes one — which is why the class is in a collection
+    /// of its own. Both values are the same image, so the difference is the setting and nothing else.
+    /// </remarks>
+    [Fact]
+    public async Task The_configured_quality_takes_effect()
+    {
+        byte[] photo = ImageFixtures.Noisy(600, 400);
+
+        byte[] lossy = await DerivativeAt(photo, "5");
+        byte[] faithful = await DerivativeAt(photo, "95");
+
+        Assert.True(
+            lossy.Length < faithful.Length,
+            $"Quality 5 produced {lossy.Length} bytes and quality 95 produced "
+            + $"{faithful.Length}: the setting made no difference.");
+    }
+
+    /// <summary>The derivative of an image at a quality named by the setting the producer reads.</summary>
+    private static async Task<byte[]> DerivativeAt(byte[] content, string quality)
+    {
+        string? previous = Environment.GetEnvironmentVariable(Constant.ConfigKey.ThumbnailQuality);
+
+        try
+        {
+            Environment.SetEnvironmentVariable(Constant.ConfigKey.ThumbnailQuality, quality);
+
+            return await DerivativeBytes(content);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Constant.ConfigKey.ThumbnailQuality, previous);
+        }
+    }
+
+    // ---- Scaffolding ----------------------------------------------------------------------
 
     private static Activity Activity(string type, string owner) => new()
     {
@@ -1268,17 +1430,10 @@ public sealed class MediaServiceTests
             string? caller = Contributor,
             bool isAdmin = false,
             TimeSpan? mediaUrlTtl = null,
-            UploadSizeCaps? caps = null,
-            IMediaHelperService? thumbnails = null)
+            UploadSizeCaps? caps = null)
         {
             _caller = caller;
             _lifetime = new SignedUrlLifetime(mediaUrlTtl ?? SignedUrlLifetime.Default);
-
-            // The real producer by default, so "an undecodable image still stores the original" is
-            // decided by bytes rather than by a double's opinion of them. Set before the service is
-            // built, because the constructor captures it. Zero is "nothing configured", so the
-            // producer applies the default quality.
-            Thumbnails = thumbnails ?? new MediaHelperService(0);
 
             // Zero is "nothing configured" rather than a cap of no bytes: the type reads it as the
             // absence of a setting and applies the default, which is the same sentinel the lifetime
@@ -1306,9 +1461,6 @@ public sealed class MediaServiceTests
 
         public MediaService Service { get; }
 
-        /// <summary>The producer the service was built with, real unless a test named another.</summary>
-        public IMediaHelperService Thumbnails { get; }
-
         /// <summary>The same wiring over a different storage double, for the tests whose storage is
         /// the thing being recorded and not the default recorder.</summary>
         public MediaService ServiceWith(IStorageRepository storage, ILogger<MediaService>? logger = null) =>
@@ -1320,7 +1472,6 @@ public sealed class MediaServiceTests
                 // under test in the gate tables, and a double here would be asserting the double.
                 new ActivityAuthorizationService(Repository, new StubUserContext(_caller)),
                 new UploadValidationService(_caps),
-                Thumbnails,
                 _lifetime,
                 logger ?? NullLogger<MediaService>.Instance);
     }
@@ -1478,6 +1629,12 @@ public sealed class MediaServiceTests
 
         public bool RefuseUploads { get; set; }
 
+        /// <summary>The write to refuse, counted from one, so a failure can be aimed at the second
+        /// object an upload stores rather than at the first.</summary>
+        public int RefuseUploadOn { get; set; }
+
+        private int _attempts;
+
         public Task<string> UploadAsync(
             string container,
             string path,
@@ -1486,7 +1643,7 @@ public sealed class MediaServiceTests
             string? cacheControl = null,
             CancellationToken cancellationToken = default)
         {
-            if (RefuseUploads)
+            if (RefuseUploads || ++_attempts == RefuseUploadOn)
             {
                 throw new NotSupportedException(NoStorage);
             }

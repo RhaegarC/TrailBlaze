@@ -52,7 +52,6 @@ public sealed class CompositionRootTests
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUploadValidationService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUserContextService>());
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IMediaHelperService>());
     }
 
     /// <summary>A cap in configuration is the one applied, and an absent one falls to the default.</summary>
