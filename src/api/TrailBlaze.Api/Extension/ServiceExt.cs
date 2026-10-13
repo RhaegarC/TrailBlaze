@@ -44,11 +44,6 @@ internal static class ServiceExt
             ParseBytes(configuration[Constant.ConfigKey.ImageUploadCapBytes]),
             ParseBytes(configuration[Constant.ConfigKey.VideoUploadCapBytes])));
 
-        // Stateless: the derivation holds nothing between calls, and the quality it reads is fixed
-        // for the process the same way the lifetime and the caps above are.
-        services.AddSingleton<IMediaHelperService>(_ => new MediaHelperService(
-            ParseInt(configuration[Constant.ConfigKey.ThumbnailQuality])));
-
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IActivityAuthorizationService, ActivityAuthorizationService>();
         services.AddScoped<IActivityService, ActivityService>();
@@ -70,13 +65,6 @@ internal static class ServiceExt
     private static long ParseBytes(string? value) =>
         long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long bytes)
             ? bytes
-            : 0;
-
-    /// <summary>A configured integer, or zero for an absent or unreadable one, which
-    /// <see cref="MediaHelperService"/> reads as the absence of a setting.</summary>
-    private static int ParseInt(string? value) =>
-        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
-            ? number
             : 0;
 
     /// <summary>Reads a configuration value the application cannot run without, and names it in the

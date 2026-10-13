@@ -473,11 +473,5 @@ public static class Constant
 
         /// <summary>Content type of thumbnail.</summary>
         public const string ContentType = "image/webp";
-
-        /// <summary>Quality thumbnail is encoded at when nothing is configured.</summary>
-        public const uint QualityDefault = 75;
-
-        /// <summary>The highest a configured quality reaches.</summary>
-        public const uint QualityCeiling = 100;
     }
 }

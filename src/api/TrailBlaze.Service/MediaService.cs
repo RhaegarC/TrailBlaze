@@ -1,6 +1,7 @@
 namespace TrailBlaze.Service;
 
 using Microsoft.Extensions.Logging;
+using ImageMagick;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
@@ -14,7 +15,6 @@ public sealed class MediaService(
     IStorageRepository storageRepository,
     IActivityAuthorizationService authorization,
     IUploadValidationService uploadValidation,
-    IMediaHelperService mediaHelper,
     SignedUrlLifetime signedUrlLifetime,
     ILogger<MediaService> logger) : IMediaService
 {
@@ -289,6 +289,27 @@ public sealed class MediaService(
         }
     }
 
+    /// <inheritdoc/>
+    public async Task<Stream> GetThumbnailStreamAsync(Stream content)
+    {
+        content.Position = 0;
+
+        using var image = new MagickImage(content);
+        image.AutoOrient();
+        image.Format = MagickFormat.WebP;
+
+        string? qualityStr = Environment.GetEnvironmentVariable(Constant.ConfigKey.ThumbnailQuality);
+        image.Quality = Convert.ToUInt32(qualityStr!);
+
+        // Deliberately not `using`: the caller reads this stream after this method returns, so a
+        // scope-bound dispose would hand them a closed one.
+        var derivative = new MemoryStream();
+        await image.WriteAsync(derivative);
+        derivative.Position = 0;
+
+        return derivative;
+    }
+
     /// <summary>A refusal keyed by the form field, so it arrives in the shape a client already reads
     /// for a body that did not bind.</summary>
     private static MediaOutcome Rejected(string reason) =>
@@ -315,7 +336,7 @@ public sealed class MediaService(
     {
         try
         {
-            Stream derivative = await mediaHelper.GetThumbnailStreamAsync(content);
+            Stream derivative = await GetThumbnailStreamAsync(content);
 
             await storageRepository.UploadAsync(
                 Constant.StorageContainer.Media,
