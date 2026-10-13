@@ -1,7 +1,7 @@
 namespace TrailBlaze.Service;
 
 using Microsoft.Extensions.Logging;
-using TrailBlaze.Interface.Infrastructure;
+using ImageMagick;
 using TrailBlaze.Interface.Repository;
 using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
@@ -73,7 +73,7 @@ public sealed class MediaService(
 
             User? uploader = await dbRepository.GetAsync<User>(row => row.Id == caller.Id);
 
-            string path = MediaPathFor(activityId, contentType!);
+            (string path, string derivativePath) = MediaPathsFor(activityId, contentType!);
 
             var media = new Media
             {
@@ -105,7 +105,11 @@ public sealed class MediaService(
             try
             {
                 await storageRepository.UploadAsync(
-                    Constant.StorageContainer.Media, path, content, contentType!, Constant.MediaCache.Directive);
+                    Constant.StorageContainer.Media,
+                    path,
+                    content,
+                    contentType!,
+                    Constant.MediaCache.Directive);
             }
             catch
             {
@@ -125,10 +129,11 @@ public sealed class MediaService(
                 throw;
             }
 
-            // Minted here rather than fetched by the client afterwards, so the answer to an upload is
-            // something renderable. The blobs are private, so there is nothing to show until a URL
-            // exists, and a round trip to mint one would be the client's second request for a single
-            // item.
+            if (kind == Constant.MediaKind.Image)
+            {
+                await TryStoreDerivativeAsync(media, content, derivativePath);
+            }
+
             DateTimeOffset expiresOn = signedUrlLifetime.ExpiryFrom(DateTimeOffset.UtcNow);
 
             return MediaOutcome.Uploaded(
@@ -223,6 +228,14 @@ public sealed class MediaService(
             await dbRepository.DeleteAsync<Media>([media.Id]);
             await storageRepository.DeleteAsync(Constant.StorageContainer.Media, media.BlobPath);
 
+            // A whole blob of its own: leaving it would keep the smaller copy of a deleted picture
+            // reachable by anyone still holding its URL.
+            if (media.ThumbnailPath is not null)
+            {
+                await storageRepository.DeleteAsync(
+                    Constant.StorageContainer.Media, media.ThumbnailPath);
+            }
+
             return MediaOutcome.Deleted();
         }
         catch (Exception ex)
@@ -260,6 +273,8 @@ public sealed class MediaService(
             // token carries are the same value rather than two that ought to agree.
             DateTimeOffset expiresOn = signedUrlLifetime.ExpiryFrom(DateTimeOffset.UtcNow);
 
+            // The original, deliberately, where the listing signs the derivative: signing the
+            // smaller copy here would make the stored original write-only.
             Uri url = await storageRepository.CreateReadUrlAsync(
                 Constant.StorageContainer.Media, media.BlobPath, expiresOn);
 
@@ -274,6 +289,27 @@ public sealed class MediaService(
         }
     }
 
+    /// <inheritdoc/>
+    public async Task<Stream> GetThumbnailStreamAsync(Stream content)
+    {
+        content.Position = 0;
+
+        using var image = new MagickImage(content);
+        image.AutoOrient();
+        image.Format = MagickFormat.WebP;
+
+        string? qualityStr = Environment.GetEnvironmentVariable(Constant.ConfigKey.ThumbnailQuality);
+        image.Quality = Convert.ToUInt32(qualityStr!);
+
+        // Deliberately not `using`: the caller reads this stream after this method returns, so a
+        // scope-bound dispose would hand them a closed one.
+        var derivative = new MemoryStream();
+        await image.WriteAsync(derivative);
+        derivative.Position = 0;
+
+        return derivative;
+    }
+
     /// <summary>A refusal keyed by the form field, so it arrives in the shape a client already reads
     /// for a body that did not bind.</summary>
     private static MediaOutcome Rejected(string reason) =>
@@ -281,8 +317,42 @@ public sealed class MediaService(
 
     /// <summary>Where a newly uploaded item is stored: the activity's folder, then a fresh name, so a
     /// client that cached a path is never served the previous bytes under it.</summary>
-    private string MediaPathFor(string activityId, string contentType) =>
-        $"{activityId}/{Guid.NewGuid():N}{uploadValidation.FileExtensionFor(contentType)}";
+    /// <remarks>Both paths come from one name, so the derivative sits beside its original — and the
+    /// suffix is required, since a JPEG's own extension is already the derivative's.</remarks>
+    private (string Original, string Derivative) MediaPathsFor(string activityId, string contentType)
+    {
+        string stem = $"{activityId}/{Guid.NewGuid():N}";
+
+        return (
+            $"{stem}{uploadValidation.FileExtensionFor(contentType)}",
+            $"{stem}{Constant.Upload.PathSuffix}{Constant.Upload.FileExtension}");
+    }
+
+    /// <summary>Derives a smaller copy and records it, or leaves the item served from its original.</summary>
+    /// <remarks>The column is written only once the bytes are there, and every failure here is logged
+    /// and swallowed rather than raised, because the original has already landed and is the item.
+    /// </remarks>
+    private async Task TryStoreDerivativeAsync(Media media, Stream content, string derivativePath)
+    {
+        try
+        {
+            Stream derivative = await GetThumbnailStreamAsync(content);
+
+            await storageRepository.UploadAsync(
+                Constant.StorageContainer.Media,
+                derivativePath,
+                derivative,
+                Constant.Upload.ContentType,
+                Constant.MediaCache.Directive);
+
+            media.ThumbnailPath = derivativePath;
+            await dbRepository.UpdateAsync(media);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Deriving a smaller copy of media {MediaId} failed.", media.Id);
+        }
+    }
 
     /// <summary>The stored item as the client sees it. It carries a URL rather than the path that URL
     /// points at: the bytes are reached through feature 07, and this is what says there are any.</summary>
@@ -296,8 +366,9 @@ public sealed class MediaService(
         bool discloseUploaderId,
         DateTimeOffset expiresOn)
     {
+        // The derivative is what a page loads; an item with none is served from its original.
         Uri url = await storageRepository.CreateReadUrlAsync(
-            Constant.StorageContainer.Media, media.BlobPath, expiresOn);
+            Constant.StorageContainer.Media, media.ThumbnailPath ?? media.BlobPath, expiresOn);
 
         return new MediaResponse
         {

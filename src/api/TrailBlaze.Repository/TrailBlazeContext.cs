@@ -82,6 +82,12 @@ public class TrailBlazeContext(DbContextOptions<TrailBlazeContext> options) : Db
                 .HasMaxLength(Constant.MediaField.BlobPathLength)
                 .IsRequired();
 
+            // Deliberately not required: video, every row stored before the derivative existed, and
+            // an image whose decode yielded nothing all carry none, and all three are served from
+            // BlobPath. The length is BlobPath's own, since a derivative's path is built from it.
+            entity.Property(media => media.ThumbnailPath)
+                .HasMaxLength(Constant.MediaField.ThumbnailPathLength);
+
             entity.Property(media => media.ContentType)
                 .HasMaxLength(Constant.MediaField.ContentTypeLength)
                 .IsRequired();

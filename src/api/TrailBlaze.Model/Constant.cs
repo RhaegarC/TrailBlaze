@@ -105,6 +105,10 @@ public static class Constant
         /// <summary>The largest video an upload may carry, in bytes. Optional, and held inside
         /// <see cref="Upload.MaxVideoSizeCapBytes"/> whatever it says.</summary>
         public const string VideoUploadCapBytes = "VideoUploadCapBytes";
+
+        /// <summary>The quality an image's derivative is re-encoded at, read from the process
+        /// environment. Optional, and applied as it stands: there is no default and no ceiling.</summary>
+        public const string ThumbnailQuality = "ThumbnailQuality";
     }
 
     /// <summary>
@@ -356,6 +360,10 @@ public static class Constant
 
         public const int BlobPathLength = 512;
 
+        /// <summary>Mirrors <see cref="BlobPathLength"/>: the derivative's path is composed the same
+        /// way, so a column narrower than the original's could not hold one.</summary>
+        public const int ThumbnailPathLength = 512;
+
         public const int ContentTypeLength = 128;
 
         public const int OriginalFileNameLength = 260;
@@ -456,5 +464,14 @@ public static class Constant
 
         /// <summary>Room for boundaries and part headers around a file at the cap.</summary>
         private const long MultipartEnvelopeBytes = 64L * 1024;
+        
+        /// <summary>Suffix of thumbnail.</summary>
+        public const string PathSuffix = "-thumb";
+
+        /// <summary>Extension of thumbnail.</summary>
+        public const string FileExtension = ".webp";
+
+        /// <summary>Content type of thumbnail.</summary>
+        public const string ContentType = "image/webp";
     }
 }

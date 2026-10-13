@@ -17,6 +17,9 @@ using TrailBlaze.Model;
 public sealed class UploadValidationService(UploadSizeCaps caps) : IUploadValidationService
 {
     /// <inheritdoc/>
+    public long AppliedImageCapBytes => caps.AppliedImageBytes;
+
+    /// <inheritdoc/>
     public string? ValidateImage(string? contentType, long sizeBytes)
     {
         long capBytes = caps.AppliedImageBytes;
