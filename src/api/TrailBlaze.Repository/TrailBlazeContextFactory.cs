@@ -11,7 +11,7 @@ using TrailBlaze.Model;
 /// <remarks>
 /// <para>
 /// Without this, EF falls back to running the startup project's <c>Program</c>, which
-/// requires <c>DbConnection</c>, <c>BlobConnection</c> and <c>AllowedOrigins</c> before it
+/// requires <c>DbConnection</c>, a storage credential and <c>AllowedOrigins</c> before it
 /// will build a host — so generating a migration would depend on every unrelated secret.
 /// </para>
 /// <para>
