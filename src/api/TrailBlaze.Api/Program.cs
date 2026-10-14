@@ -17,17 +17,27 @@ builder.Services.AddProblemDetails();
 // layers environment variables over appsettings.json, so the flat keys below keep their
 // existing env var names and deployments need no changes.
 //
-// The two connection strings are required rather than optional, so a missing one stops the host
-// at startup naming the key instead of surfacing as a null reference on the first request that
-// happens to need it. They are read here and passed to RegistService, which does the
-// registering -- everything else that gets registered, including Entra and CORS, is registered
-// in there too, so this file composes nothing on its own.
+// These are required rather than optional, so a missing one stops the host at startup naming the
+// key instead of surfacing as a null reference on the first request that happens to need it. They
+// are read here and passed to RegistService, which does the registering -- everything else that
+// gets registered, including Entra and CORS, is registered in there too, so this file composes
+// nothing on its own.
 string dbConnection = builder.Configuration.RequireSetting(
     Constant.ConfigKey.DBCon, Constant.Message.NoDbConnection);
-string blobConnection = builder.Configuration.RequireSetting(
-    Constant.ConfigKey.BlobConnection, Constant.Message.NoBlobConnection);
 
-builder.Services.RegistService(builder.Configuration, dbConnection, blobConnection);
+// Storage is required in one of two forms: the account's URL, which the application signs and
+// writes with as its own identity and so needs no secret to hold, or a shared-key connection
+// string, which is the local and test override and wins when both are set. Neither is refused
+// here, at boot, rather than on the first request that happens to touch storage.
+string? storageAccountUrl = builder.Configuration[Constant.ConfigKey.StorageAccountUrl];
+string? blobConnection = builder.Configuration[Constant.ConfigKey.BlobConnection];
+
+if (string.IsNullOrWhiteSpace(storageAccountUrl) && string.IsNullOrWhiteSpace(blobConnection))
+{
+    throw new InvalidOperationException(Constant.Message.NoStorage);
+}
+
+builder.Services.RegistService(builder.Configuration, dbConnection, storageAccountUrl, blobConnection);
 
 // Migrations are deliberately NOT applied here. Azure Container Apps runs several replicas, and
 // replicas migrating concurrently on startup race each other over the same DDL -- one wins, the

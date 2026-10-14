@@ -14,7 +14,7 @@ public static class Constant
 
         public const string NoDbConnection = "Database connection not configured. Set the 'DbConnection' configuration value.";
 
-        public const string NoBlobConnection = "Blob storage connection not configured. Set the 'BlobConnection' configuration value.";
+        public const string NoStorage = "Blob storage not configured. Set the 'StorageAccountUrl' configuration value, or 'BlobConnection' for a shared-key account.";
 
         // Profile validation. Each of these is a rejection rather than a rewrite: this is
         // text a user typed, so shortening it silently would be losing their input, and the
@@ -89,8 +89,15 @@ public static class Constant
 
         public const string AllowedOrigins = "AllowedOrigins";
 
-        /// <summary>Azure Storage connection string. No container or account name is
-        /// configured separately: the containers are the closed set in
+        /// <summary>The storage account's blob endpoint, such as
+        /// <c>https://account.blob.core.windows.net/</c>. The application authenticates to it as
+        /// itself, so the account's key is not configured at all. No container name is configured
+        /// separately: the containers are the closed set in <see cref="StorageContainer"/>.</summary>
+        public const string StorageAccountUrl = "StorageAccountUrl";
+
+        /// <summary>Azure Storage connection string, which carries an account key. The local and
+        /// test override for <see cref="StorageAccountUrl"/>, and it wins when both are set. No
+        /// container or account name is configured separately: the containers are the closed set in
         /// <see cref="StorageContainer"/>.</summary>
         public const string BlobConnection = "BlobConnection";
 

@@ -9,9 +9,16 @@ using Microsoft.AspNetCore.Mvc.Testing;
 /// <remarks>
 /// <para>
 /// The application refuses to start without its required settings, so the factory supplies
-/// them. Its connection strings point at a port nothing listens on, because this tier asserts
-/// how the host behaves rather than what the database holds: none of these tests should reach
-/// a server.
+/// them. Its database connection string points at a port nothing listens on, because this tier
+/// asserts how the host behaves rather than what the database holds: none of these tests should
+/// reach a server.
+/// </para>
+/// <para>
+/// <b>Storage is given a URL and no key</b>, which is the configuration the application is meant to
+/// run in: the repository is built to authenticate as the host's own identity, and
+/// <c>DefaultAzureCredential</c> resolves nothing and contacts nothing until a request asks it for
+/// a token, so this tier stays offline. A test that wants the shared-key override sets
+/// <c>BlobConnection</c> itself.
 /// </para>
 /// <para>
 /// <b>That is a statement about this tier, not about the suite.</b> The unreachable string also
@@ -43,7 +50,7 @@ internal sealed class TrailBlazeApiFactory : WebApplicationFactory<Program>
         _settings = new Dictionary<string, string?>
         {
             ["DbConnection"] = UnreachableConnection,
-            ["BlobConnection"] = $"DefaultEndpointsProtocol=https;AccountName=trailblazetests;AccountKey={Convert.ToBase64String(new byte[32])};EndpointSuffix=core.windows.net",
+            ["StorageAccountUrl"] = "https://trailblazetests.blob.core.windows.net/",
             ["AllowedOrigins"] = "http://localhost",
         };
 

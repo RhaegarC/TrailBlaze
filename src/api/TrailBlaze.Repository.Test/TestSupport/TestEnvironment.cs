@@ -60,12 +60,23 @@ public static class TestEnvironment
         "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/"
         + "K1SZFPTOtr/KBHBeksoGMGw==";
 
+    /// <summary>The emulator's blob endpoint on its own, which is what a client authenticating as
+    /// an identity is given — a URL, rather than the connection string a shared key would need.</summary>
+    /// <remarks>
+    /// HTTPS rather than HTTP, and that is load-bearing: the emulator serves OAuth only over TLS, so
+    /// no delegation key can be obtained through a plaintext endpoint. Its certificate is generated
+    /// when the container starts and signed by no authority, which is why the tier's clients are
+    /// built over <see cref="LoopbackTransport"/>.
+    /// </remarks>
+    public static string AzuriteAccountUrl =>
+        $"https://127.0.0.1:{Port(BlobPortVariable, DefaultBlobPort)}/devstoreaccount1";
+
     /// <summary>The emulator's blob endpoint, which is the only service this solution uses.</summary>
     public static string AzuriteConnection =>
-        "DefaultEndpointsProtocol=http;"
+        "DefaultEndpointsProtocol=https;"
         + "AccountName=devstoreaccount1;"
         + $"AccountKey={AzuriteKey};"
-        + $"BlobEndpoint=http://127.0.0.1:{Port(BlobPortVariable, DefaultBlobPort)}/devstoreaccount1;";
+        + $"BlobEndpoint={AzuriteAccountUrl};";
 
     /// <summary>
     /// The database to test against, or the reason there is none — never both, and never

@@ -54,6 +54,50 @@ public sealed class CompositionRootTests
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUserContextService>());
     }
 
+    /// <summary>
+    /// Storage is composed from the account's URL alone, with no account key configured anywhere.
+    /// </summary>
+    /// <remarks>
+    /// The claim is about the configuration rather than the object: the factory supplies a URL and
+    /// nothing else, so a composition root that still demanded a key would fail here rather than in
+    /// a deployment. What it cannot show is that the resulting repository signs successfully — that
+    /// needs an account, and the storage tier is where the whole path is exercised.
+    /// </remarks>
+    [Fact]
+    public void The_storage_repository_is_built_from_the_account_url_with_no_key()
+    {
+        using var factory = new TrailBlazeApiFactory();
+        factory.CreateClient();
+
+        Assert.NotNull(factory.Services.GetRequiredService<IStorageRepository>());
+    }
+
+    /// <summary>
+    /// A shared-key connection string is still accepted, and takes precedence over the URL.
+    /// </summary>
+    /// <remarks>
+    /// This is the override the local stack and the storage tier run on, and it is checked here
+    /// because the two settings are the one place in this composition root where saying nothing and
+    /// saying something can both be valid — a blank URL beside a key has to compose, not fail.
+    /// </remarks>
+    [Fact]
+    public void A_shared_key_connection_string_is_accepted_in_place_of_the_account_url()
+    {
+        using var factory = new TrailBlazeApiFactory(new()
+        {
+            [Constant.ConfigKey.StorageAccountUrl] = "",
+            [Constant.ConfigKey.BlobConnection] =
+                "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;"
+                + "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/"
+                + "K1SZFPTOtr/KBHBeksoGMGw==;"
+                + "BlobEndpoint=http://127.0.0.1:10010/devstoreaccount1;",
+        });
+
+        factory.CreateClient();
+
+        Assert.NotNull(factory.Services.GetRequiredService<IStorageRepository>());
+    }
+
     /// <summary>A cap in configuration is the one applied, and an absent one falls to the default.</summary>
     [Fact]
     public void The_upload_caps_come_from_configuration_and_fall_back_to_the_defaults()
