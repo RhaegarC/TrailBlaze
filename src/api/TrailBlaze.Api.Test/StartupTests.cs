@@ -31,9 +31,14 @@ public sealed class StartupTests
     /// half-configured and failing on the first request that touches the database — turns a
     /// deployment mistake into a runtime error nowhere near its cause.
     /// </summary>
+    /// <remarks>
+    /// The storage row names the account URL rather than the connection string it replaced: an
+    /// account key is no longer something this host needs, and a boot failure that asked for one
+    /// would be the deployment telling an operator to hold the secret this change removed.
+    /// </remarks>
     [Theory]
     [InlineData("DbConnection", "DbConnection")]
-    [InlineData("BlobConnection", "BlobConnection")]
+    [InlineData("StorageAccountUrl", "StorageAccountUrl")]
     public void Startup_fails_and_names_the_setting_when_required_configuration_is_absent(
         string missingKey,
         string expectedInMessage)

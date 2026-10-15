@@ -51,16 +51,25 @@ in [00-mission-2-sprint.md](docs/features/00-mission-2-sprint.md), which is thei
 
 ## Running it locally
 
-The API refuses to start without its required settings (`DbConnection`, `BlobConnection`,
-`AllowedOrigins`), so there is no zero-configuration boot. For a host `dotnet run` they come from
-user-secrets — never from `appsettings.json` or `launchSettings.json`, which are version-controlled:
+The API refuses to start without its required settings (`DbConnection`, a storage credential — see
+below — and `AllowedOrigins`), so there is no zero-configuration boot. For a host `dotnet run` they
+come from user-secrets — never from `appsettings.json` or `launchSettings.json`, which are
+version-controlled:
 
 ```bash
 cd src/api/TrailBlaze.Api
 dotnet user-secrets set "DbConnection" "Server=tcp:<server>.database.windows.net,1433;Initial Catalog=TrailBlaze;User ID=<user>;Password=<password>;Encrypt=True;TrustServerCertificate=False"
-dotnet user-secrets set "BlobConnection" "<azure storage account connection string>"
+dotnet user-secrets set "StorageAccountUrl" "https://<account>.blob.core.windows.net/"
 dotnet run
 ```
+
+**Storage is configured one of two ways, and one of them holds no secret.** `StorageAccountUrl` names
+the account's blob endpoint and the API authenticates as **its own identity** — whatever the host runs
+as, a managed identity in Azure Container Apps — signing every read URL with a user delegation key.
+Nothing else is needed and no account key is configured. `BlobConnection` is the alternative: a
+shared-key connection string, which the API signs locally from. It is what the local stack and the
+emulator use, because neither has a tenant to authenticate against, and it is what to set when the
+identity has no delegation permission. Setting both is not an error; the connection string wins.
 
 **The administrator is a database row, not a setting.** Every user the app provisions lands on
 `Role = User`; to make one an admin, sign in and hit `GET /user/me` once so the row exists (the
@@ -151,7 +160,7 @@ Against a real server, three things to arrange before the first run, all of them
 
 Against the local container the first two do not apply: there is no firewall rule to add, and the
 command above creates the database. The third still does — a local database does not stand in for
-storage, and `BlobConnection` is required at startup either way. The stack starts an Azurite and
+storage, and a storage credential is required at startup either way. The stack starts an Azurite and
 creates the three containers for you; a host `dotnet run` outside it has neither, so point that one
 at a real account or at an Azurite of your own. The Azurite in `docker-compose.test.yml` is the
 test tier's and stays out of this: it has no volume and drops the blobs it writes.

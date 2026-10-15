@@ -95,7 +95,7 @@ public sealed class CoverVisibilityMoveTests(AzureStorageFixture fixture)
 
             Assert.DoesNotContain("sig=", publicUrl.Query);
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
             HttpResponseMessage response = await http.GetAsync(publicUrl);
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -147,7 +147,7 @@ public sealed class CoverVisibilityMoveTests(AzureStorageFixture fixture)
 
     private static async Task<HttpStatusCode> StatusAsync(Uri url)
     {
-        using var http = new HttpClient();
+        using var http = LoopbackTransport.Client();
 
         return (await http.GetAsync(url)).StatusCode;
     }

@@ -53,7 +53,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
 
             Uri readUrl = await storage.CreateReadUrlAsync(Container, path, expiresOn);
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
 
             // Content type is asserted here or nowhere: the deleted unit-tier fake discarded
             // it, so nothing else in the suite would notice the upload losing its headers and
@@ -71,7 +71,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
         Uri staleUrl = await storage.CreateReadUrlAsync(
             Container, path, DateTimeOffset.UtcNow.AddMinutes(5));
 
-        using var httpClient = new HttpClient();
+        using var httpClient = LoopbackTransport.Client();
         HttpResponseMessage afterDelete = await httpClient.GetAsync(staleUrl);
 
         Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);
@@ -109,7 +109,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
             Uri expired = await storage.CreateReadUrlAsync(
                 Container, path, DateTimeOffset.UtcNow.AddMinutes(-5));
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
             HttpResponseMessage response = await http.GetAsync(expired);
 
             Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
@@ -182,7 +182,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
             Uri readUrl = await storage.CreateReadUrlAsync(
                 Container, path, DateTimeOffset.UtcNow.AddMinutes(5));
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
 
             // A well-formed write: the blob type header is required, and without it the server answers
             // 400 and refuses every write including the ones it should permit. A malformed request
@@ -269,7 +269,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
             Uri readUrl = await storage.CreateReadUrlAsync(
                 Container, path, DateTimeOffset.UtcNow.AddMinutes(5));
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
             HttpResponseMessage response = await http.GetAsync(readUrl);
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -310,7 +310,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
             Uri readUrl = await storage.CreateReadUrlAsync(
                 Container, path, DateTimeOffset.UtcNow.AddMinutes(5));
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
             HttpResponseMessage response = await http.GetAsync(readUrl);
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -361,7 +361,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
                 Constant.Upload.ContentType,
                 Constant.MediaCache.Directive);
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
 
             // Both fetched before either is deleted, so each answer is about its own object rather
             // than about what a delete left behind.
