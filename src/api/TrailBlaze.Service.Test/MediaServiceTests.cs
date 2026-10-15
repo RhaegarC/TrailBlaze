@@ -1,5 +1,6 @@
 namespace TrailBlaze.Service.Test;
 
+using ImageMagick;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Linq.Expressions;
@@ -9,16 +10,21 @@ using TrailBlaze.Interface.Service;
 using TrailBlaze.Model;
 using TrailBlaze.Model.DatabaseEntity;
 using TrailBlaze.Model.Media;
+using TrailBlaze.Service.Test.TestSupport;
 
 /// <summary>
-/// What an activity's media may be, who may contribute it, and who may remove it.
+/// What an activity's media may be, who may contribute it, and who may remove it — and the smaller
+/// copy an uploaded image is stored beside.
 /// </summary>
 /// <remarks>
 /// The rules exercised here are decided from the request and the activity alone, which is what makes
 /// them answerable without a store. The one claim this tier cannot make is that a blob really landed
 /// or really went: that needs a real account, and it is asserted in
-/// <c>TrailBlaze.Repository.Test</c>'s container tier instead.
+/// <c>TrailBlaze.Repository.Test</c>'s container tier instead. In a collection of its own, which
+/// serialises it against the rest of the assembly, because the derivative is encoded at a quality
+/// read from the process environment and the one test that sets it would set it for its neighbours.
 /// </remarks>
+[Collection(nameof(ProcessEnvironmentCollection))]
 public sealed class MediaServiceTests
 {
     private const string Owner = "the-owners-object-id";
@@ -85,7 +91,7 @@ public sealed class MediaServiceTests
             ActivityId,
             new MemoryStream(Bytes),
             "image/png",
-            Constant.Upload.ImageSizeCapBytes,
+            Constant.Upload.DefaultImageSizeCapBytes,
             "ridge.png");
 
         Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
@@ -100,11 +106,13 @@ public sealed class MediaServiceTests
             ActivityId,
             new MemoryStream(Bytes),
             "image/png",
-            Constant.Upload.ImageSizeCapBytes + 1,
+            Constant.Upload.DefaultImageSizeCapBytes + 1,
             "ridge.png");
 
         Assert.Equal(MediaOutcomeKind.Rejected, outcome.Kind);
-        Assert.Equal(Constant.Message.ImageTooLarge, outcome.Errors!["file"].Single());
+        Assert.Equal(
+            Constant.Message.ImageTooLarge(Constant.Upload.DefaultImageSizeCapBytes),
+            outcome.Errors!["file"].Single());
         Assert.Empty(harness.Storage.Uploads);
     }
 
@@ -117,7 +125,7 @@ public sealed class MediaServiceTests
             ActivityId,
             new MemoryStream(Bytes),
             "video/mp4",
-            Constant.Upload.VideoSizeCapBytes,
+            Constant.Upload.DefaultVideoSizeCapBytes,
             "ridge.mp4");
 
         Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
@@ -132,23 +140,25 @@ public sealed class MediaServiceTests
             ActivityId,
             new MemoryStream(Bytes),
             "video/mp4",
-            Constant.Upload.VideoSizeCapBytes + 1,
+            Constant.Upload.DefaultVideoSizeCapBytes + 1,
             "ridge.mp4");
 
         Assert.Equal(MediaOutcomeKind.Rejected, outcome.Kind);
-        Assert.Equal(Constant.Message.VideoTooLarge, outcome.Errors!["file"].Single());
+        Assert.Equal(
+            Constant.Message.VideoTooLarge(Constant.Upload.DefaultVideoSizeCapBytes),
+            outcome.Errors!["file"].Single());
     }
 
     /// <summary>
     /// The two directions of one claim: the cap follows the kind, so a single shared cap would fail
-    /// both. A video at 11 MB is over the image cap and admissible; an image at 11 MB is under the
-    /// video cap and refused.
+    /// both. A video just over the image cap is over that cap and admissible; an image of the same
+    /// size is under the video cap and refused.
     /// </summary>
     [Fact]
     public async Task Each_kind_is_held_to_its_own_cap_and_not_the_other_one()
     {
         var harness = new Harness();
-        long overTheImageCap = Constant.Upload.ImageSizeCapBytes + 1;
+        long overTheImageCap = Constant.Upload.DefaultImageSizeCapBytes + 1;
 
         MediaOutcome video = await harness.Service.UploadAsync(
             ActivityId, new MemoryStream(Bytes), "video/mp4", overTheImageCap, "ridge.mp4");
@@ -158,6 +168,29 @@ public sealed class MediaServiceTests
 
         Assert.Equal(MediaOutcomeKind.Uploaded, video.Kind);
         Assert.Equal(MediaOutcomeKind.Rejected, image.Kind);
+    }
+
+    /// <summary>A cap from configuration is the one enforced, and the one the refusal names.</summary>
+    [Fact]
+    public async Task A_configured_cap_governs_the_upload_and_is_the_one_the_refusal_names()
+    {
+        const long FiveMegabytes = 5L * 1024 * 1024;
+        var harness = new Harness(caps: new UploadSizeCaps(FiveMegabytes, 0));
+
+        MediaOutcome atTheCap = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", FiveMegabytes, "ridge.png");
+
+        MediaOutcome overTheCap = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", FiveMegabytes + 1, "ridge.png");
+
+        // The same bytes as a video, to show the configured image cap left the video cap alone.
+        MediaOutcome video = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "video/mp4", FiveMegabytes + 1, "ridge.mp4");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, atTheCap.Kind);
+        Assert.Equal(MediaOutcomeKind.Rejected, overTheCap.Kind);
+        Assert.Equal("The image must be 5 MB or smaller.", overTheCap.Errors!["file"].Single());
+        Assert.Equal(MediaOutcomeKind.Uploaded, video.Kind);
     }
 
     // ---- What is stored -------------------------------------------------------------------
@@ -193,7 +226,7 @@ public sealed class MediaServiceTests
         await harness.Service.UploadAsync(
             ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
 
-        (string container, string path, string contentType) = harness.Storage.Uploads.Single();
+        (string container, string path, string contentType, _) = harness.Storage.Uploads.Single();
 
         Assert.Equal(Constant.StorageContainer.Media, container);
         Assert.StartsWith($"{ActivityId}/", path, StringComparison.Ordinal);
@@ -492,6 +525,131 @@ public sealed class MediaServiceTests
         Assert.Equal("one", listing.Items[0].Id);
     }
 
+    // ---- The listing carries its URLs -------------------------------------------------------
+
+    /// <summary>
+    /// Every item in a listing arrives with a URL of its own, so a client that renders a page of
+    /// twenty images makes one request rather than twenty-one.
+    /// </summary>
+    /// <remarks>
+    /// The URL is minted here rather than fetched here: signing is a local computation over the
+    /// account key, so a page's worth costs one loop, while asking a client to fetch each one costs a
+    /// round trip per image. What this tier can assert is which blob was signed and with what instant;
+    /// that the resulting string opens the blob is the container tier's claim.
+    /// </remarks>
+    [Fact]
+    public async Task A_listing_carries_a_url_for_every_item()
+    {
+        var harness = new Harness();
+        harness.Repository.Items = [Item("one", Contributor), Item("two", Contributor)];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        Assert.Equal(2, harness.Storage.ReadUrls.Count);
+        Assert.Equal(
+            ["https://signed.invalid/media/blobs/one", "https://signed.invalid/media/blobs/two"],
+            listing.Items.Select(item => item.Url));
+    }
+
+    /// <summary>
+    /// One instant for the whole page rather than one per item, which is what lets a reader who
+    /// re-lists inside the same minute be handed the same strings back.
+    /// </summary>
+    /// <remarks>
+    /// A per-item instant would still be correct in the sense of "each URL eventually lapses", and
+    /// would still fail this: two items minted microseconds apart land on different strings, and a
+    /// browser's cache key moves for no reason. The expiry each response reports is asserted to be
+    /// that same instant, so a client counting down to it is counting down to what the token carries.
+    /// </remarks>
+    [Fact]
+    public async Task Every_item_in_a_listing_is_signed_from_one_expiry()
+    {
+        var harness = new Harness();
+        harness.Repository.Items = [Item("one", Contributor), Item("two", Contributor)];
+
+        MediaListing listing = await harness.Service.ListAsync(ActivityId);
+
+        DateTimeOffset signed = Assert.Single(harness.Storage.ReadUrls.Select(url => url.ExpiresOn).Distinct());
+        Assert.Equal([signed, signed], listing.Items.Select(item => item.ExpiresOnUtc));
+    }
+
+    /// <summary>Each URL names that item's own blob, in the private container.</summary>
+    [Fact]
+    public async Task A_listing_signs_each_items_own_blob_in_the_private_container()
+    {
+        var harness = new Harness();
+        harness.Repository.Items = [Item("one", Contributor), Item("two", Contributor)];
+
+        await harness.Service.ListAsync(ActivityId);
+
+        Assert.All(
+            harness.Storage.ReadUrls,
+            url => Assert.Equal(Constant.StorageContainer.Media, url.Container));
+        Assert.Equal(["blobs/one", "blobs/two"], harness.Storage.ReadUrls.Select(url => url.Path));
+    }
+
+    /// <summary>
+    /// An uploaded item is answered with a URL too, so a client needs no second request to show what
+    /// it just sent.
+    /// </summary>
+    [Fact]
+    public async Task An_upload_is_answered_with_a_url_and_its_expiry()
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        (string container, string path, DateTimeOffset expiresOn) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Equal(Constant.StorageContainer.Media, container);
+        Assert.Equal(harness.Repository.Inserted.Single().BlobPath, path);
+        Assert.Equal($"https://signed.invalid/{container}/{path}", outcome.Item!.Url);
+        Assert.Equal(expiresOn, outcome.Item.ExpiresOnUtc);
+    }
+
+    // ---- The cache directive the bytes are stored with --------------------------------------
+
+    /// <summary>
+    /// Media bytes are stored with a bounded, private cache directive: the browser may re-show what it
+    /// already holds, and a shared proxy may not store a copy at all.
+    /// </summary>
+    /// <remarks>
+    /// The three properties are asserted separately because each one is a different failure. The
+    /// directive names the window; <c>private</c> is what keeps an intermediary out; and the absence of
+    /// <c>immutable</c> is what leaves a cover free to move container when an entry's visibility
+    /// changes, which is why nothing here is declared content-stable.
+    /// </remarks>
+    [Fact]
+    public async Task Media_bytes_are_stored_with_a_bounded_private_cache_directive()
+    {
+        var harness = new Harness();
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        (_, _, _, string? directive) = Assert.Single(harness.Storage.Uploads);
+
+        Assert.Equal(Constant.MediaCache.Directive, directive);
+        Assert.StartsWith("private", directive, StringComparison.Ordinal);
+        Assert.Contains("max-age=", directive, StringComparison.Ordinal);
+        Assert.DoesNotContain("immutable", directive, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The window is shorter than the shortest a URL may be given, so a cached copy never outlives the
+    /// credential that fetched it.
+    /// </summary>
+    [Fact]
+    public void The_cache_window_is_shorter_than_the_shortest_signed_url_lifetime()
+    {
+        Assert.InRange(
+            TimeSpan.FromSeconds(Constant.MediaCache.MaxAgeSeconds),
+            TimeSpan.Zero,
+            SignedUrlLifetime.Default);
+    }
+
     // ---- Who may remove -------------------------------------------------------------------
 
     [Theory]
@@ -765,13 +923,19 @@ public sealed class MediaServiceTests
 
         Assert.InRange(
             outcome.Url!.ExpiresOnUtc - DateTimeOffset.UtcNow,
-            TimeSpan.FromMinutes(1),
+            SignedUrlLifetime.Boundary,
             SignedUrlLifetime.Maximum);
     }
 
     /// <summary>
     /// A configured window longer than the cap is clamped to it rather than honoured.
     /// </summary>
+    /// <remarks>
+    /// The lower bound is a whole boundary short of the cap, because the minting instant is rounded
+    /// down before the window is added: a mint late in its boundary lands up to that much earlier. The
+    /// upper bound is the claim that matters — rounding can shorten a window but must never be the way
+    /// past the cap.
+    /// </remarks>
     [Fact]
     public async Task A_configured_window_longer_than_the_cap_is_clamped()
     {
@@ -786,7 +950,7 @@ public sealed class MediaServiceTests
 
         Assert.InRange(
             expiresOn - DateTimeOffset.UtcNow,
-            SignedUrlLifetime.Maximum - TimeSpan.FromSeconds(1),
+            SignedUrlLifetime.Maximum - SignedUrlLifetime.Boundary,
             SignedUrlLifetime.Maximum);
     }
 
@@ -794,6 +958,7 @@ public sealed class MediaServiceTests
     /// A configured window that is not positive is the absence of a setting rather than an
     /// instruction to mint a dead link, so the default answers for it.
     /// </summary>
+    /// <remarks>The tolerance is one boundary, as the clamp above, and for the same reason.</remarks>
     [Theory]
     [InlineData(0)]
     [InlineData(-30)]
@@ -808,7 +973,7 @@ public sealed class MediaServiceTests
 
         Assert.InRange(
             expiresOn - DateTimeOffset.UtcNow,
-            SignedUrlLifetime.Default - TimeSpan.FromSeconds(1),
+            SignedUrlLifetime.Default - SignedUrlLifetime.Boundary,
             SignedUrlLifetime.Default);
     }
 
@@ -829,6 +994,402 @@ public sealed class MediaServiceTests
         string url = outcome.Url!.Url;
         Assert.NotEmpty(url);
         Assert.DoesNotContain(logger.Messages, message => message.Contains(url, StringComparison.Ordinal));
+    }
+
+    // ---- The derivative ---------------------------------------------------------------------
+
+    /// <summary>
+    /// An image is written twice — its original and a smaller copy — and the copy's path is what the
+    /// row records.
+    /// </summary>
+    /// <remarks>
+    /// Both blobs and the recorded path are asserted together, because any one of them alone leaves a
+    /// way for the derivative to be stored and never served, or recorded and never stored.
+    /// </remarks>
+    [Fact]
+    public async Task An_image_is_stored_beside_a_derivative_that_the_row_records()
+    {
+        var harness = new Harness();
+        byte[] photo = ImageFixtures.Noisy(400, 300);
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", photo.Length, "ridge.jpg");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Equal(2, harness.Storage.Uploads.Count);
+
+        Media row = harness.Repository.Inserted.Single();
+        string original = harness.Storage.Uploads[0].Path;
+        (string container, string path, string contentType, _) = harness.Storage.Uploads[1];
+
+        Assert.Equal(Constant.StorageContainer.Media, container);
+        Assert.Equal(Constant.Upload.ContentType, contentType);
+        Assert.Equal(row.ThumbnailPath, path);
+        Assert.NotEqual(original, path);
+        Assert.Equal(path, Assert.Single(harness.Repository.Updated).ThumbnailPath);
+    }
+
+    /// <summary>
+    /// The derivative sits beside its original in the same private container and under a name built
+    /// from the same identifier, which is what makes it as unique and as private as the original is.
+    /// </summary>
+    [Fact]
+    public async Task The_derivative_is_named_after_the_original_in_the_same_container()
+    {
+        var harness = new Harness();
+        byte[] photo = ImageFixtures.Noisy(300, 200);
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", photo.Length, "ridge.jpg");
+
+        (string originalContainer, string originalPath, _, _) = harness.Storage.Uploads[0];
+        (string derivativeContainer, string derivativePath, _, _) = harness.Storage.Uploads[1];
+
+        Assert.Equal(originalContainer, derivativeContainer);
+        Assert.StartsWith($"{ActivityId}/", derivativePath);
+        Assert.Equal(Path.GetDirectoryName(originalPath), Path.GetDirectoryName(derivativePath));
+        Assert.Equal(
+            Path.GetFileNameWithoutExtension(originalPath)
+                + Constant.Upload.PathSuffix
+                + Constant.Upload.FileExtension,
+            Path.GetFileName(derivativePath));
+    }
+
+    /// <summary>
+    /// A JPEG's derivative does not land on the original's own path.
+    /// </summary>
+    /// <remarks>
+    /// The case that makes the derivative's name more than a convention: a JPEG is stored with the
+    /// very extension the derivative is encoded as, so a derivative named from the stem alone would
+    /// write over the bytes it was made from and the item would have one blob where it claims two.
+    /// </remarks>
+    [Fact]
+    public async Task A_JPEG_derivative_does_not_take_the_originals_path()
+    {
+        var harness = new Harness();
+        byte[] photo = ImageFixtures.Noisy(300, 200);
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", photo.Length, "ridge.jpg");
+
+        string[] paths = [.. harness.Storage.Uploads.Select(upload => upload.Path)];
+
+        Assert.Equal(2, paths.Distinct().Count());
+    }
+
+    /// <summary>Video gets nothing: no second copy, no path recorded.</summary>
+    [Fact]
+    public async Task A_video_is_stored_once_and_records_no_derivative()
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "video/mp4", Bytes.Length, "ridge.mp4");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Single(harness.Storage.Uploads);
+        Assert.Null(harness.Repository.Inserted.Single().ThumbnailPath);
+        Assert.Empty(harness.Repository.Updated);
+    }
+
+    /// <summary>
+    /// An image whose bytes cannot be decoded is still an item: it is stored, served from its
+    /// original, and its derivative column stays empty rather than the upload failing.
+    /// </summary>
+    [Fact]
+    public async Task An_image_that_cannot_be_decoded_is_still_stored()
+    {
+        var harness = new Harness();
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(Bytes), "image/png", Bytes.Length, "ridge.png");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Single(harness.Storage.Uploads);
+        Assert.Null(harness.Repository.Inserted.Single().ThumbnailPath);
+    }
+
+    /// <summary>
+    /// A derivative that cannot be stored leaves the item as it would have been without one, rather
+    /// than failing an upload whose original landed.
+    /// </summary>
+    /// <remarks>
+    /// The storage double refuses its second write, so it is the derivative's upload that fails and
+    /// not the original's — the decode path is a different claim, and its neighbour covers it.
+    /// </remarks>
+    [Fact]
+    public async Task A_derivative_that_cannot_be_stored_leaves_the_original_serving()
+    {
+        var harness = new Harness();
+        harness.Storage.RefuseUploadOn = 2;
+        byte[] photo = ImageFixtures.Noisy(300, 200);
+
+        MediaOutcome outcome = await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", photo.Length, "ridge.jpg");
+
+        Assert.Equal(MediaOutcomeKind.Uploaded, outcome.Kind);
+        Assert.Single(harness.Storage.Uploads);
+        Assert.Null(harness.Repository.Inserted.Single().ThumbnailPath);
+    }
+
+    /// <summary>
+    /// The bytes stored as the original are byte-identical to what was sent: the derivative is made
+    /// from a held copy, and holding it must not replace or alter what is uploaded.
+    /// </summary>
+    [Fact]
+    public async Task The_stored_original_is_the_bytes_that_were_sent()
+    {
+        var harness = new Harness();
+        byte[] photo = ImageFixtures.Noisy(300, 200);
+
+        await harness.Service.UploadAsync(
+            ActivityId, new MemoryStream(photo), "image/jpeg", photo.Length, "ridge.jpg");
+
+        Assert.Equal(photo, harness.Storage.UploadedBytes[0]);
+    }
+
+    /// <summary>The listing signs the derivative, so a page loads the smaller copy.</summary>
+    [Fact]
+    public async Task A_listing_signs_the_derivative_when_there_is_one()
+    {
+        var harness = new Harness();
+        Media item = Item("one", Contributor);
+        item.ThumbnailPath = "blobs/one-thumb.jpg";
+        harness.Repository.Items = [item];
+
+        await harness.Service.ListAsync(ActivityId);
+
+        (_, string path, _) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.Equal("blobs/one-thumb.jpg", path);
+    }
+
+    /// <summary>
+    /// The mint route signs the original, unchanged, so the bytes that were stored stay reachable
+    /// rather than becoming write-only.
+    /// </summary>
+    [Fact]
+    public async Task The_mint_route_signs_the_original_even_when_there_is_a_derivative()
+    {
+        var harness = new Harness();
+        Media item = Item("one", Contributor);
+        item.ThumbnailPath = "blobs/one-thumb.jpg";
+        harness.Repository.Item = item;
+
+        await harness.Service.CreateReadUrlAsync("one");
+
+        (_, string path, _) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.Equal(item.BlobPath, path);
+    }
+
+    /// <summary>An item with no derivative is served from its original, so nothing that worked
+    /// before stops working.</summary>
+    [Fact]
+    public async Task An_item_with_no_derivative_is_served_from_its_original()
+    {
+        var harness = new Harness();
+        Media item = Item("one", Contributor);
+        harness.Repository.Items = [item];
+
+        await harness.Service.ListAsync(ActivityId);
+
+        (_, string path, _) = Assert.Single(harness.Storage.ReadUrls);
+
+        Assert.Equal(item.BlobPath, path);
+    }
+
+    /// <summary>Removing an item removes both of its blobs: leaving the derivative behind would
+    /// leave the smaller copy of a deleted picture reachable.</summary>
+    [Fact]
+    public async Task Deleting_an_item_removes_its_derivative_too()
+    {
+        var harness = new Harness();
+        Media item = Item("one", Contributor);
+        item.ThumbnailPath = "blobs/one-thumb.jpg";
+        harness.Repository.Item = item;
+
+        await harness.Service.DeleteAsync("one");
+
+        Assert.Equal([item.BlobPath, "blobs/one-thumb.jpg"], harness.Storage.Deleted);
+    }
+
+    /// <summary>An item without a derivative asks storage for exactly one deletion, not two.</summary>
+    [Fact]
+    public async Task Deleting_an_item_without_a_derivative_removes_one_blob()
+    {
+        var harness = new Harness();
+        Media item = Item("one", Contributor);
+        harness.Repository.Item = item;
+
+        await harness.Service.DeleteAsync("one");
+
+        Assert.Equal([item.BlobPath], harness.Storage.Deleted);
+    }
+
+    // The claim that a stream longer than its declared length is refused is withdrawn: it was
+    // enforced by a capped in-memory hold of the original, which the upload no longer takes, and
+    // the route cannot produce the mismatch anyway — the controller passes `IFormFile.Length`,
+    // which the server measures, rather than a length the client states.
+
+    // The claims that the quality is clamped to a ceiling, and that a non-positive or unparsable
+    // configured value falls to a default, are withdrawn with the type that carried them: the
+    // quality is now read and applied as it stands, so there is no ceiling and no default to assert.
+
+    // ---- The producer ---------------------------------------------------------------------
+
+    /// <summary>The service the producer tests drive. The decode is decided by the bytes alone, so
+    /// nothing the harness supplies is read — but it is the real wiring, not a stand-in.</summary>
+    private static MediaService Producer() => new Harness().Service;
+
+    /// <summary>The derivative's bytes, read the way storage reads them: from the stream the producer
+    /// handed back, after it returned.</summary>
+    private static async Task<byte[]> DerivativeBytes(byte[] content)
+    {
+        using Stream derivative = await Producer().GetThumbnailStreamAsync(new MemoryStream(content));
+        using var buffer = new MemoryStream();
+
+        await derivative.CopyToAsync(buffer);
+
+        return buffer.ToArray();
+    }
+
+    private static async Task<MagickImage> Decode(byte[] content) => new(await DerivativeBytes(content));
+
+    /// <summary>
+    /// The stream is still open once the call has returned, because the caller uploads from it
+    /// afterwards: a derivative disposed on the way out hands the caller a closed stream that every
+    /// read rejects.
+    /// </summary>
+    [Fact]
+    public async Task The_derivative_stream_is_readable_after_the_call_returns()
+    {
+        Stream derivative = await Producer().GetThumbnailStreamAsync(
+            new MemoryStream(ImageFixtures.Gradient(400, 300)));
+
+        Assert.True(derivative.CanRead);
+
+        byte[] bytes = new byte[derivative.Length];
+        int read = await derivative.ReadAsync(bytes);
+
+        Assert.Equal(bytes.Length, read);
+        Assert.NotEmpty(bytes);
+    }
+
+    /// <summary>The derivative is re-encoded, not a copy of the original's bytes.</summary>
+    [Fact]
+    public async Task The_derivative_is_a_WebP_however_the_source_was_encoded()
+    {
+        byte[] source = ImageFixtures.Gradient(400, 300);
+
+        using MagickImage image = await Decode(source);
+
+        Assert.Equal(MagickFormat.WebP.ToString(), image.Format.ToString());
+        Assert.NotEqual(source, await DerivativeBytes(source));
+    }
+
+    /// <summary>
+    /// The claim the whole feature exists for: what the browser receives is smaller than what was
+    /// uploaded.
+    /// </summary>
+    /// <remarks>
+    /// The source is noise on purpose. A smooth image compresses so well as a PNG that a lossy
+    /// re-encode of it can be larger, which would make this assertion about the format rather than
+    /// about the derivative; a photograph is what the feature is for, and noise is what a photograph
+    /// is to a compressor.
+    /// </remarks>
+    [Fact]
+    public async Task A_derivative_comes_back_smaller_than_the_photograph_it_came_from()
+    {
+        byte[] photo = ImageFixtures.Noisy(900, 700);
+
+        byte[] derivative = await DerivativeBytes(photo);
+
+        Assert.True(
+            derivative.Length < photo.Length,
+            $"The derivative ({derivative.Length} bytes) is not smaller than its source "
+            + $"({photo.Length} bytes).");
+    }
+
+    /// <summary>A source with transparency keeps its size: WebP carries an alpha channel, so the
+    /// derivative is a still rather than a flattening encode.</summary>
+    [Fact]
+    public async Task A_transparent_source_keeps_its_size()
+    {
+        using MagickImage image = await Decode(ImageFixtures.Transparent(200, 150));
+
+        Assert.Equal(200u, image.Width);
+        Assert.Equal(150u, image.Height);
+    }
+
+    /// <summary>An animated source yields one frame, not a moving derivative.</summary>
+    [Fact]
+    public async Task An_animated_source_yields_a_single_frame()
+    {
+        using var frames = new MagickImageCollection(
+            await DerivativeBytes(ImageFixtures.AnimatedGif(64, 64, frames: 3)));
+
+        Assert.Single(frames);
+    }
+
+    /// <summary>
+    /// Bytes that are not an image are reported to the caller rather than answered with an empty
+    /// derivative: a media item keeps its original and survives the failure, and a caller that
+    /// stored an empty stream in its place would be serving a broken image as a success.
+    /// </summary>
+    [Fact]
+    public async Task Bytes_that_are_not_an_image_are_reported_rather_than_returned()
+    {
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => Producer().GetThumbnailStreamAsync(new MemoryStream(ImageFixtures.NotAnImage)));
+    }
+
+    /// <summary>The same answer for an empty file, which is what a client that sent nothing sends.</summary>
+    [Fact]
+    public async Task An_empty_file_is_reported_rather_than_returned()
+    {
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => Producer().GetThumbnailStreamAsync(new MemoryStream([])));
+    }
+
+    /// <summary>
+    /// The configured quality takes effect, which is only observable on an image with detail to
+    /// discard: at quality 5 far more of the source survives as approximation than at quality 95.
+    /// </summary>
+    /// <remarks>
+    /// The setting is read from the process environment by the producer itself, so this is the only
+    /// way to reach it and the only test that writes one — which is why the class is in a collection
+    /// of its own. Both values are the same image, so the difference is the setting and nothing else.
+    /// </remarks>
+    [Fact]
+    public async Task The_configured_quality_takes_effect()
+    {
+        byte[] photo = ImageFixtures.Noisy(600, 400);
+
+        byte[] lossy = await DerivativeAt(photo, "5");
+        byte[] faithful = await DerivativeAt(photo, "95");
+
+        Assert.True(
+            lossy.Length < faithful.Length,
+            $"Quality 5 produced {lossy.Length} bytes and quality 95 produced "
+            + $"{faithful.Length}: the setting made no difference.");
+    }
+
+    /// <summary>The derivative of an image at a quality named by the setting the producer reads.</summary>
+    private static async Task<byte[]> DerivativeAt(byte[] content, string quality)
+    {
+        string? previous = Environment.GetEnvironmentVariable(Constant.ConfigKey.ThumbnailQuality);
+
+        try
+        {
+            Environment.SetEnvironmentVariable(Constant.ConfigKey.ThumbnailQuality, quality);
+
+            return await DerivativeBytes(content);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Constant.ConfigKey.ThumbnailQuality, previous);
+        }
     }
 
     // ---- Scaffolding ----------------------------------------------------------------------
@@ -863,11 +1424,21 @@ public sealed class MediaServiceTests
     {
         private readonly string? _caller;
         private readonly SignedUrlLifetime _lifetime;
+        private readonly UploadSizeCaps _caps;
 
-        public Harness(string? caller = Contributor, bool isAdmin = false, TimeSpan? mediaUrlTtl = null)
+        public Harness(
+            string? caller = Contributor,
+            bool isAdmin = false,
+            TimeSpan? mediaUrlTtl = null,
+            UploadSizeCaps? caps = null)
         {
             _caller = caller;
             _lifetime = new SignedUrlLifetime(mediaUrlTtl ?? SignedUrlLifetime.Default);
+
+            // Zero is "nothing configured" rather than a cap of no bytes: the type reads it as the
+            // absence of a setting and applies the default, which is the same sentinel the lifetime
+            // above carries.
+            _caps = caps ?? new UploadSizeCaps(0, 0);
 
             Repository = new RecordingRepository
             {
@@ -900,7 +1471,7 @@ public sealed class MediaServiceTests
                 // The real rule, not a stand-in: the visibility and ownership decisions are the thing
                 // under test in the gate tables, and a double here would be asserting the double.
                 new ActivityAuthorizationService(Repository, new StubUserContext(_caller)),
-                new UploadValidationService(),
+                new UploadValidationService(_caps),
                 _lifetime,
                 logger ?? NullLogger<MediaService>.Instance);
     }
@@ -940,6 +1511,9 @@ public sealed class MediaServiceTests
         public Media? Proposed { get; private set; }
 
         public List<Media> Inserted { get; } = [];
+
+        /// <summary>Every row handed to an update, which is how a derivative's path is recorded.</summary>
+        public List<Media> Updated { get; } = [];
 
         public List<string> DeletedMedia { get; } = [];
 
@@ -1018,7 +1592,11 @@ public sealed class MediaServiceTests
             return Task.FromResult(ids.Count);
         }
 
-        public Task<int> UpdateAsync<T>(T item) where T : EntityBase => throw new NotSupportedException(NoWrites);
+        public Task<int> UpdateAsync<T>(T item) where T : EntityBase
+        {
+            Updated.Add((Media)(object)item);
+            return Task.FromResult(1);
+        }
 
         public Task<int> UpdateAsync<T>(List<T> items) where T : EntityBase =>
             throw new NotSupportedException(NoWrites);
@@ -1041,25 +1619,41 @@ public sealed class MediaServiceTests
     {
         public List<(string Container, string Path, DateTimeOffset ExpiresOn)> ReadUrls { get; } = [];
 
-        public List<(string Container, string Path, string ContentType)> Uploads { get; } = [];
+        public List<(string Container, string Path, string ContentType, string? CacheControl)> Uploads { get; } = [];
+
+        /// <summary>The bytes each upload carried, read out of the stream it was handed, so "what was
+        /// stored is what was sent" is answerable without a store.</summary>
+        public List<byte[]> UploadedBytes { get; } = [];
 
         public List<string> Deleted { get; } = [];
 
         public bool RefuseUploads { get; set; }
+
+        /// <summary>The write to refuse, counted from one, so a failure can be aimed at the second
+        /// object an upload stores rather than at the first.</summary>
+        public int RefuseUploadOn { get; set; }
+
+        private int _attempts;
 
         public Task<string> UploadAsync(
             string container,
             string path,
             Stream content,
             string contentType,
+            string? cacheControl = null,
             CancellationToken cancellationToken = default)
         {
-            if (RefuseUploads)
+            if (RefuseUploads || ++_attempts == RefuseUploadOn)
             {
                 throw new NotSupportedException(NoStorage);
             }
 
-            Uploads.Add((container, path, contentType));
+            using var captured = new MemoryStream();
+            content.CopyTo(captured);
+
+            UploadedBytes.Add(captured.ToArray());
+            Uploads.Add((container, path, contentType, cacheControl));
+
             return Task.FromResult(path);
         }
 
@@ -1112,6 +1706,7 @@ public sealed class MediaServiceTests
             string path,
             Stream content,
             string contentType,
+            string? cacheControl = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Mark(nameof(UploadAsync)).ToString());
 

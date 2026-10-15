@@ -428,8 +428,10 @@ then user-secrets, then environment variables, then command line. Later sources 
 - **A key the application cannot run without is enforced at the composition root**, by
   `RequireSetting`, which fails startup with a message naming the key. Whether "not configured"
   is a tolerable state is a per-key decision, and this is where it is made: `TenantId` and
-  `Audience` are allowed to be absent, while `DbConnection`, `BlobConnection` and `AllowedOrigins`
-  are not. Declaring a key empty and requiring it are not in conflict — the file states the key
+  `Audience` are allowed to be absent, while `DbConnection`, `AllowedOrigins` and a storage
+  credential are not — the last being the one setting that is required **without being a single
+  key**: `StorageAccountUrl` or `BlobConnection`, either of which configures storage, so the root
+  enforces the pair rather than calling `RequireSetting` for each. Declaring a key empty and requiring it are not in conflict — the file states the key
   exists, and the root states what a missing value means. Requiring a key is for a setting the
   application cannot work without, not for one whose absence an operator should notice: feature 03's
   `AdminObjectId`/`AdminDisplayName` were both required, and both were removed on 2026-09-19 along
@@ -640,7 +642,7 @@ back to the emulator and needs no secret.
 **How to write a test in either tier, how the containers are isolated, and what a run prints are all
 in [docs/testing-and-tdd.md](../../docs/testing-and-tdd.md), which is their only home. No count
 belongs here**: the counts are in
-[00-mission-1-sprint.md](../../docs/features/00-mission-1-sprint.md), and nowhere else. A number
+[00-mission-2-sprint.md](../../docs/features/00-mission-2-sprint.md), and nowhere else. A number
 restated in four documents goes stale in four, and it did, repeatedly. This section keeps the claim,
 which is what a reviewer needs; the sprint file keeps the measurement, which is what has to be
 re-run.

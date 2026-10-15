@@ -1,6 +1,6 @@
 # 02 — Entra Auth
 
-Status: **Archived** — merged to `develop` in PR #4 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Status: **Archived** — merged to `develop` in PR #4 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Archiving records the end of this document's lifecycle, **not a finished feature**: every acceptance
 criterion below is met by code, but the tests described in [Testing status](#testing-status) were
 deliberately not written in the pass that built it, so by
@@ -98,7 +98,7 @@ attributed for what I write without registering, inviting, or waiting for an adm
       primary key guarantees that — but the losing request fails its insert rather than converging,
       and surfaces as a 500. `UserRepository.AddIfAbsentAsync` met this until it was removed in
       review; see "Closed in this pass" for what replaced it and what the fix would be. Tracked
-      under [11-e2e-verification](../11-e2e-verification.md)
+      under [11-e2e-verification](11-e2e-verification.md)
 - [x] Values are truncated to the column lengths before insert so an over-long claim cannot fail
       the insert (`DisplayName` 200, `Email` 320, `Role` 16)
 - [x] An email claim is captured from `email`, with the WS-Federation `emailaddress` fallback

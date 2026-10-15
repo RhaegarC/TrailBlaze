@@ -14,7 +14,7 @@ public static class Constant
 
         public const string NoDbConnection = "Database connection not configured. Set the 'DbConnection' configuration value.";
 
-        public const string NoBlobConnection = "Blob storage connection not configured. Set the 'BlobConnection' configuration value.";
+        public const string NoStorage = "Blob storage not configured. Set the 'StorageAccountUrl' configuration value, or 'BlobConnection' for a shared-key account.";
 
         // Profile validation. Each of these is a rejection rather than a rewrite: this is
         // text a user typed, so shortening it silently would be losing their input, and the
@@ -41,14 +41,17 @@ public static class Constant
         public static readonly string ImageTypeNotAllowed =
             $"The file must be one of: {string.Join(", ", Upload.ImageContentTypes)}.";
 
-        public static readonly string ImageTooLarge =
-            $"The image must be {Upload.ImageSizeCapBytes / (1024 * 1024)} MB or smaller.";
+        // Methods rather than constants, because the cap they name is configuration: a fixed string
+        // would report the default to an operator who had raised it, telling a caller their file
+        // exceeded a size it was measured against nowhere.
+        public static string ImageTooLarge(long capBytes) =>
+            $"The image must be {capBytes / (1024 * 1024)} MB or smaller.";
 
         public static readonly string VideoTypeNotAllowed =
             $"The file must be one of: {string.Join(", ", Upload.VideoContentTypes)}.";
 
-        public static readonly string VideoTooLarge =
-            $"The video must be {Upload.VideoSizeCapBytes / (1024 * 1024)} MB or smaller.";
+        public static string VideoTooLarge(long capBytes) =>
+            $"The video must be {capBytes / (1024 * 1024)} MB or smaller.";
 
         // Activity validation. Rejections, never rewrites: this is text the caller typed, so
         // shortening it would be storing something they did not write.
@@ -86,14 +89,33 @@ public static class Constant
 
         public const string AllowedOrigins = "AllowedOrigins";
 
-        /// <summary>Azure Storage connection string. No container or account name is
-        /// configured separately: the containers are the closed set in
+        /// <summary>The storage account's blob endpoint, such as
+        /// <c>https://account.blob.core.windows.net/</c>. The application authenticates to it as
+        /// itself, so the account's key is not configured at all. No container name is configured
+        /// separately: the containers are the closed set in <see cref="StorageContainer"/>.</summary>
+        public const string StorageAccountUrl = "StorageAccountUrl";
+
+        /// <summary>Azure Storage connection string, which carries an account key. The local and
+        /// test override for <see cref="StorageAccountUrl"/>, and it wins when both are set. No
+        /// container or account name is configured separately: the containers are the closed set in
         /// <see cref="StorageContainer"/>.</summary>
         public const string BlobConnection = "BlobConnection";
 
         /// <summary>How many minutes a media read URL is given. Optional, and held inside
         /// <see cref="SignedUrlLifetime.Maximum"/> whatever it says.</summary>
         public const string MediaUrlTtlMinutes = "MediaUrlTtlMinutes";
+
+        /// <summary>The largest image an upload may carry, in bytes. Optional, and held inside
+        /// <see cref="Upload.MaxImageSizeCapBytes"/> whatever it says.</summary>
+        public const string ImageUploadCapBytes = "ImageUploadCapBytes";
+
+        /// <summary>The largest video an upload may carry, in bytes. Optional, and held inside
+        /// <see cref="Upload.MaxVideoSizeCapBytes"/> whatever it says.</summary>
+        public const string VideoUploadCapBytes = "VideoUploadCapBytes";
+
+        /// <summary>The quality an image's derivative is re-encoded at, read from the process
+        /// environment. Optional, and applied as it stands: there is no default and no ceiling.</summary>
+        public const string ThumbnailQuality = "ThumbnailQuality";
     }
 
     /// <summary>
@@ -154,6 +176,30 @@ public static class Constant
 
         /// <summary>Private. Activity media, reached only through a short-lived SAS URL.</summary>
         public const string Media = "media";
+    }
+
+    /// <summary>
+    /// How long a browser may re-show an item's bytes without asking for them again.
+    /// </summary>
+    /// <remarks>
+    /// Bounded well below <see cref="SignedUrlLifetime.Default"/> because the URL is the control and
+    /// this is not: a cached copy is re-shown after its token has lapsed, which is what a window means
+    /// rather than something the window fails to prevent. <c>private</c> keeps an intermediary from
+    /// storing a copy at all, and it is never <c>immutable</c> — a cover's path changes when an entry
+    /// crosses the public line, so nothing served this way is content-stable.
+    /// </remarks>
+    public static class MediaCache
+    {
+        /// <summary>The window, in seconds, after which a browser must ask again.</summary>
+        /// <remarks>
+        /// Also the window <see cref="SignedUrlLifetime.Boundary"/> rounds to, so changing this moves
+        /// every signed URL's granularity with it — which is the intent, since a URL that changes
+        /// sooner than the copy it names lapses is a URL that misses a cache it could have hit.
+        /// </remarks>
+        public const int MaxAgeSeconds = 300;
+
+        /// <summary>The directive media bytes are stored with.</summary>
+        public static readonly string Directive = $"private, max-age={MaxAgeSeconds}";
     }
 
     /// <summary>The values <c>User.Role</c> accepts. Changing this list needs a migration, and
@@ -321,6 +367,10 @@ public static class Constant
 
         public const int BlobPathLength = 512;
 
+        /// <summary>Mirrors <see cref="BlobPathLength"/>: the derivative's path is composed the same
+        /// way, so a column narrower than the original's could not hold one.</summary>
+        public const int ThumbnailPathLength = 512;
+
         public const int ContentTypeLength = 128;
 
         public const int OriginalFileNameLength = 260;
@@ -356,8 +406,13 @@ public static class Constant
     /// </para>
     /// <para>
     /// The caps are Decision #24's. Read as mebibytes rather than decimal megabytes, because
-    /// 10 * 1024 * 1024 is the number a browser, a fetch client and an upload control all
-    /// agree on; 10,000,000 would make "exactly at the cap" a different file for each of them.
+    /// 1024 * 1024 is the number a browser, a fetch client and an upload control all agree on;
+    /// 10,000,000 would make "exactly at the cap" a different file for each of them.
+    /// </para>
+    /// <para>
+    /// The defaults and the ceilings live here while the configured value does not, because a route
+    /// attribute takes a compile-time constant and a setting is not one: <see cref="UploadSizeCaps"/>
+    /// is where configuration is clamped to the ceiling declared below.
     /// </para>
     /// </remarks>
     public static class Upload
@@ -374,27 +429,56 @@ public static class Constant
         public static readonly string[] MediaContentTypes =
             [.. ImageContentTypes, .. VideoContentTypes];
 
-        /// <summary>The image cap: 10 MB. A file exactly at the cap is accepted.</summary>
-        public const long ImageSizeCapBytes = 10L * 1024 * 1024;
+        /// <summary>The image cap applied when none is configured: 25 MB. A file exactly at the cap
+        /// is accepted.</summary>
+        public const long DefaultImageSizeCapBytes = 25L * 1024 * 1024;
 
-        /// <summary>The video cap: 200 MB (Decision #24).</summary>
-        public const long VideoSizeCapBytes = 200L * 1024 * 1024;
+        /// <summary>The video cap applied when none is configured: 200 MB (Decision #24).</summary>
+        public const long DefaultVideoSizeCapBytes = 200L * 1024 * 1024;
+
+        /// <summary>The largest image cap any setting may reach, and the value the image routes
+        /// carry as their request-size limit.</summary>
+        public const long MaxImageSizeCapBytes = 100L * 1024 * 1024;
+
+        /// <summary>The largest video cap any setting may reach, and the value the media route
+        /// carries as its request-size limit.</summary>
+        public const long MaxVideoSizeCapBytes = 512L * 1024 * 1024;
 
         /// <summary>
-        /// The largest request body the media upload route accepts: the video cap plus room for the
-        /// multipart envelope around it.
+        /// The largest request body the media upload route accepts: the video ceiling plus room for
+        /// the multipart envelope around it.
         /// </summary>
         /// <remarks>
-        /// A route limit rather than a validation rule. Kestrel refuses a body over 30 MB and the
-        /// form parser refuses a multipart body over 128 MB, both **before** the service sees
-        /// anything — so without this the documented 400 for an oversize file would arrive as a bare
-        /// 413 for every video over 128 MB, which is most of the ones the cap admits. The envelope
-        /// allowance is what keeps a file exactly at the cap from being refused by its own boundary
-        /// and headers.
+        /// A route limit rather than a validation rule, and derived from the ceiling rather than the
+        /// default: Kestrel refuses a body over 30 MB and the form parser refuses a multipart body
+        /// over 128 MB, both before the service sees anything, so a limit set to the default would
+        /// answer an oversize video with a bare 413 rather than the documented 400. The envelope
+        /// allowance is what keeps a file exactly at the ceiling from being refused by its own
+        /// boundary and headers.
         /// </remarks>
-        public const long MaxMediaRequestBytes = VideoSizeCapBytes + MultipartEnvelopeBytes;
+        public const long MaxMediaRequestBytes = MaxVideoSizeCapBytes + MultipartEnvelopeBytes;
+
+        /// <summary>
+        /// The largest request body the cover and avatar routes accept: the image ceiling plus room
+        /// for the multipart envelope around it.
+        /// </summary>
+        /// <remarks>
+        /// Both routes carried no limit while the image cap was 10 MB, which sat below Kestrel's
+        /// 30 MB default and the form parser's 128 MB one; the ceiling is now above both, so without
+        /// this an acceptable cover would be answered with a bare 413.
+        /// </remarks>
+        public const long MaxImageRequestBytes = MaxImageSizeCapBytes + MultipartEnvelopeBytes;
 
         /// <summary>Room for boundaries and part headers around a file at the cap.</summary>
         private const long MultipartEnvelopeBytes = 64L * 1024;
+        
+        /// <summary>Suffix of thumbnail.</summary>
+        public const string PathSuffix = "-thumb";
+
+        /// <summary>Extension of thumbnail.</summary>
+        public const string FileExtension = ".webp";
+
+        /// <summary>Content type of thumbnail.</summary>
+        public const string ContentType = "image/webp";
     }
 }

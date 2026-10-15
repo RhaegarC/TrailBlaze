@@ -1,0 +1,143 @@
+# Mission 1 — TrailBlaze Activity Journal
+
+Status: **Archived** — Mission 1 closed 2026-10-05; derived from
+[docs/PRD.md](../../PRD.md) on 2026-09-15, which stays the living reference (decisions log,
+canonical data model, permission table).
+
+**Mission 1 is closed** *(2026-10-05)*. Successor work lives in
+[00-mission-2-sprint.md](../00-mission-2-sprint.md), which owns the live test counts. The one item
+this mission closes without is feature 02's deferred token tests, which stay deferred in
+[02-entra-auth](02-entra-auth.md) rather than being carried across.
+
+## Goal
+
+An activity journal that is public **by default rather than in principle**. Anyone browses the
+`Public` activities, newest first, with their covers and the images and videos each one carries;
+signing in widens that to `Shared` entries and the caller's own `Private` ones. One shared feed,
+populated by any signed-in user; the activity's `Type` decides who may read it and ownership
+decides who may edit or delete (Decisions #26/#27). *(2026-09-30 — the media half of the first
+sentence came out from behind sign-in; the activity's `Type` now decides media too, which is what
+[12](12-anonymous-media-read.md) does.)*
+
+## How to read these features (working model)
+
+- **Backend** is implemented test-first (RED → GREEN → refactor; tiers in
+  [docs/testing-and-tdd.md](../../testing-and-tdd.md)). It lives in `src/api/` as a layered
+  solution — `TrailBlaze.Model`, `TrailBlaze.Repository`, `TrailBlaze.Service`,
+  `TrailBlaze.Interface`, `TrailBlaze.Api` — each layer with a sibling `*.Test` xUnit project.
+  Test command: `dotnet test` (from `src/api/`).
+- **Frontend** is authored in Figma Make and exported into `src/web/` as a **single role-gated
+  React app**. It is not test-first. Consequently each feature below specs the **backend/API
+  slice** the exported UI calls and its acceptance criteria — it does not spec screens, widgets,
+  or renderer behavior.
+- A feature that changes the data model updates the PRD data-model table in the same PR
+  ([schema-change discipline](../../PRD.md#data-model)).
+- Status reflects the doc lifecycle (file created → in progress → archived after PR to `develop`).
+
+### Sequencing note — authorization lands late, deliberately
+
+Features **04–08** build the CRUD and media mechanics while every signed-in user is still free to
+write anything. Feature **09** then imposes the visibility, ownership and admin rules on top. This
+is a build-order choice, not an oversight: the mechanics stay independently testable, and 09 gets
+to state the full permission matrix as its own acceptance criteria. The consequence is that
+**04–08 were not safe to deploy on their own** — and with per-activity visibility (Decision #26)
+that was a sharper statement than it used to be, since before 09 landed a `Private` activity was not
+actually private. 09 merged in PR #26 *(2026-09-24)*, which closes this note as far as the backend is
+concerned: `develop` is deployable from that commit. If the trade is ever unwelcome again, move 09 to
+run immediately after 04.
+
+## Feature breakdown
+
+Number = priority (lowest first = next to implement); file = `docs/features/NN-name.md`.
+
+**This table is the only place a feature's status is written down.** The `Status` column owns
+progress and the summary cell owns what the slice is; a feature's own file states its lifecycle and
+nothing more, and the PRD's [current-state
+table](../../PRD.md#current-state-vs-target) states capability rather than progress.
+
+| # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
+|---|---|---|---|---|
+| 01 | [foundation](01-foundation.md) | — | Layered `TrailBlaze.*` solution + sibling `*.Test` projects that **run tests**; Azure SQL Database via EF Core with migrations applied by the pipeline; `Dockerfile` for the ACA image; `IStorageRepository` abstraction; config for Azure Blob | archived — merged in PR #3. The in-memory storage fake it shipped was deleted on 2026-09-18 ([testing-and-tdd.md](../../testing-and-tdd.md)) |
+| 02 | [entra-auth](02-entra-auth.md) | 01 | Backend validates Entra ID bearer tokens; users auto-provisioned on first sight of an `oid`; caller identity available to services; **self-service profile** — display name, bio, avatar, theme, language | archived — merged in PR #4, **tests deferred**, so unfinished: the profile slice is implemented and unproven |
+| 03 | [the role column](03-admin-seeding.md) | 02 | `Role` stored on `users`, defaulting to `User` and closed to `User`/`Admin`; one admin set by hand; role readable by the authorization path | archived — merged in PR #12, and unlike 02 its tests exist. **The server-side role read the authorization path needs does not exist yet** — it was built and removed in review as unconsumed, and [09](09-permission-enforcement.md) adds it |
+| 04 | [activity-crud](04-activity-crud.md) | 02 | Create/read/update/delete an activity: title, location, activity date, optional description, and `Type` (visibility). Validation: title/location/date required; `ActivityDate` is a calendar date. Plus the **anonymous paged list** — newest entry first, `pageSize` clamped, visibility-scoped. **Who may mutate is 09's; the payload and the detail read are 05's** | archived — merged in PR #15. The list applies the read half of the visibility rule; **the admin branch is not implemented** (no role is readable), and no mutation is authorized |
+| 05 | [public-activity-list](05-public-activity-list.md) | 04 | The read surface's payload and second read: the cover URL, the media count and the creator's display name on a list item; `GET /api/activity/{id}` applying the visibility rule as a **404**; an admin branch that is blocked on a readable role | archived — merged in PR #19. The payload, the detail read and the cover URL it projects (populated by 08) work; **the admin branch of the visibility rule is not implemented** (no role is readable, so it lands with 09) |
+| 06 | [media-upload](06-media-upload.md) | 04 | Upload images/videos to the **private** container: content-type allowlist, size caps (10 MB / 200 MB), ≤ 50 per contributor per activity; list media metadata. **Collaborative** — any signed-in caller who can read the activity may contribute; each item records its **uploader** | archived — merged in PR #17. Upload, metadata listing and item deletion work; **the administrator among the permitted deleters is not implemented** (no role is readable, so it lands with 09), and **fetching the bytes is 07's** *(2026-09-25 — both have now landed: 09 in PR #26, 07 in PR #28, so the slice this row described is closed)* |
+| 07 | [sas-delivery](07-sas-delivery.md) | 06 | `GET /api/media/{id}/url` mints a **short-lived SAS URL**, and **only** for an authenticated caller — rejected before any blob operation otherwise | archived — merged in PR #28. The route, the visibility gate, the clamped TTL policy and the read-only single-blob scope are built and proven, the scope against a live account. **The audience widened on 2026-09-30** ([12](12-anonymous-media-read.md)): the route, the gate and the TTL policy are unchanged, but a caller who can read the activity may now mint without a token, and the anonymous refusal became a 404 rather than a 401. **Two claims moved**: the "before any blob operation" count is at the service tier rather than the API tier (a tokenless request is refused by the middleware before the action runs, so the count there would hold by framework ordering), and the API tier's authenticated 200 is not reachable without a tenant |
+| 08 | [cover-images](08-cover-images.md) | 04 | Cover is a **separate upload** whose container **follows the activity's `Type`** — public `covers` for `Public`, private `media` otherwise; a `Type` change across that line **moves** the cover. Never derived from private media | archived — merged in PR #20. The upload route, the routing rule and the visibility-change move are built and proven, the move against a live account; **no ownership rule** (any signed-in caller who can read an entry may set its cover), which lands with 09 |
+| 09 | [permission-enforcement](09-permission-enforcement.md) | 03, 04 | **Two axes enforced in one service**: visibility gates reads, ownership gates mutations, `Admin` overrides both. Anonymous denied everywhere except the two public read endpoints. Media upload is the axis crossing — allowed to any caller who can read the activity | archived — merged in PR #26. `IActivityAuthorizationService` holds the whole rule and every route consults it; the role is read from `users.Role`; 403 and 404 are told apart on the same route. **Two claims are not made here**: the live-pipeline status matrix moves to 11 (the Api tier cannot carry a token into an unreachable database), and the "leaves no blob" half of the rejected-mutation criterion has no tier to live in, so the ordering double is what proves it. **The anonymous exception widened on 2026-09-30** ([12](12-anonymous-media-read.md)): this row's summary names two public read endpoints, and there are now four — the media listing and the media-URL mint follow the entry's `Type` as the other two do. The rule itself did not move: it is still this feature's single predicate, still consulted by every route |
+| 10 | [figma-integration](10-figma-integration.md) | 05, 07, 08, 09 | The Figma-exported app wired to the API: MSAL login, API calls, role gating, **visibility badges**, **media grouped by uploader**, and the **profile screen**. **Non-TDD** — verified manually | archived — merged in PR #31. The export's screens are untouched: the wiring is `src/api/`, `src/auth/`, `src/data/`, `src/config.ts` and marked seams in `App.tsx`, and `scripts/web-seam.py` now fails when a re-export clobbers one of those files without saying so. **Three criteria are not met and are not claimed** — the export renders no `<video>` element, no per-media delete control, and no avatar an anonymous visitor can see, so all three are recorded as export gaps rather than hand-built, per the no-hand-authored-screens non-goal. **No criterion is claimed on the strength of having seen it work**: the browser walkthrough belongs to [11](11-e2e-verification.md) *(and has since run — 2026-10-05 — so the integration is no longer merely compiled and type-checked; the three export gaps above are unchanged by that run)* |
+| 11 | [e2e-verification](11-e2e-verification.md) | 10 | Full-stack pass against a running stack: anonymous `Public`-only list → sign in for `Shared` → media visible → create with `Type` → collaborative upload by a second user → grouped by uploader → edit own → a `Private` entry 404s for a stranger → admin override | archived — the pass was performed against a running stack *(2026-10-05)*. **The three export gaps feature 10 records still stand**, so a criterion depending on one of them is proven at its API half only; the file's Notes carry that limit and the rest of what a single scripted journey cannot prove |
+| 12 | [anonymous-media-read](12-anonymous-media-read.md) | 06, 07, 09 | **A reversal of Decision #2's media half**: the activity's `Type` decides who may read its media, exactly as it decides who may read its text. `GET /api/activity/{id}/media` and `GET /api/media/{id}/url` admit an anonymous caller for a `Public` activity and answer **404** — never 401 — for `Shared`, `Private` or absent. The upload and delete routes stay signed-in, and an anonymous listing carries no uploader id (Decision #30) | archived — merged in PR #43. Two gates were deleted rather than a rule written: `VisibleTo` already answered `Public` for an anonymous caller, and `CanRead` was already called a few lines later. **Two claims are not made here**: the Api tier asserts admission rather than answers (a request past the door dies on the factory's unreachable store, so 500 is the whole of its claim), and the app group's three criteria are unclaimed — the rendered page is [11](11-e2e-verification.md)'s walkthrough, which has since run *(2026-10-05)* |
+
+## Non-TDD tracks (not feature files)
+
+- **Figma Make authoring** — screen design happens in Figma Make; the export is consumed by
+  feature 10. Only the API integration is hand-written.
+- **Deployment prerequisites** mostly fold into feature 01.
+
+## Definition of Done (checked by `/sprint-status`)
+
+- [x] Layered `TrailBlaze.*` backend solution builds; `dotnet test` green from `src/api/` **with a
+      non-zero test count** — a green run over zero discovered tests does not count, and was the
+      state when this line was written. The counts are below; a skipped test is not a passing one
+- [x] Entra auth: backend validates bearer tokens; users auto-provisioned; exactly one admin
+      — closed by [11](11-e2e-verification.md)'s pass *(2026-10-05)*. Feature 02's token **tests**
+      stay deferred, so this is an observed claim rather than a unit-tested one
+- [x] Self-service profile complete: the caller can edit display name, bio, theme and language and
+      upload an avatar, on their own row only, with `Role` not writable through the profile route
+- [x] Activity CRUD complete with validation (title, location, calendar-date `ActivityDate`) and
+      `Type` required, defaulting to `Public`
+- [x] Anonymous visitors can page the activity list, newest entry first; `pageSize` clamped; the list
+      is **visibility-scoped**, not merely unauthenticated
+- [x] Images and videos upload to the private container within the validation caps, to **any
+      signed-in caller who can read the activity**, each item recording its uploader
+- [x] Media is reachable only via short-lived SAS URLs, minted for **any caller who can read the
+      activity** — landed in [07](07-sas-delivery.md), merged in PR #28, where the audience
+      was authenticated callers only; widened on 2026-09-30 by [12](12-anonymous-media-read.md)
+- [x] Cover images upload separately, into the container the activity's `Type` requires, and render
+      in the list; a `Type` change across the public line **moves** the cover
+- [x] Visibility, ownership and admin rules enforced in one service; anonymous denied except the
+      public reads — **four** of them since 2026-09-30, where
+      [12](12-anonymous-media-read.md) widened the media half of the exception; a `Private`
+      entry is **404** to a caller who may not read it, **403** to one who may read but not act —
+      landed in [09](09-permission-enforcement.md), merged in PR #26
+- [x] Figma-exported app integrated with the API (MSAL, role gating, media grouped by uploader,
+      visibility badges, the profile screen); the export's mock data replaced by real calls; E2E
+      verified
+- [x] Each backend feature merged to `develop` with its tests (RED → GREEN)
+
+## Test counts at Mission 1's close
+
+These are the numbers this mission closed on, kept as a record of that moment rather than as a claim
+about today: each row is what a run printed, read off the summary as `Passed / Skipped / Total`.
+**The live counts now live in [00-mission-2-sprint.md](../00-mission-2-sprint.md), which is their only
+home** — they were previously restated in the README, the PRD, STANDARD §10 and the test strategy,
+and went stale in all four whenever a feature added a test. How the tiers are shaped, and which one a
+new test belongs to, is [testing-and-tdd.md](../../testing-and-tdd.md)'s subject, not this file's.
+*(2026-10-05 — re-measured on a bare machine when Mission 2 was opened and unchanged, so nothing had
+drifted since this table was written.)*
+
+| Project | Bare machine | With the containers |
+|---|---|---|
+| `TrailBlaze.Service.Test` | 273 / 0 / 273 | 273 / 0 / 273 |
+| `TrailBlaze.Repository.Test` | 47 / 78 / 125 | 125 / 0 / 125 |
+| `TrailBlaze.Api.Test` | 19 / 0 / 19 | 19 / 0 / 19 |
+| **All three** | **339 / 78 / 417** | **417 / 0 / 417** |
+
+Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
+the container tiers skip, and `Category=Container` is the only trait in the solution.
+
+## Open items
+
+- **Figma export defects, not export timing.** The export exists in `src/web/`, so feature 10 is no
+  longer blocked on its *arrival* — it is blocked on the export being **fixed in Figma Make and
+  re-exported**. Which of its defects are re-export fixes rather than gaps in this documentation is a
+  question for that work; this file does not carry the list.
+- **Azure credentials in CI** — **re-stamped 2026-09-18, and the gap is narrower than this said.**
+  The storage tier no longer needs credentials at all: it runs the real `AzureBlobStorageRepository`
+  against the Azurite container, which carries no secret, so CI proves the blob implementation
+  without an Azure account. What still needs real credentials is the much smaller set of claims only
+  a real account can settle — its certificate, its ACL behaviour, and its API-version acceptance —
+  plus feature 11's end-to-end tier. There is no CI pipeline to run any of it yet; STANDARD §11
+  describes the target and records that it is not built.

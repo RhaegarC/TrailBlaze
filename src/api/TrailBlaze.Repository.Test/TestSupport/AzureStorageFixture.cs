@@ -1,6 +1,8 @@
 namespace TrailBlaze.Repository.Test.TestSupport;
 
 using Azure;
+using Azure.Core;
+using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using TrailBlaze.Model;
@@ -65,7 +67,23 @@ public sealed class AzureStorageFixture : IAsyncLifetime
 
     /// <summary>A client for this account, for the assertions that need to address a blob or
     /// a container directly rather than through <c>IStorageRepository</c>.</summary>
-    public BlobServiceClient Service => new(ConnectionString);
+    public BlobServiceClient Service => new(ConnectionString, LoopbackTransport.Options());
+
+    /// <summary>The account's blob endpoint, which is what an identity-authenticated client is
+    /// pointed at instead of a connection string.</summary>
+    public Uri AccountUri => Service.Uri;
+
+    /// <summary>
+    /// The identity the application signs and writes as.
+    /// </summary>
+    /// <remarks>
+    /// The emulator gets the one it accepts — a signed-shaped JWT it reads without verifying, for
+    /// the same reason it has a published account key: there is no authority behind it and the
+    /// account belongs to this machine. Anything else gets this process's own credentials, which is
+    /// what a deployment holds, so the tier is the same code with a different account behind it
+    /// rather than a second implementation.
+    /// </remarks>
+    public TokenCredential Identity => IsEmulator ? new EmulatorIdentity() : new DefaultAzureCredential();
 
     public async Task InitializeAsync()
     {
@@ -78,7 +96,7 @@ public sealed class AzureStorageFixture : IAsyncLifetime
         }
 
         ConnectionString = connection;
-        IsEmulator = new BlobServiceClient(connection).Uri.IsLoopback;
+        IsEmulator = new BlobServiceClient(connection, LoopbackTransport.Options()).Uri.IsLoopback;
 
         foreach (string container in Containers)
         {
@@ -134,7 +152,26 @@ public sealed class AzureStorageFixture : IAsyncLifetime
     {
         Skip.IfNot(IsAvailable, SkipReason);
 
-        return new AzureBlobStorageRepository(ConnectionString);
+        return new AzureBlobStorageRepository(ConnectionString, LoopbackTransport.Options());
+    }
+
+    /// <summary>
+    /// The production implementation authenticating as <paramref name="identity"/> rather than with
+    /// the account key, with the same skip contract as <see cref="Repository"/>.
+    /// </summary>
+    /// <param name="clock">The clock the key's life is measured against, so a test can outlast a
+    /// window it cannot wait for. The machine's own when omitted.</param>
+    /// <param name="options">Client options the caller has wrapped, so it can observe the requests
+    /// this repository makes. Loopback-trusting options when omitted.</param>
+    public AzureBlobStorageRepository SigningRepository(
+        TokenCredential identity,
+        TimeProvider? clock = null,
+        BlobClientOptions? options = null)
+    {
+        Skip.IfNot(IsAvailable, SkipReason);
+
+        return new AzureBlobStorageRepository(
+            AccountUri, identity, options ?? LoopbackTransport.Options(), clock);
     }
 
     /// <summary>
@@ -147,10 +184,9 @@ public sealed class AzureStorageFixture : IAsyncLifetime
     /// </remarks>
     private static async Task<bool> AnswersAsync(string connectionString)
     {
-        var options = new BlobClientOptions
-        {
-            Retry = { MaxRetries = 0, NetworkTimeout = TimeSpan.FromSeconds(5) },
-        };
+        BlobClientOptions options = LoopbackTransport.Options();
+        options.Retry.MaxRetries = 0;
+        options.Retry.NetworkTimeout = TimeSpan.FromSeconds(5);
 
         try
         {

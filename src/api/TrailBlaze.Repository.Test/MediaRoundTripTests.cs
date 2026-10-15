@@ -21,7 +21,14 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
     : IClassFixture<TrailBlazeDatabaseFixture>
 {
     /// <summary>A size no <c>int</c> column could hold, so a narrowed column fails here.</summary>
-    private const long VideoSize = Constant.Upload.VideoSizeCapBytes;
+    /// <remarks>
+    /// Above <c>int.MaxValue</c> on purpose, which the value it used to borrow — the video cap — was
+    /// not: that number fits an <c>int</c> comfortably, so the assertion would have held against a
+    /// column narrowed to one and the comment described a check that was not being made. The width
+    /// of the column is what this test is about, so the size is stated here rather than borrowed from
+    /// an upload rule that has no bearing on it.
+    /// </remarks>
+    private const long VideoSize = 3_000_000_000L;
 
     /// <summary>The uploader every cap test counts, and the one the seeded rows belong to.</summary>
     private const string Ada = "oid-ada";
@@ -96,6 +103,76 @@ public sealed class MediaRoundTripTests(TrailBlazeDatabaseFixture fixture)
 
         Assert.Equal(
             VideoSize, (await Repository(reading).GetAsync<Media>(row => row.Id == written.Id))!.SizeBytes);
+    }
+
+    /// <summary>
+    /// The derivative's path survives the trip through the column the migration added, at exactly the
+    /// widest value the column takes.
+    /// </summary>
+    /// <remarks>
+    /// The length is the column's own rather than a plausible path's, so the boundary is what is being
+    /// asserted: a column a character narrower would refuse this insert, and the service building a
+    /// path from a long activity id would have nowhere to put it.
+    /// </remarks>
+    [SkippableFact]
+    public async Task The_derivative_path_survives_the_round_trip_at_the_columns_full_width()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
+
+        string activityId = Guid.NewGuid().ToString();
+        Media written = Item(activityId, "ridge.jpg", Constant.MediaKind.Image, 4_096);
+        written.ThumbnailPath = new string('t', Constant.MediaField.ThumbnailPathLength);
+
+        using (IServiceScope scope = fixture.CreateScope())
+        {
+            await Repository(scope).CreateAsync(written);
+        }
+
+        using IServiceScope reading = fixture.CreateScope();
+
+        Assert.Equal(
+            written.ThumbnailPath,
+            (await Repository(reading).GetAsync<Media>(row => row.Id == written.Id))!.ThumbnailPath);
+    }
+
+    /// <summary>
+    /// The engine refuses a derivative path past the column's width, which is what makes the number in
+    /// the model a bound rather than a comment — and, more to the point, what a path built from a long
+    /// activity id would meet.
+    /// </summary>
+    [SkippableFact]
+    public async Task The_engine_refuses_a_derivative_path_past_the_columns_width()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
+
+        using IServiceScope scope = fixture.CreateScope();
+
+        Media rogue = Item(Guid.NewGuid().ToString(), "ridge.jpg", Constant.MediaKind.Image, 4_096);
+        rogue.ThumbnailPath = new string('t', Constant.MediaField.ThumbnailPathLength + 1);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => Repository(scope).CreateAsync(rogue));
+    }
+
+    /// <summary>
+    /// An item with no derivative writes and reads back as one, which is the whole reason the column
+    /// is nullable: video has none, and so has every row stored before the column existed.
+    /// </summary>
+    [SkippableFact]
+    public async Task An_item_without_a_derivative_round_trips_a_null()
+    {
+        Skip.IfNot(fixture.IsAvailable, fixture.SkipReason);
+
+        string activityId = Guid.NewGuid().ToString();
+        Media written = Item(activityId, "ridge.mp4", Constant.MediaKind.Video, 4_096);
+
+        using (IServiceScope scope = fixture.CreateScope())
+        {
+            await Repository(scope).CreateAsync(written);
+        }
+
+        using IServiceScope reading = fixture.CreateScope();
+
+        Assert.Null((await Repository(reading).GetAsync<Media>(row => row.Id == written.Id))!.ThumbnailPath);
     }
 
     /// <summary>

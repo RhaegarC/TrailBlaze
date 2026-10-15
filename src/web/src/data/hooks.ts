@@ -26,6 +26,8 @@ import {
   type ProfileView,
 } from "../api/mappers";
 import { useAuth } from "../auth/store";
+import type { WireMedia } from "../api/types";
+import { hasLife, remember, urlFor } from "./mediaUrlCache";
 
 interface Loadable {
   loading: boolean;
@@ -148,7 +150,7 @@ export function useActivity(
 // ─── An activity's media ───────────────────────────────────────────────────────
 
 /**
- * The media of one activity, each item carrying a freshly minted read URL.
+ * The media of one activity, each item carrying a read URL the listing supplied.
  *
  * No `enabled` flag: both routes authorize on the activity's own read rule, so a screen that may
  * render the activity is a screen that may fetch its media. A caller who may not read it is
@@ -165,17 +167,12 @@ export function useActivityMedia(activityId: string): { media: MediaView[] } & L
   const [loading, reload] = useLoad(
     async (signal) => {
       const items = await listMedia(activityId, signal);
-      // One URL per item, all in flight at once: the grid renders every item, and a signed URL
-      // is cheap to mint. A single failure leaves that one tile without a source rather than
-      // emptying the section.
-      const urls = await Promise.all(
-        items.map((item) =>
-          getMediaUrl(item.id, signal)
-            .then((result) => result.url)
-            .catch(() => "")
-        )
-      );
-      return items.map((item, index) => toMediaView(item, urls[index]));
+
+      // The listing carries a URL and its expiry for every item, so a page of images costs one
+      // request rather than one plus the number of images.
+      const settled = await Promise.all(items.map((item) => withFreshUrl(item, signal)));
+
+      return settled.map(toMediaView);
     },
     setMedia,
     [activityId, status],
@@ -183,6 +180,34 @@ export function useActivityMedia(activityId: string): { media: MediaView[] } & L
   );
 
   return { media, loading, error, reload };
+}
+
+/**
+ * The item with a URL worth rendering, minting one only when there is nothing left to render.
+ *
+ * The usual answer is the URL the listing already carried, so the per-item request this replaces is
+ * normally not made at all. It is made for an item whose URL has run out, which happens to a page
+ * left open past the signing window — and a mint inside the same boundary minute returns the string
+ * it replaced, which is why the cache's margin is a whole minute rather than a few seconds.
+ */
+async function withFreshUrl(item: WireMedia, signal: AbortSignal): Promise<WireMedia> {
+  const alreadyHeld = urlFor(item.id);
+  if (alreadyHeld !== null) return { ...item, url: alreadyHeld };
+
+  if (hasLife(item.url, item.expiresOnUtc)) {
+    remember([item]);
+    return item;
+  }
+
+  try {
+    const minted = await getMediaUrl(item.id, signal);
+    remember([{ id: item.id, ...minted }]);
+    return { ...item, url: minted.url };
+  } catch {
+    // A single failure leaves that one tile without a source rather than emptying the section,
+    // which is the behaviour the fan-out this replaced had too.
+    return { ...item, url: "" };
+  }
 }
 
 // ─── The caller's profile ──────────────────────────────────────────────────────

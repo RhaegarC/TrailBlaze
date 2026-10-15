@@ -13,9 +13,50 @@ services:
       - "127.0.0.1:${TB_TEST_SQL_PORT:-14330}:1433"
     shm_size: 1gb
 
+  # The emulator serves OAuth only over TLS, and the delegation-key path is only reachable through
+  # OAuth -- so the blob service needs a certificate. This generates one into a named volume on the
+  # first `up` and keeps it after, because the image ships none and has no way to make one at boot.
+  # Nothing here is a secret: the key is unsigned, it names loopback, and it is discarded with the
+  # volume. It is kept between runs so a second `up` does not invalidate the certificate the running
+  # emulator is already serving.
+  azure-storage-edge-cert:
+    image: mcr.microsoft.com/azure-cli:2.89.1
+    container_name: azure-storage-edge-cert
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        [ -s /certs/azurite.pem ] && exit 0
+        openssl req -x509 -newkey rsa:2048 -nodes -days 730 \
+          -keyout /certs/azurite.key -out /certs/azurite.pem \
+          -subj "/CN=127.0.0.1" \
+          -addext "subjectAltName=IP:127.0.0.1,DNS:localhost"
+    volumes:
+      - azurite-certs:/certs
+    restart: "no"
+
   azure-storage-edge:
     image: mcr.microsoft.com/azure-storage/azurite:3.37.0
     container_name: azure-storage-edge
-    command: ["azurite", "-l", "/data", "--blobHost", "0.0.0.0"]
+    command:
+      - azurite
+      - -l
+      - /data
+      - --blobHost
+      - 0.0.0.0
+      - --cert
+      - /certs/azurite.pem
+      - --key
+      - /certs/azurite.key
+      - --oauth
+      - basic
+    depends_on:
+      azure-storage-edge-cert:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:${TB_TEST_BLOB_PORT:-10010}:10000"
+    volumes:
+      - azurite-certs:/certs
+
+volumes:
+  azurite-certs:

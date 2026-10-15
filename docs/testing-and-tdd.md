@@ -27,7 +27,9 @@ repository calls, and neither test would catch the two being wired to each other
 the suite closes that seam today.
 
 **Which product behaviour the suite covers, and which it does not, is status rather than standard.**
-It is written down once, in [00-mission-1-sprint.md](features/00-mission-1-sprint.md).
+It is written down once, in the live sprint file
+([00-mission-2-sprint.md](features/00-mission-2-sprint.md)); [Mission 1's](features/archive/00-mission-1-sprint.md)
+is its closed record.
 This document says how a test is written and where it runs:
 it names no feature and carries no count, because a count restated here went stale here every time a
 feature added a test.

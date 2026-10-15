@@ -179,7 +179,7 @@ public sealed class StorageContainerRoutingTests(AzureStorageFixture fixture)
             Uri publicUrl = storage.CreatePublicUrl(container, path);
             Assert.DoesNotContain("sig=", publicUrl.Query);
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
             HttpResponseMessage response = await http.GetAsync(publicUrl);
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -217,7 +217,7 @@ public sealed class StorageContainerRoutingTests(AzureStorageFixture fixture)
 
             Uri unsigned = storage.CreatePublicUrl(Constant.StorageContainer.Media, path);
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
             HttpResponseMessage response = await http.GetAsync(unsigned);
 
             Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);

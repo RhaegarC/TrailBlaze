@@ -1,6 +1,6 @@
 # 01 — Foundation
 
-Status: **Archived** — merged to `develop` in PR #3 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Status: **Archived** — merged to `develop` in PR #3 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../../PRD.md) — Decisions #5/#6/#16/#22 + "System overview" and "Deployment".
 
 ## Summary

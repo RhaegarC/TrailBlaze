@@ -53,7 +53,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
 
             Uri readUrl = await storage.CreateReadUrlAsync(Container, path, expiresOn);
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
 
             // Content type is asserted here or nowhere: the deleted unit-tier fake discarded
             // it, so nothing else in the suite would notice the upload losing its headers and
@@ -71,7 +71,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
         Uri staleUrl = await storage.CreateReadUrlAsync(
             Container, path, DateTimeOffset.UtcNow.AddMinutes(5));
 
-        using var httpClient = new HttpClient();
+        using var httpClient = LoopbackTransport.Client();
         HttpResponseMessage afterDelete = await httpClient.GetAsync(staleUrl);
 
         Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);
@@ -109,7 +109,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
             Uri expired = await storage.CreateReadUrlAsync(
                 Container, path, DateTimeOffset.UtcNow.AddMinutes(-5));
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
             HttpResponseMessage response = await http.GetAsync(expired);
 
             Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
@@ -182,7 +182,7 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
             Uri readUrl = await storage.CreateReadUrlAsync(
                 Container, path, DateTimeOffset.UtcNow.AddMinutes(5));
 
-            using var http = new HttpClient();
+            using var http = LoopbackTransport.Client();
 
             // A well-formed write: the blob type header is required, and without it the server answers
             // 400 and refuses every write including the ones it should permit. A malformed request
@@ -237,5 +237,160 @@ public sealed class AzureBlobStorageIntegrationTests(AzureStorageFixture fixture
                 Constant.StorageContainer.Media, $"integration/{Guid.NewGuid():N}.txt"));
 
         Assert.Null(thrown);
+    }
+
+    /// <summary>
+    /// A cache directive given on upload is stored with the object and served back on the response.
+    /// </summary>
+    /// <remarks>
+    /// Only a real backend can answer this. A declared header is not a stored header until something
+    /// stores it, and a fake that implemented the contract would be asserting its own dictionary —
+    /// which is the reason this tier exists rather than a double. The pair matters together: this test
+    /// says the directive survives the round trip, and its neighbour says an upload that gave none is
+    /// not given one on the object's behalf.
+    /// </remarks>
+    [SkippableFact]
+    public async Task A_cache_directive_given_on_upload_is_served_back_with_the_object()
+    {
+        AzureBlobStorageRepository storage = fixture.Repository();
+        const string Container = Constant.StorageContainer.Media;
+        string path = $"integration/{Guid.NewGuid():N}.txt";
+        string directive = Constant.MediaCache.Directive;
+
+        try
+        {
+            await storage.UploadAsync(
+                Container,
+                path,
+                new MemoryStream("trail-blaze"u8.ToArray()),
+                "text/plain",
+                directive);
+
+            Uri readUrl = await storage.CreateReadUrlAsync(
+                Container, path, DateTimeOffset.UtcNow.AddMinutes(5));
+
+            using var http = LoopbackTransport.Client();
+            HttpResponseMessage response = await http.GetAsync(readUrl);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.NotNull(response.Headers.CacheControl);
+            Assert.True(response.Headers.CacheControl!.Private);
+            Assert.Equal(
+                TimeSpan.FromSeconds(Constant.MediaCache.MaxAgeSeconds),
+                response.Headers.CacheControl.MaxAge);
+        }
+        finally
+        {
+            await storage.DeleteAsync(Container, path);
+        }
+    }
+
+    /// <summary>
+    /// An upload that names no cache directive leaves the property off the object rather than
+    /// inventing one.
+    /// </summary>
+    /// <remarks>
+    /// The other half of the pair, and the reason the parameter is optional rather than defaulted to
+    /// something: covers and avatars are stored through this same call, and a directive supplied here
+    /// would apply to them too. A default of "private" would therefore mark a cover — the one image
+    /// whose container moves — as something a browser may keep.
+    /// </remarks>
+    [SkippableFact]
+    public async Task An_upload_given_no_cache_directive_stores_none()
+    {
+        AzureBlobStorageRepository storage = fixture.Repository();
+        const string Container = Constant.StorageContainer.Media;
+        string path = $"integration/{Guid.NewGuid():N}.txt";
+
+        try
+        {
+            await storage.UploadAsync(
+                Container, path, new MemoryStream("trail-blaze"u8.ToArray()), "text/plain");
+
+            Uri readUrl = await storage.CreateReadUrlAsync(
+                Container, path, DateTimeOffset.UtcNow.AddMinutes(5));
+
+            using var http = LoopbackTransport.Client();
+            HttpResponseMessage response = await http.GetAsync(readUrl);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Null(response.Headers.CacheControl);
+        }
+        finally
+        {
+            await storage.DeleteAsync(Container, path);
+        }
+    }
+
+    /// <summary>
+    /// An original and its derivative are two objects in the same private container, each reached by
+    /// its own URL, and removing one leaves the other alone.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What the derivative needs from storage and cannot get from a double: that two paths in one
+    /// container are genuinely separate objects. The paths differ only by the suffix the feature puts
+    /// between the stem and the extension, so if the backend treated them as one key the derivative
+    /// would silently replace the bytes it was made from — and the suite would never see it, because
+    /// both writes would report success.
+    /// </para>
+    /// <para>
+    /// The derivative's content type is asserted too, and for the same reason the round trip above
+    /// asserts one: a JPEG served without its type is the derivative failing at the only job it has.
+    /// </para>
+    /// </remarks>
+    [SkippableFact]
+    public async Task An_original_and_its_derivative_are_separate_objects_in_the_same_container()
+    {
+        AzureBlobStorageRepository storage = fixture.Repository();
+        const string Container = Constant.StorageContainer.Media;
+        string stem = $"integration/{Guid.NewGuid():N}";
+        string originalPath = $"{stem}.png";
+        string derivativePath = $"{stem}{Constant.Upload.PathSuffix}{Constant.Upload.FileExtension}";
+        byte[] original = "the original's bytes"u8.ToArray();
+        byte[] derivative = "the derivative's bytes"u8.ToArray();
+
+        try
+        {
+            await storage.UploadAsync(
+                Container, originalPath, new MemoryStream(original), "image/png", Constant.MediaCache.Directive);
+            await storage.UploadAsync(
+                Container,
+                derivativePath,
+                new MemoryStream(derivative),
+                Constant.Upload.ContentType,
+                Constant.MediaCache.Directive);
+
+            using var http = LoopbackTransport.Client();
+
+            // Both fetched before either is deleted, so each answer is about its own object rather
+            // than about what a delete left behind.
+            HttpResponseMessage originalResponse = await http.GetAsync(
+                await storage.CreateReadUrlAsync(Container, originalPath, DateTimeOffset.UtcNow.AddMinutes(5)));
+            HttpResponseMessage derivativeResponse = await http.GetAsync(
+                await storage.CreateReadUrlAsync(Container, derivativePath, DateTimeOffset.UtcNow.AddMinutes(5)));
+
+            Assert.Equal(HttpStatusCode.OK, originalResponse.StatusCode);
+            Assert.Equal(original, await originalResponse.Content.ReadAsByteArrayAsync());
+
+            Assert.Equal(HttpStatusCode.OK, derivativeResponse.StatusCode);
+            Assert.Equal(Constant.Upload.ContentType, derivativeResponse.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(derivative, await derivativeResponse.Content.ReadAsByteArrayAsync());
+
+            // The item's removal takes its original first; the derivative has to survive that, since
+            // the service removes it as a second call and a shared key would make this its death.
+            await storage.DeleteAsync(Container, originalPath);
+
+            HttpResponseMessage afterDelete = await http.GetAsync(
+                await storage.CreateReadUrlAsync(Container, derivativePath, DateTimeOffset.UtcNow.AddMinutes(5)));
+
+            Assert.Equal(HttpStatusCode.OK, afterDelete.StatusCode);
+            Assert.Equal(derivative, await afterDelete.Content.ReadAsByteArrayAsync());
+        }
+        finally
+        {
+            await storage.DeleteAsync(Container, originalPath);
+            await storage.DeleteAsync(Container, derivativePath);
+        }
     }
 }

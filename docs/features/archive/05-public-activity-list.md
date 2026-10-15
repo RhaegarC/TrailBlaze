@@ -1,6 +1,6 @@
 # 05 — Public Activity List
 
-Status: **Archived** — merged to `develop` in PR #19 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Status: **Archived** — merged to `develop` in PR #19 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../../PRD.md) — Decisions #2/#3/#10/#23/#25/#26/#29/#30 + "Media storage & delivery" + "API surface" + "Authentication & authorization".
 
 > **Archiving this one does not mean the slice is closed.** It shipped the payload and the detail

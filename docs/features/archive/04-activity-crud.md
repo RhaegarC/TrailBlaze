@@ -1,6 +1,6 @@
 # 04 — Activity CRUD
 
-Status: **Archived** — merged to `develop` in PR #15 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Status: **Archived** — merged to `develop` in PR #15 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../../PRD.md) — Decisions #10/#11/#12/#25/#26 + "API surface" and the `activities` data-model row.
 
 > **Archiving this one does not mean the slice is closed.** It shipped the CRUD mechanics and the
@@ -170,7 +170,7 @@ is not covered by any tier, and is called out rather than implied.**
 
 - **This slice is not safe to deploy** — it builds the CRUD mechanics while every authenticated
   caller may still edit or delete anything, and feature **09** adds the ownership and admin rules.
-  See the sequencing note in [00-mission-1-sprint.md](../00-mission-1-sprint.md).
+  See the sequencing note in [00-mission-1-sprint.md](00-mission-1-sprint.md).
 - **The list ships here; what [05](05-public-activity-list.md) still owns is the payload.** The
   cover URL, the media count and the creator's display name are absent from a list item, the detail
   read `GET /api/activity/{id}` is still a plain 200 for any id, and the admin branch of the

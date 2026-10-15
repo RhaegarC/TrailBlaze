@@ -30,7 +30,7 @@ export interface MediaView {
   kind: "Image" | "Video";
   originalFileName: string;
   sizeBytes: number;
-  /** A signed, expiring URL, empty until `getMediaUrl` has answered for this item. */
+  /** A signed, expiring URL. Empty only when a refresh failed for this one item. */
   url: string;
   contentType: string;
   uploadedBy: string;
@@ -70,19 +70,19 @@ export function toWireActivityType(type: string): WireActivityType {
 }
 
 /**
- * A media item, with its `url` supplied by the caller.
+ * A media item, with the URL the wire carried.
  *
- * The URL is a separate request per item — a signed, short-lived bearer token — so it is not
- * something this mapping can fetch, and a screen that has not fetched it yet renders the item
- * without one rather than not at all.
+ * The listing mints the URL, so this needs no second request and takes no URL argument — but the
+ * URL it maps is the one the cache settled on, not necessarily the one the listing arrived with,
+ * which is why the caller hands over the item it has decided to render rather than the raw response.
  */
-export function toMediaView(wire: WireMedia, url: string): MediaView {
+export function toMediaView(wire: WireMedia): MediaView {
   return {
     id: wire.id,
     kind: wire.kind,
     originalFileName: wire.originalFileName,
     sizeBytes: wire.sizeBytes,
-    url,
+    url: wire.url,
     contentType: wire.contentType,
     uploadedBy: wire.uploaderDisplayName ?? "",
     uploadedByUserId: wire.uploadedByUserId ?? "",

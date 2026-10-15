@@ -15,17 +15,26 @@ internal static class ServiceExt
     /// <summary>Registers application services together with their dependencies. Must run after
     /// <see cref="PersistenceExtensions.AddRepositoryPersistence"/>, which registers the context
     /// and the repositories the services consume.</summary>
+    /// <param name="storageAccountUrl">The account's blob endpoint, for a repository that signs and
+    /// writes as this host's own identity. Ignored when <paramref name="blobConnection"/> is set.</param>
+    /// <param name="blobConnection">A shared-key connection string, which is the local and test
+    /// override. Exactly one of the two must be present; <c>Program</c> refuses the boot when
+    /// neither is.</param>
     public static IServiceCollection RegistService(
         this IServiceCollection services,
         IConfiguration configuration,
         string dbConnection,
-        string blobConnection)
+        string? storageAccountUrl,
+        string? blobConnection)
     {
         services.AddRepositoryPersistence(dbConnection);
 
-        // A singleton: the client is thread-safe and holds a connection pool worth keeping.
-        services.AddSingleton<IStorageRepository>(
-            _ => new AzureBlobStorageRepository(blobConnection));
+        // A singleton: the client is thread-safe, holds a connection pool worth keeping, and on the
+        // identity path holds one delegation key for every caller to share.
+        services.AddSingleton<IStorageRepository>(_ =>
+            string.IsNullOrWhiteSpace(blobConnection)
+                ? AzureBlobStorageRepository.ForAccount(new Uri(storageAccountUrl!))
+                : new AzureBlobStorageRepository(blobConnection));
 
         // The window a media read URL is given. Optional: an absent or unparsable setting falls to the
         // policy's default, and a value above its cap is clamped there rather than honoured here.
@@ -37,6 +46,12 @@ internal static class ServiceExt
                     out double minutes)
                     ? TimeSpan.FromMinutes(minutes)
                     : SignedUrlLifetime.Default));
+
+        // The caps an upload is held to, read the same way: absent, unreadable or non-positive falls
+        // to the default, and a value above the ceiling is clamped there rather than honoured here.
+        services.AddSingleton(_ => new UploadSizeCaps(
+            ParseBytes(configuration[Constant.ConfigKey.ImageUploadCapBytes]),
+            ParseBytes(configuration[Constant.ConfigKey.VideoUploadCapBytes])));
 
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IActivityAuthorizationService, ActivityAuthorizationService>();
@@ -53,6 +68,13 @@ internal static class ServiceExt
 
         return services;
     }
+
+    /// <summary>A configured byte count, or zero for an absent or unreadable one, which
+    /// <see cref="UploadSizeCaps"/> reads as the absence of a setting.</summary>
+    private static long ParseBytes(string? value) =>
+        long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long bytes)
+            ? bytes
+            : 0;
 
     /// <summary>Reads a configuration value the application cannot run without, and names it in the
     /// failure.</summary>

@@ -1,6 +1,6 @@
 # 03 — The role column, and the single admin
 
-Status: **Archived** — merged to `develop` in PR #12 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Status: **Archived** — merged to `develop` in PR #12 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../../PRD.md) — Decisions #9/#21 + "Authentication & authorization" and the `users` data-model row.
 
 > **The file keeps its name.** It was written as *admin seeding* and is archived under that slug;

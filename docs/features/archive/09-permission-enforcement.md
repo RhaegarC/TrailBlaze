@@ -1,6 +1,6 @@
 # 09 — Permission Enforcement
 
-Status: **Archived** — merged to `develop` in PR #26 · [00-mission-1-sprint.md](../00-mission-1-sprint.md)
+Status: **Archived** — merged to `develop` in PR #26 · [00-mission-1-sprint.md](00-mission-1-sprint.md)
 Source: [PRD](../../PRD.md) — Decisions #2/#3/#9/#21/#26/#27 + "Authentication & authorization" + "API surface".
 
 ## Summary
@@ -123,7 +123,7 @@ in and is not built. The other is the status codes. The 401/403/404 statuses are
 the service outcome, the outcome-to-HTTP mapping, and the endpoint table. `TrailBlazeApiFactory`
 boots against an unreachable connection string, so a request carrying a valid token would authenticate
 and then fail on the connection rather than on the rule, which is a red for the wrong reason. **The
-live-pipeline matrix is [feature 11](../11-e2e-verification.md)'s**, and it is the same gap that file
+live-pipeline matrix is [feature 11](11-e2e-verification.md)'s**, and it is the same gap that file
 already carries for 05–08; what lands here is every claim a token is not needed to make.
 
 ## Tests (TDD)
@@ -146,7 +146,7 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   precisely because the intuitive-but-wrong rule would pass every other test in this file — for
   contribution that is "only the owner may add", and for removal it is "the owner may curate their
   own entry", which is the one review caught.
-- Integration (`TrailBlaze.Api.Test`) — **moved to [feature 11](../11-e2e-verification.md)**
+- Integration (`TrailBlaze.Api.Test`) — **moved to [feature 11](11-e2e-verification.md)**
   *(2026-09-24)*: exercise each endpoint over the real pipeline with a test token, asserting the
   exact status code — 401 unauthenticated, 403 authenticated-but-not-permitted, 404 absent **or
   invisible**, 200/201/204 allowed — and the **403/404 pair on the same route**. The factory boots
@@ -175,7 +175,7 @@ This is a **security hot spot** and must be test-first (RED → GREEN) per
   explicit decision fails rather than silently defaulting open. `AnonymousReachabilityTests` also
   asserts the other half of default deny — that no controller action carries neither a grant nor an
   authorization attribute — which is the case the closed list cannot see.
-- Regression guard (**moved to [feature 11](../11-e2e-verification.md)**, 2026-09-24): a test
+- Regression guard (**moved to [feature 11](11-e2e-verification.md)**, 2026-09-24): a test
   asserting that no route other than those two returns a **200 to an anonymous caller** for a
   non-`Public` activity. This is the guard that catches a future endpoint which authenticates
   correctly but forgets the visibility predicate — the failure mode that leaving a `Private`

@@ -11,6 +11,7 @@ import type { WireProfile } from "../api/types";
 import { getProfile } from "../api/endpoints";
 import { setTokenSource } from "../api/client";
 import { entra } from "../config";
+import { forgetAll } from "../data/mediaUrlCache";
 
 export type AuthRole = "visitor" | "user" | "admin";
 
@@ -126,6 +127,11 @@ export async function signOut(): Promise<void> {
     // way, so the token stops being attached to requests.
   }
   setTokenSource(async () => null);
+
+  // A media URL is a bearer token too, and it was minted for the session that just ended. Leaving
+  // it held would let a signed-out browser keep rendering private bytes from its own cache.
+  forgetAll();
+
   state = ANONYMOUS;
   setState({});
 }

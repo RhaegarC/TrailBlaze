@@ -11,7 +11,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FEATURES = ROOT / "docs" / "features"
-SPRINT = FEATURES / "00-mission-1-sprint.md"
+# One sprint file per mission, discovered rather than named: a single hard-coded path would leave a
+# later mission's features unindexed, and check 5 would report every one of them as unlinked. A closed
+# mission's file moves to `archive/`, and its table still owns its own features' rows, so both
+# directories are scanned.
+SPRINTS = sorted(
+    list(FEATURES.glob("00-mission-*-sprint.md"))
+    + list((FEATURES / "archive").glob("00-mission-*-sprint.md"))
+)
 TEST_STRATEGY = ROOT / "docs" / "testing-and-tdd.md"
 # The slash commands are the user's global configuration rather than a per-repository copy, so
 # the set the README is checked against lives outside the tree.
@@ -83,16 +90,17 @@ def links_resolve():
 
 
 def counts_have_one_home():
-    """A live test count appears only in the sprint file, which owns it.
+    """A live test count appears only in a sprint file, which owns it.
 
     A count on a dated line is a measurement of a moment rather than a claim about now,
-    and the sprint file's own drift record needs to be able to quote one.
+    and a sprint file's own drift record needs to be able to quote one. The newest sprint
+    file is the live table; an earlier one keeps its numbers as the record of its close.
     """
     pattern = re.compile(r"\b\d+ (?:tests?\b|passed\b|skipped\b)|\bTotal: \d+")
     dated = re.compile(r"\b(?:19|20)\d\d-\d\d-\d\d\b|\bas of\b|\bMeasured\b|\bChecked\b")
     failures = []
     for path in markdown_files():
-        if path == SPRINT or is_archived(path):
+        if path in SPRINTS or is_archived(path):
             continue
         text = prose(path.read_text(encoding="utf-8"))
         for number, line in enumerate(text.splitlines(), start=1):
@@ -121,34 +129,41 @@ def ci_is_not_contradicted():
 
 def sprint_table_covers_features():
     """Every feature file has exactly one sprint-table row, archived ones marked so."""
-    text = prose(SPRINT.read_text(encoding="utf-8"))
+    # Every mission's table counts, so a feature added by a later sprint is satisfied by a row
+    # in that sprint's table rather than by one retrofitted into an earlier, closed one. Rows match
+    # on file name alone: a closed mission's sprint file sits in `archive/` beside the features it
+    # indexes, so its rows link a bare name, while a live one links `archive/NN-...` for a feature
+    # that is already archived. Both forms name the same file.
+    if not SPRINTS:
+        return [f"no sprint file found at {relative(ROOT, FEATURES)}/00-mission-*-sprint.md"]
+    text = "\n".join(prose(path.read_text(encoding="utf-8")) for path in SPRINTS)
     rows = re.findall(r"^\|\s*(\d\d)\s*\|(.+)$", text, re.MULTILINE)
     linked = {}
     for number, row in rows:
         for target in re.findall(r"\]\(([^)\s]+)\)", row):
-            linked.setdefault(target.split("#")[0], []).append(number)
+            linked.setdefault(Path(target.split("#")[0]).name, []).append(number)
 
     failures = []
     for archived in (False, True):
         for number, path in numbered(FEATURES, archived).items():
-            expected = f"archive/{path.name}" if archived else path.name
-            if expected not in linked:
+            if path.name not in linked:
                 failures.append(f"no sprint-table row links to {relative(ROOT, path)}")
     for number, path in numbered(FEATURES, True).items():
-        expected = f"archive/{path.name}"
         row = next(
             (
                 line
                 for line in text.splitlines()
-                if expected in line and line.lstrip().startswith("|")
+                if path.name in line and line.lstrip().startswith("|")
             ),
             "",
         )
         if row and "archiv" not in row.lower():
             failures.append(f"{relative(ROOT, path)}: sprint-table row does not say archived")
-    for target in linked:
-        if re.match(r"\d\d-", Path(target).name) and not (SPRINT.parent / target).exists():
-            failures.append(f"sprint table links to missing {target}")
+    for name in linked:
+        if re.match(r"\d\d-", name) and not (FEATURES / name).exists() and not (
+            FEATURES / "archive" / name
+        ).exists():
+            failures.append(f"sprint table links to missing {name}")
     return failures
 
 
@@ -181,7 +196,7 @@ def status_is_a_lifecycle_marker():
 
 
 def no_status_outside_the_sprint_table():
-    """Nothing but the sprint table and archived records states a feature's status.
+    """Nothing but a sprint table and archived records states a feature's status.
 
     `.claude/` is a workflow, not an index: its files describe the archiving *procedure*,
     and the documented form of a Status line, so a status word there is instruction.
@@ -190,7 +205,7 @@ def no_status_outside_the_sprint_table():
     pattern = re.compile(r"\*\*(?:Not started|In progress|Done|Archived|done|archived)\*\*")
     failures = []
     for path in markdown_files():
-        if path == SPRINT or is_archived(path) or ".claude" in path.parts:
+        if path in SPRINTS or is_archived(path) or ".claude" in path.parts:
             continue
         for number, line in enumerate(prose(path.read_text(encoding="utf-8")).splitlines(), 1):
             if number <= 6 and line.startswith("Status:"):

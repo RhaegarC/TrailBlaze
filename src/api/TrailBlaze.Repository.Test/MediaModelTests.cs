@@ -21,6 +21,7 @@ public sealed class MediaModelTests
     [InlineData(nameof(Media.ActivityId), 128)]
     [InlineData(nameof(Media.Kind), 16)]
     [InlineData(nameof(Media.BlobPath), 512)]
+    [InlineData(nameof(Media.ThumbnailPath), 512)]
     [InlineData(nameof(Media.ContentType), 128)]
     [InlineData(nameof(Media.OriginalFileName), 260)]
     public void A_column_is_bounded_to_its_documented_length(string propertyName, int expectedLength) =>
@@ -39,6 +40,19 @@ public sealed class MediaModelTests
     [InlineData(nameof(Media.OriginalFileName))]
     public void A_required_column_is_non_nullable(string propertyName) =>
         Assert.False(PropertyOf(propertyName).IsNullable);
+
+    /// <summary>
+    /// The derivative's path is the one column here that may be absent, and a reader that assumed
+    /// otherwise would break on video.
+    /// </summary>
+    /// <remarks>
+    /// Three ways it is absent, and they are not distinguished in the schema: the item is a video, the
+    /// row predates the derivative, or a decode yielded nothing. All three are served from the
+    /// original, so null is a state the reader must be able to hold rather than an error.
+    /// </remarks>
+    [Fact]
+    public void The_derivative_path_is_optional() =>
+        Assert.True(PropertyOf(nameof(Media.ThumbnailPath)).IsNullable);
 
     /// <summary>
     /// The uploader is the shared audit column <see cref="EntityBase.CreatedBy"/>, which every
