@@ -1,6 +1,6 @@
 # 16 — Sign blob read URLs with the application's identity
 
-Status: **Archived** — merged to `develop` in PR #56 · [00-mission-2-sprint.md](../00-mission-2-sprint.md)
+Status: **Archived** — merged to `develop` in PR #56 · [00-mission-2-sprint.md](00-mission-2-sprint.md)
 Source: [PRD](../../PRD.md) — Decision #7 (amended) + "Media storage & delivery"
 
 ## Summary

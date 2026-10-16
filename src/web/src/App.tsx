@@ -110,7 +110,8 @@ const T = {
     // @integration:end
     noMedia: "No media uploaded yet.",
     items: (n: number) => `${n} item${n !== 1 ? "s" : ""}`,
-    sasRequired: "SAS required",
+    // @integration:begin the "SAS required" badge went with the static row it labelled
+    // @integration:end
     details: "Details",
     date: "Date",
     location: "Location",
@@ -190,7 +191,8 @@ const T = {
     // @integration:end
     noMedia: "暂无媒体文件。",
     items: (n: number) => `${n} 个文件`,
-    sasRequired: "需要 SAS",
+    // @integration:begin the "SAS required" badge went with the static row it labelled
+    // @integration:end
     details: "详情",
     date: "日期",
     location: "地点",
@@ -806,20 +808,27 @@ function ActivityDetail({
                                 })}
                               </div>
                             )}
+                            {/* @integration:begin the export's video row carries a "SAS required" badge, which a
+                                fixture needed; the listing signs every item, so the player replaces the badge */}
                             {groupVideos.map((m) => (
-                              <div key={m.id} className={`flex items-center gap-4 px-4 py-3 border ${C.border} mb-2 mt-2`}>
-                                <div className={`w-8 h-8 ${C.secondary} flex items-center justify-center shrink-0`}>
-                                  <svg width="12" height="14" viewBox="0 0 12 14" fill="none">
-                                    <path d="M1 1L11 7L1 13V1Z" fill="#c8893a" />
-                                  </svg>
+                              <div key={m.id} className={`border ${C.border} mb-2 mt-2`}>
+                                {m.url && (
+                                  <video src={m.url} controls preload="metadata" className="w-full max-h-[420px] bg-black" />
+                                )}
+                                <div className="flex items-center gap-4 px-4 py-3">
+                                  <div className={`w-8 h-8 ${C.secondary} flex items-center justify-center shrink-0`}>
+                                    <svg width="12" height="14" viewBox="0 0 12 14" fill="none">
+                                      <path d="M1 1L11 7L1 13V1Z" fill="#c8893a" />
+                                    </svg>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-sm ${C.fg} truncate`}>{m.originalFileName}</p>
+                                    <p className={`font-mono-data text-[11px] ${C.dim}`}>{formatBytes(m.sizeBytes)} · {m.contentType}</p>
+                                  </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-sm ${C.fg} truncate`}>{m.originalFileName}</p>
-                                  <p className={`font-mono-data text-[11px] ${C.dim}`}>{formatBytes(m.sizeBytes)} · {m.contentType}</p>
-                                </div>
-                                <span className={`font-mono-data text-[10px] ${C.dimmer} uppercase tracking-wider`}>{t.sasRequired}</span>
                               </div>
                             ))}
+                            {/* @integration:end */}
                           </div>
                         )}
                       </div>
