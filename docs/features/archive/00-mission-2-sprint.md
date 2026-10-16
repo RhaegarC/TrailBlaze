@@ -1,7 +1,16 @@
 # Mission 2 — Performance
 
-Status: **Planning** — derived from [docs/PRD.md](../PRD.md) on 2026-10-05. The PRD stays the living
-reference (decisions log, canonical data model, permission table).
+Status: **Archived** — Mission 2 closed 2026-10-16; derived from
+[docs/PRD.md](../../PRD.md) on 2026-10-05, which stays the living reference (decisions log,
+canonical data model, permission table).
+
+**Mission 2 is closed** *(2026-10-16)*. All four features are merged and archived (PRs #50, #52, #54,
+#56), and the counts below are the measurement taken at the close rather than a carry-forward. Three
+items the mission closes **without** are listed under **Open items** rather than ticked: the browser
+half of [14](14-image-thumbnails.md) and [15](15-media-url-cache.md), [13](13-upload-size-limits.md)'s
+refusal-shape criterion, and [16](16-user-delegation-sas.md)'s delegation check against a real
+account. No successor mission is planned yet, so these counts have no live home until a Mission 3
+sprint file exists, and the newest sprint file owns them again when one is written.
 
 ## Goal
 
@@ -18,7 +27,7 @@ those:
 Nothing here changes what the product *is*. It changes how much of it crosses the network, and how
 much memory the server spends to decide that.
 
-**One row here is not performance work, and it says so.** [16](archive/16-user-delegation-sas.md) moves the
+**One row here is not performance work, and it says so.** [16](16-user-delegation-sas.md) moves the
 storage credential from the account key to the application's own identity. It is in this mission
 because it is the one change that would make feature 15's per-item signing cost a network call, so
 the two are read together — but it is a security and configuration change, reviewed on its own
@@ -27,7 +36,7 @@ merits, and its acceptance criteria are about what the application holds rather 
 ## How to read these features (working model)
 
 - **Backend** is implemented test-first (RED → GREEN → refactor; tiers in
-  [docs/testing-and-tdd.md](../testing-and-tdd.md)). It lives in `src/api/` as a layered solution —
+  [docs/testing-and-tdd.md](../../testing-and-tdd.md)). It lives in `src/api/` as a layered solution —
   `TrailBlaze.Model`, `TrailBlaze.Repository`, `TrailBlaze.Service`, `TrailBlaze.Interface`,
   `TrailBlaze.Api` — each layer with a sibling `*.Test` xUnit project. Test command: `dotnet test`
   (from `src/api/`).
@@ -36,7 +45,7 @@ merits, and its acceptance criteria are about what the application holds rather 
   the exported UI calls and its acceptance criteria, and the client half is recorded as
   `verification-only` where it cannot be asserted.
 - A feature that changes the data model updates the PRD data-model table in the same PR
-  ([schema-change discipline](../PRD.md#data-model)).
+  ([schema-change discipline](../../PRD.md#data-model)).
 - Status reflects the doc lifecycle (file created → in progress → archived after PR to `develop`).
 
 Numbers continue from Mission 1 — features **13**, **14**, **15**, **16** — because its table fixes
@@ -60,15 +69,15 @@ Number = priority (lowest first = next to implement); file = `docs/features/NN-n
 **This table is the only place a feature's status is written down.** The `Status` column owns
 progress and the summary cell owns what the slice is; a feature's own file states its lifecycle and
 nothing more, and the PRD's [current-state
-table](../PRD.md#current-state-vs-target) states capability rather than progress. Mission 1's table
+table](../../PRD.md#current-state-vs-target) states capability rather than progress. Mission 1's table
 keeps rows 01–12 and is the record of that mission.
 
 | # | Feature (file) | Depends on | Summary — the backend/API slice | Status |
 |---|---|---|---|---|
-| 13 | [upload-size-limits](archive/13-upload-size-limits.md) | 06 | The image and video caps stop being compile-time constants and become **configuration**, with raised defaults (25 MB image / 200 MB video) and **absolute ceilings** (100 MB / 512 MB) that still refuse a runaway upload. The route-level request limits follow the ceilings, so a file the service would accept is never answered with a bare 413 | archived — merged in PR #50. Both caps come from configuration and clamp to their ceilings, the refusal names the cap in force, and the cover and avatar routes now carry the request-size limits they did not need while the image cap sat below Kestrel's 30 MB default. **One criterion is not claimed**: that an oversize request is answered with the service's 400 rather than a bare 413, on all three upload routes, is `verification-only` — every route is `[Authorize]` and the Api tier holds no token, so the attribute is unreachable from a test, and the manual pass has not been run |
-| 14 | [image-thumbnails](archive/14-image-thumbnails.md) | 06, 07, **15** | **Every uploaded image is stored twice** — the original plus a re-encoded derivative at a configured quality, with **no resize** — and the derivative is what the browser receives. Video is untouched: no transcoding, no poster frame, original streamed as today. Needs a new nullable column, so the PRD data model moves with it. **Implemented after 15, not before it** — see the numbering note above. *(2026-10-11 — the maximum dimension this row used to name is **gone**: the derivative keeps the original's pixel dimensions, and the decoder's resource limits went with it. A **cover** is the other change and goes the other way: it is stored as the derivative alone, with no original kept, so for a cover "stored twice" is not what happens.)* | archived — merged in PR #54. An uploaded image is stored with a re-encoded WebP derivative in the same private `media` container, the listing signs it while the mint route keeps signing the original, and a **cover** is stored as the derivative alone; video is untouched. **One consequence is recorded rather than fixed**: the producer reads `ThumbnailQuality` from the process environment and applies it as it stands, so an unset value encodes at quality 0 and one that will not parse throws — absorbed by the media upload and returned as a 500 by the cover route. The web half is `verification-only` and the browser pass has not been run |
-| 15 | [media-url-cache](archive/15-media-url-cache.md) | 07, 12 | The media listing **carries each item's read URL and expiry**, collapsing the app's 1+N fan-out into one request; blobs gain a `Cache-Control`; and the SAS expiry is aligned to a window boundary so successive listings mint the *same* URL and a browser cache can hit it. No route is added or removed. Read with 16: minting per item is cheap only while signing stays local | archived — merged in PR #52. The listing mints a URL per item from one page expiry, the minting instant is rounded to a boundary taken from the cache window so successive listings produce the same string for as long as a browser may reuse the bytes, media uploads carry a bounded `private` `Cache-Control`, and the app asks once and holds what it was given. **Two criteria about the browser are not claimed**: no runner exists in `src/web`, so the reuse and the refresh are `verification-only` and the manual pass has not been run |
-| 16 | [user-delegation-sas](archive/16-user-delegation-sas.md) | 07, 12, 15 | **Not performance work.** The storage credential stops being the account key: the API signs read URLs with a **user delegation key** obtained as its own Entra identity, so no account key sits in configuration and the signatures become revocable. The delegation key is cached per key lifetime — the one backend cache this mission actually needs, since it is *not* caller-dependent. **Its first step is to settle whether the emulator can mint one at all**, because if it cannot, no tier exercises the delegation path | archived — merged in PR #56. The adapter signs each read URL as the identity the host runs as, holding one delegation key while it still covers the longest URL the application may sign and making one round trip where several requests arrive together; an identity that cannot sign is an error rather than a URL carrying no authorization. **The question the row left open is answered**: Azurite 3.37.0 mints a delegation key and accepts a SAS built from it, so the container tier exercises the whole path — over TLS, which OAuth requires and which the stack now generates a certificate for. **Two things are not claimed.** The first criterion is **amended rather than met**: the shared-key connection string stays as an override for the emulator and the local development stack, so the account key has left the required settings and not the code. And whether the deployed identity holds the delegation permission against a **real** account is `verification-only` — the emulator reads a token's claims without verifying them — with the pass unrun |
+| 13 | [upload-size-limits](13-upload-size-limits.md) | 06 | The image and video caps stop being compile-time constants and become **configuration**, with raised defaults (25 MB image / 200 MB video) and **absolute ceilings** (100 MB / 512 MB) that still refuse a runaway upload. The route-level request limits follow the ceilings, so a file the service would accept is never answered with a bare 413 | archived — merged in PR #50. Both caps come from configuration and clamp to their ceilings, the refusal names the cap in force, and the cover and avatar routes now carry the request-size limits they did not need while the image cap sat below Kestrel's 30 MB default. **One criterion is not claimed**: that an oversize request is answered with the service's 400 rather than a bare 413, on all three upload routes, is `verification-only` — every route is `[Authorize]` and the Api tier holds no token, so the attribute is unreachable from a test, and the manual pass has not been run |
+| 14 | [image-thumbnails](14-image-thumbnails.md) | 06, 07, **15** | **Every uploaded image is stored twice** — the original plus a re-encoded derivative at a configured quality, with **no resize** — and the derivative is what the browser receives. Video is untouched: no transcoding, no poster frame, original streamed as today. Needs a new nullable column, so the PRD data model moves with it. **Implemented after 15, not before it** — see the numbering note above. *(2026-10-11 — the maximum dimension this row used to name is **gone**: the derivative keeps the original's pixel dimensions, and the decoder's resource limits went with it. A **cover** is the other change and goes the other way: it is stored as the derivative alone, with no original kept, so for a cover "stored twice" is not what happens.)* | archived — merged in PR #54. An uploaded image is stored with a re-encoded WebP derivative in the same private `media` container, the listing signs it while the mint route keeps signing the original, and a **cover** is stored as the derivative alone; video is untouched. **One consequence is recorded rather than fixed**: the producer reads `ThumbnailQuality` from the process environment and applies it as it stands, so an unset value encodes at quality 0 and one that will not parse throws — absorbed by the media upload and returned as a 500 by the cover route. The web half is `verification-only` and the browser pass has not been run |
+| 15 | [media-url-cache](15-media-url-cache.md) | 07, 12 | The media listing **carries each item's read URL and expiry**, collapsing the app's 1+N fan-out into one request; blobs gain a `Cache-Control`; and the SAS expiry is aligned to a window boundary so successive listings mint the *same* URL and a browser cache can hit it. No route is added or removed. Read with 16: minting per item is cheap only while signing stays local | archived — merged in PR #52. The listing mints a URL per item from one page expiry, the minting instant is rounded to a boundary taken from the cache window so successive listings produce the same string for as long as a browser may reuse the bytes, media uploads carry a bounded `private` `Cache-Control`, and the app asks once and holds what it was given. **Two criteria about the browser are not claimed**: no runner exists in `src/web`, so the reuse and the refresh are `verification-only` and the manual pass has not been run |
+| 16 | [user-delegation-sas](16-user-delegation-sas.md) | 07, 12, 15 | **Not performance work.** The storage credential stops being the account key: the API signs read URLs with a **user delegation key** obtained as its own Entra identity, so no account key sits in configuration and the signatures become revocable. The delegation key is cached per key lifetime — the one backend cache this mission actually needs, since it is *not* caller-dependent. **Its first step is to settle whether the emulator can mint one at all**, because if it cannot, no tier exercises the delegation path | archived — merged in PR #56. The adapter signs each read URL as the identity the host runs as, holding one delegation key while it still covers the longest URL the application may sign and making one round trip where several requests arrive together; an identity that cannot sign is an error rather than a URL carrying no authorization. **The question the row left open is answered**: Azurite 3.37.0 mints a delegation key and accepts a SAS built from it, so the container tier exercises the whole path — over TLS, which OAuth requires and which the stack now generates a certificate for. **Two things are not claimed.** The first criterion is **amended rather than met**: the shared-key connection string stays as an override for the emulator and the local development stack, so the account key has left the required settings and not the code. And whether the deployed identity holds the delegation permission against a **real** account is `verification-only` — the emulator reads a token's claims without verifying them — with the pass unrun |
 
 ## Definition of Done
 
@@ -82,7 +91,7 @@ keeps rows 01–12 and is the record of that mission.
 - [x] Video behaviour is unchanged — stored as-is, no derivative, served as today
 - [x] A media listing carries a read URL and an expiry per item, and the app makes one request for a
       listing rather than one plus N (the app's half is `verification-only` —
-      [15](archive/15-media-url-cache.md) records what was and was not established)
+      [15](15-media-url-cache.md) records what was and was not established)
 - [x] Media bytes carry a bounded, `private` cache header, and the SAS expiry remains the control
 - [x] The data-model change lands in the PRD in the same pull request as the migration
 - [x] No storage account key is read from configuration: the API signs read URLs as its own identity,
@@ -96,9 +105,11 @@ keeps rows 01–12 and is the record of that mission.
 ## Current test counts
 
 **This table is the only place the counts are written down**, and it is a measurement rather than a
-derivation: each row is what a run printed, read off the summary as `Passed / Skipped / Total`. How
+derivation: each row is what a run printed, read off the summary as `Passed / Skipped / Total`. Since
+the mission closed it is the record of the close rather than a live claim, and the next sprint file
+takes the live table over. How
 the tiers are shaped, and which one a new test belongs to, is
-[testing-and-tdd.md](../testing-and-tdd.md)'s subject, not this file's. Mission 1's own table is the
+[testing-and-tdd.md](../../testing-and-tdd.md)'s subject, not this file's. Mission 1's own table is the
 frozen measurement taken when that mission closed.
 
 | Project | Bare machine | With the containers |
@@ -110,13 +121,13 @@ frozen measurement taken when that mission closed.
 
 Bare-machine numbers are the honest description of a machine with nothing configured, not a failure:
 the container tiers skip, and `Category=Container` is the only trait in the solution. *(2026-10-05 —
-[13](archive/13-upload-size-limits.md) added nine test cases, all in the offline tiers, so the
+[13](13-upload-size-limits.md) added nine test cases, all in the offline tiers, so the
 bare-machine count and the container count moved by the same nine and the container column is
 otherwise the Mission 1 close figure. The Repository row's bare split was taken from a
 `Category!=Container` run and the container half from a `Category=Container` run, which partition the
 same 125.)*
 
-*(2026-10-06 — [15](archive/15-media-url-cache.md) added fourteen test cases: twelve in the service tier's
+*(2026-10-06 — [15](15-media-url-cache.md) added fourteen test cases: twelve in the service tier's
 offline tests, all in `TrailBlaze.Service.Test`, and two in the storage tier, which is
 container-tagged. So the container column moved by fourteen and the bare column by twelve, and the
 two are no longer the same distance apart as they were. **The Repository row's bare split moved for a
@@ -125,7 +136,7 @@ with the emulator down, and this one with it up. The storage tier is container-t
 when *nothing answers at its endpoint*, so a bare run on a machine with Azurite running executes its
 19 storage tests and skips only the 61 that need SQL — 47 offline + 19 storage = the 66 passed, 61
 skipped. `Category!=Container` is therefore not the offline run, exactly as
-[testing-and-tdd.md](../testing-and-tdd.md) warns: it reports 47 / 0 / 47 here, and `Category=Container`
+[testing-and-tdd.md](../../testing-and-tdd.md) warns: it reports 47 / 0 / 47 here, and `Category=Container`
 reports 19 / 61 / 80. The two partitions are of the same 127.)
 
 *(2026-10-06 — the twelfth of those cases is a correction to 15 rather than an addition to it, and it
@@ -136,7 +147,7 @@ visitor re-downloaded, which is the case the feature was written for. The bounda
 the cache window rather than chosen beside it, and the client's refresh margin moved with it. The
 count moved by one because the coupling is asserted rather than commented.)*
 
-*(2026-10-11 — [14](archive/14-image-thumbnails.md) moved the counts, and it also **removed** cases, which is
+*(2026-10-11 — [14](14-image-thumbnails.md) moved the counts, and it also **removed** cases, which is
 worth separating out rather than reporting as a net. `TrailBlaze.Service.Test` is +26: fourteen in the
 new `MediaHelperServiceTests`, one covering the derivative's stream still being readable after the
 producer returns — the claim that caught a disposed-stream defect the first version of the type
@@ -167,7 +178,7 @@ unattested with the move, and it is recorded in the feature file as withdrawn ra
 the clamp is the only withdrawal in that list whose behaviour was removed by a change of placement
 rather than by a decision, and it is the one to read before the PR merges.)*
 
-*(2026-10-15 — [16](archive/16-user-delegation-sas.md) added fifteen cases: nine in
+*(2026-10-15 — [16](16-user-delegation-sas.md) added fifteen cases: nine in
 `TrailBlaze.Service.Test`, all offline, and six in `TrailBlaze.Repository.Test`, all in the storage
 tier. The container column therefore moved by fifteen and the bare column by nine, and
 `TrailBlaze.Api.Test` is unchanged — the composition root gained two assertions and the host tier one
@@ -181,16 +192,34 @@ running, so their bare figures are a partition rather than an observation, and e
 which tier had run unasked. The Repository row partitions 49 offline / 90 container — 84 before this
 feature gained its six — so what moved in the bare split is only the size of the skip.)*
 
+*(2026-10-16 — **measured at the close, on both columns, and the table above is unchanged by it.**
+`TrailBlaze.Service.Test` 322 / 0 / 322 and `TrailBlaze.Api.Test` 22 / 0 / 22 in both runs;
+`TrailBlaze.Repository.Test` 49 / 90 / 139 with the containers down and 139 / 0 / 139 with them up —
+the three rows above exactly, read off `dotnet test TrailBlaze.slnx` rather than carried forward.
+**The container column has a prerequisite the notes above never had to name, and getting it wrong
+looks exactly like a bare machine.** `dotnet test` does not read `src/api/.env` — the compose file
+does. So unless `MSSQL_SA_PASSWORD` is exported into the test process, the database tier skips for
+want of it and the same running stack prints **75 / 64 / 139**: the storage tier executes, because
+Azurite needs no secret, and the 64 that need SQL do not. The skip message names the missing
+variable; the number alone does not, and 64 skips reads like "the containers are down".)*
+
 ## Open items
+
+Three items are **carried out of this mission rather than closed** *(2026-10-16)*. Each is
+`verification-only`: nothing about it can be asserted by a test, so it is recorded here rather than
+ticked, and none can be settled by a test run — one needs a browser, one a real Azure account, and one
+a token the Api tier does not hold.
 
 - **The web half of 14 and 15 cannot be asserted.** `src/web` has no test runner, which bugs 01–03
   each record, so the client-side claims are `verification-only`: what was run is written down and the
-  rendered result is a browser observation. *(2026-10-06 — [15](archive/15-media-url-cache.md) merged
+  rendered result is a browser observation. *(2026-10-06 — [15](15-media-url-cache.md) merged
   with its pass still unrun, and that pass was not decoration: the browser half is where the caching
   defect lived. The minting boundary was a minute against a five-minute cache window, so a returning
   visitor re-downloaded — invisible to every backend test, and found by reading the two numbers
-  against each other rather than by running anything. The pass is still outstanding.)*
-- **One pass needs a real account rather than a browser.** [16](archive/16-user-delegation-sas.md) is
+  against each other rather than by running anything. **The pass is still outstanding at the close** —
+  it is the one open item a browser alone can clear, and the instrument is the Network tab's Size and
+  Status columns, read with `Disable cache` off.)*
+- **One pass needs a real account rather than a browser.** [16](16-user-delegation-sas.md) is
   verified against the emulator end to end, but the emulator's OAuth **reads a token's claims without
   verifying them** — there is no authority behind it and the account belongs to whoever started the
   container. So whether a deployed identity actually holds the delegation permission against a real
@@ -198,15 +227,26 @@ feature gained its six — so what moved in the bare split is only the size of t
   right" and "the account agrees". It is also the step a deployment gets wrong in a specific way: the
   permission the delegation-key call needs is a management-plane action, so a role assignment scoped
   to the *container* leaves ordinary blob reads working while minting a URL fails. The feature file
-  records what to run; the mission is not closed on the strength of the emulator's answer.
+  records what to run. **The mission closes with this item carried, and deliberately not on the
+  strength of the emulator's answer** — the emulator answers, but only for itself.
+- **One criterion of [13](13-upload-size-limits.md) is unclaimed.** Its Definition-of-Done row pairs
+  two claims: that the caps come from configuration and clamp to their ceilings, and that an oversize
+  request is answered with the service's 400 rather than a bare 413 **on all three upload routes**.
+  The first is met and covered by tests; the second is unrun, because every route is `[Authorize]` and
+  the Api tier holds no token, so the attribute is unreachable from a test. The row is unchecked
+  rather than ticked, and a manual pass with a real token is what would settle it.
+
+The two below are not carried work — the first is an unexplained observation, the second a record of
+the mission before this one.
+
 - **A merge that does not exist.** On 2026-10-05 the message "pr merged" arrived naming no pull
   request, and no merge matches it — the newest PR of any state is #48, and neither `origin/develop`
   nor `origin/master` had moved since 2026-09-30 11:01Z when it was checked. Recorded here so it is
   not lost; it is unrelated to this mission and blocks nothing. *(2026-10-05 — two merges have landed
   since, #49 and #50, and both named their number; neither is the message above, so the observation
   stands as written rather than as an open question.)*
-- **Mission 1 closed on 2026-10-05, with one item unfinished.** [Feature 11](archive/11-e2e-verification.md)'s
+- **Mission 1 closed on 2026-10-05, with one item unfinished.** [Feature 11](11-e2e-verification.md)'s
   walkthrough ran — it is the only place the Admin override is exercised end to end, and the pass that
-  observes [bug 03](../bugs/00-bug-log.md)'s fix, since the media and list reads widen for a signed-in
-  caller. Feature 02's deferred token tests remain deferred in [02](archive/02-entra-auth.md). Neither
+  observes [bug 03](../../bugs/00-bug-log.md)'s fix, since the media and list reads widen for a signed-in
+  caller. Feature 02's deferred token tests remain deferred in [02](02-entra-auth.md). Neither
   is a performance concern and neither is carried here.

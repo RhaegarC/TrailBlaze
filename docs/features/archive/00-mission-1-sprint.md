@@ -5,7 +5,8 @@ Status: **Archived** — Mission 1 closed 2026-10-05; derived from
 canonical data model, permission table).
 
 **Mission 1 is closed** *(2026-10-05)*. Successor work lives in
-[00-mission-2-sprint.md](../00-mission-2-sprint.md), which owns the live test counts. The one item
+[00-mission-2-sprint.md](00-mission-2-sprint.md), which owns the test counts as the newest sprint
+file. The one item
 this mission closes without is feature 02's deferred token tests, which stay deferred in
 [02-entra-auth](02-entra-auth.md) rather than being carried across.
 
@@ -111,8 +112,9 @@ table](../../PRD.md#current-state-vs-target) states capability rather than progr
 
 These are the numbers this mission closed on, kept as a record of that moment rather than as a claim
 about today: each row is what a run printed, read off the summary as `Passed / Skipped / Total`.
-**The live counts now live in [00-mission-2-sprint.md](../00-mission-2-sprint.md), which is their only
-home** — they were previously restated in the README, the PRD, STANDARD §10 and the test strategy,
+**The counts this mission handed on live in [00-mission-2-sprint.md](00-mission-2-sprint.md), which is
+their only home** — the newest sprint file, still theirs after it closed on 2026-10-16. They were
+previously restated in the README, the PRD, STANDARD §10 and the test strategy,
 and went stale in all four whenever a feature added a test. How the tiers are shaped, and which one a
 new test belongs to, is [testing-and-tdd.md](../../testing-and-tdd.md)'s subject, not this file's.
 *(2026-10-05 — re-measured on a bare machine when Mission 2 was opened and unchanged, so nothing had

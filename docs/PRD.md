@@ -95,16 +95,18 @@ some work the ladder attributes to features 01–02 already exists:
 
 **Where the code stands against it.** The rows state what the product offers today, not how
 far along its feature is — a feature's own progress lives in a
-[sprint file](features/00-mission-2-sprint.md#feature-breakdown), which is its only home.
-Mission 2's is the live one; [Mission 1's](features/archive/00-mission-1-sprint.md) closed on
-2026-10-05 and is kept as the record of that mission.
+[sprint file](features/archive/00-mission-2-sprint.md#feature-breakdown), which is its only home.
+Both missions are closed and no successor is planned: [Mission 2's](features/archive/00-mission-2-sprint.md)
+closed on 2026-10-16 and [Mission 1's](features/archive/00-mission-1-sprint.md) on 2026-10-05, each
+kept as the record of its mission. The newest sprint file owns the live counts again when one is
+written.
 
 | Area | Target (this document) | Code today | Closes in |
 |---|---|---|---|
 | Database engine | **Azure SQL Server** | SQL Server through EF Core (`Microsoft.EntityFrameworkCore.SqlServer`); migrations and snapshot generated against it | feature 01 |
 | API hosting | ACA from a container image | `src/api/Dockerfile` builds the image; `src/api/docker-compose.yml` runs it locally against container engines, which neither target consumes | feature 01 |
 | Web hosting | Azure Static Web Apps by GitHub workflow | not built | feature 10 |
-| Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers and the filters are in [testing-and-tdd.md](testing-and-tdd.md); the counts are in [00-mission-2-sprint.md](features/00-mission-2-sprint.md), which is their only home | feature 01 |
+| Test harness | xUnit per layer, container-backed tiers | three `*.Test` projects, one per layer; the container tiers skip rather than fail when unreachable. The tiers and the filters are in [testing-and-tdd.md](testing-and-tdd.md); the counts are in [00-mission-2-sprint.md](features/archive/00-mission-2-sprint.md), which is their only home | feature 01 |
 | Blob abstraction | `IStorageRepository`, three containers, no fake | `IStorageRepository` in `TrailBlaze.Interface`, one Azure adapter in `TrailBlaze.Repository`, exercised by the storage tier against Azurite | feature 01 |
 | Storage credential | the API signs read URLs as its own identity, and holds no account key (Decision #33) | built — the composition root builds the adapter from `StorageAccountUrl` plus the application's own identity, and `CreateReadUrlAsync` signs each read URL with a **user delegation key** fetched from the service and held for as long as it still covers a URL this application may sign. *(**2026-10-14** — the shared-key connection string is still read, as a **deliberate override** rather than a requirement: the emulator and the local development stack have no tenant to authenticate against. A deployment sets the account URL and holds no key; an operator may set a key instead. The account key has left the required settings, not the code.)* | feature 16 |
 | Activity table | the data model below | `activities` exists, migrated by `AddActivities`, with its check-constrained `Type`. The CRUD routes and the anonymous paged list are implemented, the list applying the read half of the visibility rule; **who may mutate an entry is not yet enforced**, and an admin still pages what a user pages because no role is read | feature 04 |

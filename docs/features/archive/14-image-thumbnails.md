@@ -1,6 +1,6 @@
 # 14 — Every image is stored with a derivative
 
-Status: **Archived** — merged to `develop` in PR #54 · [00-mission-2-sprint.md](../00-mission-2-sprint.md)
+Status: **Archived** — merged to `develop` in PR #54 · [00-mission-2-sprint.md](00-mission-2-sprint.md)
 Source: [PRD](../../PRD.md) — Decision #31 (new, changed 2026-10-11) + Decision #15 (unchanged,
 video-scoped) + "Media storage & delivery" + "Data model"
 
