@@ -1,6 +1,6 @@
 # 04 — A video item is listed and can never be played
 
-Status: **Open** — fix in progress on `fix/04-video-items-never-play` · [00-bug-log.md](00-bug-log.md)
+Status: **Archived** — merged to `develop` in PR #60 · [00-bug-log.md](../00-bug-log.md)
 Reported: 2026-10-16 · Severity: **High** — every video on every activity is unplayable, and nothing
 is exposed
 Component: `src/web` — the activity detail's media section
@@ -72,7 +72,7 @@ review:
 
 **The export is not edited, so the correction is still owed upstream.** A re-export replaces
 `src/web/src/App.tsx` with the export's copy and this player goes with it —
-[`src/web/UPSTREAM.md`](../../src/web/UPSTREAM.md) is the procedure, and Figma Make is where the
+[`src/web/UPSTREAM.md`](../../../src/web/UPSTREAM.md) is the procedure, and Figma Make is where the
 `<video>` element belongs.
 
 ## Fix
@@ -97,8 +97,8 @@ review:
 - `python scripts/web-seam.py` — unchanged from `develop`: the two pre-existing failures in
   `src/web/.gitignore` and `src/web/.figma/make/site.json`, and nothing new. The edited block is
   inside its seam markers, which is what keeps this change out of the drift report.
-- Manual, signed in — an activity holding a video plays it. This is the observable claim the report is
-  about, and it is the only check here that could show the fix works.
+- Manual, signed in — **not recorded as run.** The observable claim is that an activity holding a video
+  plays it, and it is the only check in this list that could show the fix works.
 
 The server half is already asserted — `A_listing_signs_the_derivative_when_there_is_one` and
 `An_item_with_no_derivative_is_served_from_its_original` are what make `m.url` a playable URL for a
@@ -108,7 +108,8 @@ seam between the client and the server, which is where this bug lived.
 ## Not covered here
 
 - **Nothing verifies the player, now or later.** No gate in this repository can see a `<video>` render
-  and no tier exercises `src/web`, so "a video plays" rests on the manual pass above.
+  and no tier exercises `src/web`, so "a video plays" rests on the manual pass, and that pass is not
+  recorded as run anywhere in this repository.
 - **A URL that lapses while the page is open is not re-minted for the player.** The URL is minted at
   page load — the hook fetches once per mount — so a detail page left open past the signing window
   holds a URL that no longer resolves, and the player has no retry. Images carry the same exposure

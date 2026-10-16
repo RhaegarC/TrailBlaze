@@ -10,7 +10,7 @@ Numbering is Project #1 (Mission 1 — TrailBlaze Activity Journal).
 | 01 | [01-popup-sign-in-never-completes.md](archive/01-popup-sign-in-never-completes.md) | High | `src/web` — sign-in | 2026-09-28 | archived — merged in PR #34 | `loginIssue` |
 | 02 | [02-banner-shows-no-identity.md](archive/02-banner-shows-no-identity.md) | Normal | `src/web` — banner | 2026-09-30 | archived — merged in PR #38 | `fix/banner-identity` |
 | 03 | [03-signed-in-list-drops-the-token.md](archive/03-signed-in-list-drops-the-token.md) | High | `src/web` — activity reads | 2026-09-30 | archived — merged in PR #46 | `fix/03-signed-in-list-drops-the-token` |
-| 04 | [04-video-items-never-play.md](04-video-items-never-play.md) | High | `src/web` — media rendering | 2026-10-16 | open — fix in progress | `fix/04-video-items-never-play` |
+| 04 | [04-video-items-never-play.md](archive/04-video-items-never-play.md) | High | `src/web` — media rendering | 2026-10-16 | archived — merged in PR #60 | `fix/04-video-items-never-play` |
 
 ## Severity guide
 
