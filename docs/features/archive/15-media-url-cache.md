@@ -1,6 +1,6 @@
 # 15 — A listing carries its URLs, and the browser may keep them
 
-Status: **Archived** — merged to `develop` in PR #52 · [00-mission-2-sprint.md](../00-mission-2-sprint.md)
+Status: **Archived** — merged to `develop` in PR #52 · [00-mission-2-sprint.md](00-mission-2-sprint.md)
 Source: [PRD](../../PRD.md) — Decision #7 (amended) + Decision #32 (new) + Decision #30 + "Reading —
 what a caller receives"
 

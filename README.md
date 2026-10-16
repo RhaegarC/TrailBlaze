@@ -12,7 +12,7 @@ decides who may *edit* an entry rather than who may read it.
 |---|---|
 | [docs/PRD.md](docs/PRD.md) | The product definition — the decisions log, the canonical data model, the permission matrix, and the API surface |
 | [docs/features/archive/00-mission-1-sprint.md](docs/features/archive/00-mission-1-sprint.md) | Mission 1's closed feature ladder, dependency order, and Definition of Done |
-| [docs/features/00-mission-2-sprint.md](docs/features/00-mission-2-sprint.md) | Mission 2 — performance: its features, their status, and the live test counts |
+| [docs/features/archive/00-mission-2-sprint.md](docs/features/archive/00-mission-2-sprint.md) | Mission 2 — performance: its features, their status, and the test counts at its close on 2026-10-16 |
 | [docs/testing-and-tdd.md](docs/testing-and-tdd.md) | Test tiers and the RED → GREEN → refactor discipline |
 | [docs/features/backlog.md](docs/features/backlog.md) | Ideas that are *not* yet features |
 
@@ -47,7 +47,7 @@ repository — and runs on slash commands:
 Backend tests run from `src/api/` with `dotnet test`. Two containers back the database and storage
 tiers — start them with `docker compose -f docker-compose.test.yml up -d` first, or those tests
 **skip** rather than fail. See [testing-and-tdd.md](docs/testing-and-tdd.md); the current counts are
-in [00-mission-2-sprint.md](docs/features/00-mission-2-sprint.md), which is their only home.
+in [00-mission-2-sprint.md](docs/features/archive/00-mission-2-sprint.md), which is their only home.
 
 ## Running it locally
 
@@ -183,7 +183,7 @@ pointed somewhere else would migrate the wrong database and report success.
 1. **The suite is real but shallow.** `dotnet test` from `src/api/` is green either way: with the two
    test containers running everything passes, and with nothing configured the container-backed tests
    **skip** rather than fail — reported rather than hidden, and a skip is not a pass. The counts are
-   in [00-mission-2-sprint.md](docs/features/00-mission-2-sprint.md), and what is covered against
+   in [00-mission-2-sprint.md](docs/features/archive/00-mission-2-sprint.md), and what is covered against
    what is not is status, owned by that file's table. Feature 02's slice — the profile routes, avatar
    upload and upload validator — is **not** covered. "Green" here means the foundation is
    green.
